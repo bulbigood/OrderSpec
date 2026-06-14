@@ -1,10 +1,21 @@
 ---
-description: Create or update the project constitution from interactive or provided principle inputs, ensuring all dependent templates stay in sync.
-handoffs: 
-  - label: Build Specification
+description: Author or amend the project constitution — the supreme governance document that gates execute literally (principles + machine-readable capability grants).
+handoffs:
+  - label: Write a specification
     agent: order.spec
-    prompt: Implement the feature specification based on the updated constitution. I want to build...
+    prompt: With the constitution in place, specify the feature. I want to build...
 ---
+
+## Role of this document
+
+The constitution at `.orderspec/memory/constitution.md` is the **supreme law of the project**. It does two distinct jobs — keep them distinct:
+
+1. **Principles** — declarative, testable rules the project must uphold (human-facing governance).
+2. **Capability grants** — machine-readable permissions that **gates execute literally**. The most important: whether `code-check` (and other gates) may run the test suite, invoke a compiler/linter, or touch the network as evidence.
+
+> **Default-deny is law.** If the constitution does not explicitly grant a capability, every gate MUST treat it as **denied** and degrade to static inspection. Silence is never "allowed". You are authoring the thing that other commands obey without re-interpretation — be unambiguous.
+
+This command **authors and validates** the constitution. It does **not** rewrite specs, plans, tasks, or templates to match it: when an amendment conflicts with existing artifacts, you **detect and route** (name the owning command), you do not fix them here.
 
 ## User Input
 
@@ -12,139 +23,101 @@ handoffs:
 $ARGUMENTS
 ```
 
-You **MUST** consider the user input before proceeding (if not empty).
+Consider the user input before proceeding (if non-empty).
 
 ## Pre-Execution Checks
 
-**Check for extension hooks (before constitution update)**:
-- Check if `.orderspec/extensions.yml` exists in the project root.
-- If it exists, read it and look for entries under the `hooks.before_constitution` key
-- If the YAML cannot be parsed or is invalid, skip hook checking silently and continue normally
-- Filter out hooks where `enabled` is explicitly `false`. Treat hooks without an `enabled` field as enabled by default.
-- For each remaining hook, do **not** attempt to interpret or evaluate hook `condition` expressions:
-  - If the hook has no `condition` field, or it is null/empty, treat the hook as executable
-  - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
-- For each executable hook, output the following based on its `optional` flag:
-  - **Optional hook** (`optional: true`):
-    ```
-    ## Extension Hooks
+**Run `before_constitution` hooks** per the standard hook protocol in `.orderspec/extensions.yml` (read `hooks.before_constitution`; skip silently if absent/invalid; honor `enabled`; do not evaluate `condition` expressions; for mandatory hooks emit `EXECUTE_COMMAND` and wait). See the shared hook spec — do not duplicate logic.
 
-    **Optional Pre-Hook**: {extension}
-    Command: `/{command}`
-    Description: {description}
+## Execution
 
-    Prompt: {prompt}
-    To execute: `/{command}`
-    ```
-  - **Mandatory hook** (`optional: false`):
-    ```
-    ## Extension Hooks
+### 1. Load
 
-    **Automatic Pre-Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
+- Read `.orderspec/memory/constitution.md`. If missing, copy `.orderspec/templates/constitution-template.md` first, then read it.
+- Identify every placeholder token `[ALL_CAPS_IDENTIFIER]`.
+- The template's principle count is a default, not a quota. If the user asks for more/fewer principles, honor that.
 
-    Wait for the result of the hook command before proceeding to the Outline.
-    ```
-- If no hooks are registered or `.orderspec/extensions.yml` does not exist, skip silently
+### 2. Resolve values
 
-## Outline
+For each placeholder and each requested change, in priority order:
 
-You are updating the project constitution at `.orderspec/memory/constitution.md`. This file is a TEMPLATE containing placeholder tokens in square brackets (e.g. `[PROJECT_NAME]`, `[PRINCIPLE_1_NAME]`). Your job is to (a) collect/derive concrete values, (b) fill the template precisely, and (c) propagate any amendments across dependent artifacts.
+1. **User input** (this conversation) — use it.
+2. **Repo evidence** — infer from `README`, existing docs, or the prior constitution.
+3. **Unresolved** — if a value genuinely cannot be determined, write the literal marker `[UNRESOLVED: <field> — <why>]` and list it in the Sync Impact Report. Do **not** invent governance.
 
-**Note**: If `.orderspec/memory/constitution.md` does not exist yet, it should have been initialized from `.orderspec/templates/constitution-template.md` during project setup. If it's missing, copy the template first.
+Dates: `RATIFICATION_DATE` = original adoption (ask or mark `[UNRESOLVED]` if unknown). `LAST_AMENDED_DATE` = today (2026-06-14) if anything changed, else unchanged. ISO format `YYYY-MM-DD`.
 
-Follow this execution flow:
+### 3. Author the content
 
-1. Load the existing constitution at `.orderspec/memory/constitution.md`.
-   - Identify every placeholder token of the form `[ALL_CAPS_IDENTIFIER]`.
-   **IMPORTANT**: The user might require less or more principles than the ones used in the template. If a number is specified, respect that - follow the general template. You will update the doc accordingly.
+**Principles** — each principle MUST be:
+- declarative and **testable** (a gate or a human can objectively judge compliance);
+- written with `MUST` / `SHOULD` (never bare "should" / "we try to"); each `SHOULD` carries a one-line rationale for when it may be skipped;
+- accompanied by a short rationale if the rule is non-obvious.
 
-2. Collect/derive values for placeholders:
-   - If user input (conversation) supplies a value, use it.
-   - Otherwise infer from existing repo context (README, docs, prior constitution versions if embedded).
-   - For governance dates: `RATIFICATION_DATE` is the original adoption date (if unknown ask or mark TODO), `LAST_AMENDED_DATE` is today if changes are made, otherwise keep previous.
-   - `CONSTITUTION_VERSION` must increment according to semantic versioning rules:
-     - MAJOR: Backward incompatible governance/principle removals or redefinitions.
-     - MINOR: New principle/section added or materially expanded guidance.
-     - PATCH: Clarifications, wording, typo fixes, non-semantic refinements.
-   - If version bump type ambiguous, propose reasoning before finalizing.
+**Capability grants** — this is the section gates read. State each capability **explicitly and in plain machine-detectable terms**. At minimum address:
+- **Test execution**: may a gate run the project's tests as evidence? If yes, name the command (e.g. `run: pytest -q`). If unstated → denied.
+- **Build / compile / lint as evidence**: permitted? command?
+- **Network access** during a gate: permitted? scope?
+- **Mechanical auto-fixes**: may gates apply reversible normalizations (glossary terms, stale-ID references) automatically, or only route them?
 
-3. Draft the updated constitution content:
-   - Replace every placeholder with concrete text (no bracketed tokens left except intentionally retained template slots that the project has chosen not to define yet—explicitly justify any left).
-   - Preserve heading hierarchy and comments can be removed once replaced unless they still add clarifying guidance.
-   - Ensure each Principle section: succinct name line, paragraph (or bullet list) capturing non‑negotiable rules, explicit rationale if not obvious.
-   - Ensure Governance section lists amendment procedure, versioning policy, and compliance review expectations.
+Write grants as flat, unambiguous statements — no prose a weak model could misread. A reviewing gate must be able to answer "am I allowed to do X?" with a literal yes/no by scanning this section.
 
-4. Consistency propagation checklist (convert prior checklist into active validations):
-   - Read `.orderspec/templates/plan-template.md` and ensure any "Constitution Check" or rules align with updated principles.
-   - Read `.orderspec/templates/spec-template.md` for scope/requirements alignment—update if constitution adds/removes mandatory sections or constraints.
-   - Read `.orderspec/templates/tasks-template.md` and ensure task categorization reflects new or removed principle-driven task types (e.g., observability, versioning, testing discipline).
-   - Read each command file in `.orderspec/templates/commands/*.md` (including this one) to verify no outdated references (agent-specific names like CLAUDE only) remain when generic guidance is required.
-   - Read any runtime guidance docs (e.g., `README.md`, `docs/quickstart.md`, or agent-specific guidance files if present). Update references to principles changed.
+### 4. Version
 
-5. Produce a Sync Impact Report (prepend as an HTML comment at top of the constitution file after update):
-   - Version change: old → new
-   - List of modified principles (old title → new title if renamed)
-   - Added sections
-   - Removed sections
-   - Templates requiring updates (✅ updated / ⚠ pending) with file paths
-   - Follow-up TODOs if any placeholders intentionally deferred.
+Increment `CONSTITUTION_VERSION` (semantic) by the **highest-severity** change present:
 
-6. Validation before final output:
-   - No remaining unexplained bracket tokens.
-   - Version line matches report.
-   - Dates ISO format YYYY-MM-DD.
-   - Principles are declarative, testable, and free of vague language ("should" → replace with MUST/SHOULD rationale where appropriate).
+| Bump | Trigger (detect, don't deliberate) |
+|------|-----------------------------------|
+| **MAJOR** | a principle or capability grant was **removed**, **reversed**, or made **more restrictive** |
+| **MINOR** | a principle or grant was **added** or **materially expanded** |
+| **PATCH** | wording, typos, clarifications — no change to what is required or permitted |
 
-7. Write the completed constitution back to `.orderspec/memory/constitution.md` (overwrite).
+Pick the single highest bump that applies. State the rationale in one line.
 
-8. Output a final summary to the user with:
-   - New version and bump rationale.
-   - Any files flagged for manual follow-up.
-   - Suggested commit message (e.g., `docs: amend constitution to vX.Y.Z (principle additions + governance update)`).
+### 5. Detect conflicts and route (do NOT fix)
 
-Formatting & Style Requirements:
+Without rewriting anything, check whether this amendment **invalidates** existing artifacts, and route each finding to its owner:
 
-- Use Markdown headings exactly as in the template (do not demote/promote levels).
-- Wrap long rationale lines to keep readability (<100 chars ideally) but do not hard enforce with awkward breaks.
-- Keep a single blank line between sections.
-- Avoid trailing whitespace.
+- A changed/removed **principle** that an existing `spec.md` relies on → route to `/order.spec`.
+- A changed **capability grant** that affects how a gate gathers evidence → note which gate's behavior changes.
+- A new mandatory section that templates don't yet carry → route to template maintenance.
 
-If the user supplies partial updates (e.g., only one principle revision), still perform validation and version decision steps.
+Emit these as a **Routing block**. You produce findings, not edits. (Cross-artifact reconciliation after the fact is `sync-check`'s job — point the user there if findings are broad.)
 
-If critical info missing (e.g., ratification date truly unknown), insert `TODO(<FIELD_NAME>): explanation` and include in the Sync Impact Report under deferred items.
+### 6. Validate before writing
 
-Do not create a new template; always operate on the existing `.orderspec/memory/constitution.md` file.
+- No unexplained `[BRACKET]` tokens remain (only intentional `[UNRESOLVED: …]`, each listed in the report).
+- Every principle is testable and uses MUST/SHOULD correctly.
+- Every capability is either explicitly granted or knowingly omitted (= denied); no capability is left vaguely worded.
+- Version line matches the bump rationale; dates are ISO.
+
+### 7. Write & report
+
+Overwrite `.orderspec/memory/constitution.md`. Prepend a **Sync Impact Report** as an HTML comment:
+
+```
+<!--
+Sync Impact Report
+Version: <old> → <new> (<MAJOR|MINOR|PATCH>: <one-line reason>)
+Principles changed: <list, with renames as old → new>
+Capability grants changed: <list, with old → new where relevant>
+Added / Removed sections: <list>
+Routing (owner must reconcile):
+  - <finding> → /order.<command>
+Unresolved: <[UNRESOLVED] markers, or "none">
+-->
+```
+
+Then output to the user: the new version + bump reason, the Routing block (what they must reconcile and where), any `[UNRESOLVED]` items, and a suggested commit message, e.g. `docs: amend constitution to v<X.Y.Z> (<short reason>)`.
+
+## Constraints
+
+- Operate **only** on the existing `.orderspec/memory/constitution.md`. Never create a parallel template.
+- Preserve heading hierarchy from the template; do not demote/promote levels.
+- Single blank line between sections; no trailing whitespace.
+- Partial updates still go through versioning + validation + routing.
+- **You author governance; you do not enforce it and you do not rewrite the artifacts it governs.**
 
 ## Post-Execution Checks
 
-**Check for extension hooks (after constitution update)**:
-Check if `.orderspec/extensions.yml` exists in the project root.
-- If it exists, read it and look for entries under the `hooks.after_constitution` key
-- If the YAML cannot be parsed or is invalid, skip hook checking silently and continue normally
-- Filter out hooks where `enabled` is explicitly `false`. Treat hooks without an `enabled` field as enabled by default.
-- For each remaining hook, do **not** attempt to interpret or evaluate hook `condition` expressions:
-  - If the hook has no `condition` field, or it is null/empty, treat the hook as executable
-  - If the hook defines a non-empty `condition`, skip the hook and leave condition evaluation to the HookExecutor implementation
-- For each executable hook, output the following based on its `optional` flag:
-  - **Optional hook** (`optional: true`):
-    ```
-    ## Extension Hooks
-
-    **Optional Hook**: {extension}
-    Command: `/{command}`
-    Description: {description}
-
-    Prompt: {prompt}
-    To execute: `/{command}`
-    ```
-  - **Mandatory hook** (`optional: false`):
-    ```
-    ## Extension Hooks
-
-    **Automatic Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
-    ```
-- If no hooks are registered or `.orderspec/extensions.yml` does not exist, skip silently
+**Run `after_constitution` hooks** per the standard hook protocol (read `hooks.after_constitution`; same rules as pre-hooks). Do not duplicate the protocol text.
