@@ -38,32 +38,7 @@ Can be wired as an automatic post-plan hook (`hooks.after_plan`).
 
 ## Pre-Execution Checks
 
-**Check for extension hooks (before validation)**:
-- If `.orderspec/extensions.yml` exists, read entries under `hooks.before_plan_check`. If missing or unparsable YAML, skip silently.
-- Filter out hooks with `enabled: false` (absent `enabled` = enabled).
-- Do **not** evaluate hook `condition` expressions: hooks with no/empty `condition` are executable; hooks with a non-empty `condition` are skipped (left to HookExecutor).
-- For each executable hook, output by `optional` flag:
-  - **Optional hook** (`optional: true`):
-    ```
-    ## Extension Hooks
-
-    **Optional Pre-Hook**: {extension}
-    Command: `/{command}`
-    Description: {description}
-
-    Prompt: {prompt}
-    To execute: `/{command}`
-    ```
-  - **Mandatory hook** (`optional: false`):
-    ```
-    ## Extension Hooks
-
-    **Automatic Pre-Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
-
-    Wait for the result of the hook command before proceeding to the Goal.
-    ```
+Run the **`before_plan_check`** phase per `.orderspec/memory/hooks-protocol.md`.
 
 ## Goal
 
@@ -220,30 +195,9 @@ The gate's responsibilities end at detection, mechanical repair, and routing:
 
 Recommended loop: run the routed commands (batch the requests if convenient), then **re-run `/order.plan-check`** to confirm. Idempotent: a plan with no design/contract findings yields ✅ PASS. Repo-drift-over-time or whole-system concerns → `/order.analyze`.
 
-### 7. Post-Execution Hooks
+## Post-Execution Checks
 
-- If `.orderspec/extensions.yml` is missing, unparsable, or has no `hooks.after_plan_check` entries, skip silently.
-- Filter out `enabled: false` hooks (absent = enabled). Do **not** evaluate `condition`: no/empty condition = executable; non-empty condition = skip (left to HookExecutor).
-- For each executable hook:
-  - **Mandatory** (`optional: false`):
-    ```
-    ## Extension Hooks
-
-    **Automatic Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
-    ```
-  - **Optional** (`optional: true`):
-    ```
-    ## Extension Hooks
-
-    **Optional Hook**: {extension}
-    Command: `/{command}`
-    Description: {description}
-
-    Prompt: {prompt}
-    To execute: `/{command}`
-    ```
+Run the **`after_plan_check`** phase per `.orderspec/memory/hooks-protocol.md`.
 
 ## Operating Principles
 

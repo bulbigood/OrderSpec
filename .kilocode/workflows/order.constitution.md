@@ -27,7 +27,7 @@ Consider the user input before proceeding (if non-empty).
 
 ## Pre-Execution Checks
 
-**Run `before_constitution` hooks** per the standard hook protocol in `.orderspec/extensions.yml` (read `hooks.before_constitution`; skip silently if absent/invalid; honor `enabled`; do not evaluate `condition` expressions; for mandatory hooks emit `EXECUTE_COMMAND` and wait). See the shared hook spec — do not duplicate logic.
+Run the **`before_constitution`** phase per `.orderspec/memory/hooks-protocol.md`.
 
 ## Execution
 
@@ -120,4 +120,4 @@ Then output to the user: the new version + bump reason, the Routing block (what 
 
 ## Post-Execution Checks
 
-**Run `after_constitution` hooks** per the standard hook protocol (read `hooks.after_constitution`; same rules as pre-hooks). Do not duplicate the protocol text.
+Run the **`after_constitution`** phase per `.orderspec/memory/hooks-protocol.md`.

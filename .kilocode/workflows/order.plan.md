@@ -48,36 +48,7 @@ If a necessary implementation decision would change the contract, STOP and repor
 
 ## Pre-Execution Checks
 
-**Check for extension hooks (before planning)**:
-
-- If `.orderspec/extensions.yml` exists, read entries under `hooks.before_plan`. If missing or unparsable YAML, skip silently.
-- Filter out hooks with `enabled: false` (absent `enabled` = enabled).
-- Do **not** evaluate hook `condition` expressions: hooks with no/empty `condition` are executable; hooks with a non-empty `condition` are skipped (left to HookExecutor).
-- For each executable hook, output by `optional` flag:
-  - **Optional hook** (`optional: true`):
-
-    ```text
-    ## Extension Hooks
-
-    **Optional Pre-Hook**: {extension}
-    Command: `/{command}`
-    Description: {description}
-
-    Prompt: {prompt}
-    To execute: `/{command}`
-    ```
-
-  - **Mandatory hook** (`optional: false`):
-
-    ```text
-    ## Extension Hooks
-
-    **Automatic Pre-Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
-
-    Wait for the result of the hook command before proceeding to the Outline.
-    ```
+Run the **`before_plan`** phase per `.orderspec/memory/hooks-protocol.md`.
 
 ## Outline
 
@@ -197,35 +168,9 @@ If a necessary implementation decision would change the contract, STOP and repor
 - If the plan reveals a contradiction in spec.md, STOP and report — do not silently "fix" the contract.
 - Every file path in the plan must be real (existing) or explicitly marked NEW.
 
-## Mandatory Post-Execution Hooks
+## Post-Execution Checks
 
-**You MUST complete this section before reporting completion.**
-
-- If `.orderspec/extensions.yml` is missing, unparsable, or has no `hooks.after_plan` entries, skip to Completion Report.
-- Filter out `enabled: false` hooks (absent = enabled). Do **not** evaluate `condition`: no/empty condition = executable; non-empty condition = skip (left to HookExecutor).
-- For each executable hook:
-  - **Mandatory** (`optional: false`) — **MUST emit `EXECUTE_COMMAND:`**:
-
-    ```text
-    ## Extension Hooks
-
-    **Automatic Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
-    ```
-
-  - **Optional** (`optional: true`):
-
-    ```text
-    ## Extension Hooks
-
-    **Optional Hook**: {extension}
-    Command: `/{command}`
-    Description: {description}
-
-    Prompt: {prompt}
-    To execute: `/{command}`
-    ```
+Run the **`after_plan`** phase per `.orderspec/memory/hooks-protocol.md`.
 
 ## Completion Report
 
