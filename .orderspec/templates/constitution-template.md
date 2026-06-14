@@ -1,50 +1,87 @@
 # [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+  Supreme governance document. Two distinct jobs:
+    1. Core Principles      — human-facing rules the project must uphold.
+    2. Capability Grants    — machine-readable permissions that GATES EXECUTE LITERALLY.
+  LAW: any capability not explicitly granted below is DENIED. Gates degrade to
+  static inspection on anything unstated. Silence is never permission.
+  Edit only via `/order.constitution`. Keep heading levels intact.
+-->
 
 ## Core Principles
 
 ### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+<!-- Example: I. Contract Stability -->
+[PRINCIPLE_1_RULE]
+<!--
+  State as MUST / SHOULD, declarative and testable.
+  Example: "spec.md MUST remain the source of truth; behavior changes start there, not in code."
+  Add a one-line rationale if the rule is not self-evident.
+  Every SHOULD carries a note on when it may be skipped.
+-->
 
 ### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+[PRINCIPLE_2_RULE]
 
 ### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+[PRINCIPLE_3_RULE]
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+<!-- Add or remove principle blocks freely; the count above is a default, not a quota. -->
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+## Capability Grants
+<!--
+  THIS SECTION IS READ BY GATES. Write flat, unambiguous yes/no statements with
+  explicit commands. A gate must be able to scan this and answer "am I allowed
+  to do X?" with a literal yes/no — no prose it could misread.
+  Anything omitted here is DENIED.
+-->
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+### Test execution
+[GRANT_TESTS]
+<!--
+  Granted example:  "ALLOWED. Gates MAY run tests as evidence. run: [TEST_COMMAND]"
+  Denied  example:  "DENIED. Gates MUST NOT run tests; rely on static inspection."
+-->
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### Build / compile / lint as evidence
+[GRANT_BUILD]
+<!-- Example: "ALLOWED. run: [BUILD_COMMAND]"  |  "DENIED." -->
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+### Network access during a gate
+[GRANT_NETWORK]
+<!-- Example: "DENIED."  |  "ALLOWED for: [explicit scope]" -->
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+### Mechanical auto-fixes by gates
+[GRANT_AUTOFIX]
+<!--
+  Whether gates may APPLY reversible normalizations (glossary terms, stale-ID
+  references) vs. only ROUTE them. Example:
+  "ALLOWED for glossary-term normalization and unambiguous stale-ID references only;
+   anything touching meaning or scope MUST be routed, never applied."
+-->
+
+## [SECTION_NAME]
+<!--
+  Optional extra sections: security requirements, performance standards,
+  tech-stack constraints, compliance. Add as needed; keep them principle-like
+  (testable, MUST/SHOULD). Remove this block if unused.
+-->
+[SECTION_CONTENT]
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
 [GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+<!--
+  Example:
+  - This constitution supersedes all other practices; on conflict, it wins.
+  - Amendments are made only via `/order.constitution`, which versions the document
+    and ROUTES conflicting artifacts to their owning commands (it does not rewrite them).
+  - Version policy (semantic):
+      MAJOR — a principle or capability grant is removed, reversed, or made stricter.
+      MINOR — a principle or grant is added or materially expanded.
+      PATCH — wording / clarification, no change to what is required or permitted.
+  - Default-deny on capabilities is non-negotiable: unstated ⇒ denied.
+-->
 
 **Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+<!-- Dates ISO YYYY-MM-DD. Unknown values → [UNRESOLVED: <field> — <why>]. -->
