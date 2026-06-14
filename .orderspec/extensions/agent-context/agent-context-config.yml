@@ -1,0 +1,4 @@
+context_file: .kilocode/rules/orderspec-rules.md
+context_markers:
+  start: <!-- ORDERSPEC START -->
+  end: <!-- ORDERSPEC END -->

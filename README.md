@@ -13,7 +13,7 @@ This design exists for one reason: **to stay safe with weaker / cheaper models.*
 - [Core Philosophy (Model B)](#core-philosophy-model-b)
 - [The Pipeline at a Glance](#the-pipeline-at-a-glance)
 - [Commands](#commands)
-- [The `specify` Command — Three Modes](#the-specify-command--three-modes)
+- [The `spec` Command — Three Modes](#the-spec-command--three-modes)
 - [The Four Gates](#the-four-gates)
 - [Auto-Fix vs Route — the One Rule](#auto-fix-vs-route--the-one-rule)
 - [Routing Blocks](#routing-blocks)
@@ -34,7 +34,7 @@ OrderSpec separates two jobs that most SDD tools fuse together:
 
 | Job | Who does it | Can it change contract meaning? |
 |-----|-------------|-------------------------------|
-| **Authoring** content | the owner command (`specify`, `plan`, `tasks`) | ✅ yes — this is its purpose |
+| **Authoring** content | the owner command (`spec`, `plan`, `tasks`) | ✅ yes — this is its purpose |
 | **Inspecting** content | the gate (`*-check`, `analyze`) | ❌ never — it detects and routes |
 
 A gate is a **pure inspector with a single, narrow write permission**: it may apply only **mechanical / meaning-preserving** fixes. Everything that touches meaning, threshold, scope, a missing topic, or a source-of-truth decision is surfaced as a **Routing block** pointing at the owner command.
@@ -49,21 +49,21 @@ The most important consequence: **`analyze` can never delete or regenerate an ar
 
 ```mermaid
 graph TD
-    SPEC["/speckit.specify<br/>(create · refine · decompose)"] --> SC{"/speckit.spec-check<br/>inspect spec.md"}
+    SPEC["/order.spec<br/>(create · refine · decompose)"] --> SC{"/order.spec-check<br/>inspect spec.md"}
     SC -->|route| SPEC
-    SC -->|pass| PLAN["/speckit.plan<br/>physical mapping"]
-    PLAN --> PC{"/speckit.plan-check<br/>inspect plan.md"}
+    SC -->|pass| PLAN["/order.plan<br/>physical mapping"]
+    PLAN --> PC{"/order.plan-check<br/>inspect plan.md"}
     PC -->|route| PLAN
     PC -->|route: spec defect| SPEC
-    PC -->|pass| TASKS["/speckit.tasks<br/>ordered work"]
-    TASKS --> TC{"/speckit.tasks-check<br/>inspect tasks.md"}
+    PC -->|pass| TASKS["/order.tasks<br/>ordered work"]
+    TASKS --> TC{"/order.tasks-check<br/>inspect tasks.md"}
     TC -->|route| TASKS
     TC -->|route: upstream| PLAN
-    TC -->|pass| AN{"/speckit.analyze<br/>cross-stage integration"}
+    TC -->|pass| AN{"/order.analyze<br/>cross-stage integration"}
     AN -->|route to owner| SPEC
     AN -->|route to owner| PLAN
     AN -->|route to owner| TASKS
-    AN -->|pass| IMPL["/speckit.implement"]
+    AN -->|pass| IMPL["/order.code"]
 ```
 
 Gates are **conditional**, not mandatory. On a clean single-session run by a capable model they're usually green and can be skipped. They earn their keep when an artifact was hand-edited, time passed between stages, or a weaker model generated something downstream.
@@ -74,22 +74,22 @@ Gates are **conditional**, not mandatory. On a clean single-session run by a cap
 
 | Command | Type | Owns | Reads |
 |---------|------|------|-------|
-| `/speckit.specify` | **owner** | `spec.md` content (the WHAT-contract) | constitution |
-| `/speckit.spec-check` | gate | — (inspects spec) | `spec.md`, checklist (RO), constitution |
-| `/speckit.plan` | **owner** | `plan.md` content (physical mapping) | `spec.md`, repo |
-| `/speckit.plan-check` | gate | — (inspects plan) | `spec.md`, `plan.md`, repo |
-| `/speckit.tasks` | **owner** | `tasks.md` content (ordered work) | `plan.md`, `spec.md` |
-| `/speckit.tasks-check` | gate | — (inspects tasks) | `spec.md`, `plan.md`, `tasks.md` |
-| `/speckit.analyze` | gate | — (cross-stage integration) | all three + repo + constitution |
-| `/speckit.implement` | executor | the codebase | all artifacts |
+| `/order.spec` | **owner** | `spec.md` content (the WHAT-contract) | constitution |
+| `/order.spec-check` | gate | — (inspects spec) | `spec.md`, checklist (RO), constitution |
+| `/order.plan` | **owner** | `plan.md` content (physical mapping) | `spec.md`, repo |
+| `/order.plan-check` | gate | — (inspects plan) | `spec.md`, `plan.md`, repo |
+| `/order.tasks` | **owner** | `tasks.md` content (ordered work) | `plan.md`, `spec.md` |
+| `/order.tasks-check` | gate | — (inspects tasks) | `spec.md`, `plan.md`, `tasks.md` |
+| `/order.analyze` | gate | — (cross-stage integration) | all three + repo + constitution |
+| `/order.code` | executor | the codebase | all artifacts |
 
-> `clarify` is gone. Its question-and-answer elicitation now lives inside `/speckit.specify` (the Quality Validation flow), where authoring belongs.
+> `clarify` is gone. Its question-and-answer elicitation now lives inside `/order.spec` (the Quality Validation flow), where authoring belongs.
 
 ---
 
-## The `specify` Command — Three Modes
+## The `spec` Command — Three Modes
 
-`/speckit.specify` is the **sole owner of contract content**. It auto-detects its mode *before touching the filesystem*:
+`/order.spec` is the **sole owner of contract content**. It auto-detects its mode *before touching the filesystem*:
 
 <details open>
 <summary><b>create</b> — no active spec (or only an untouched template)</summary>
@@ -97,8 +97,8 @@ Gates are **conditional**, not mandatory. On a clean single-session run by a cap
 Fills the SDD template section by section, assigns stable IDs, validates against the quality checklist. **Refuses to overwrite** an existing non-template `spec.md` — if one exists, it re-routes itself to `refine`.
 
 ```bash
-/speckit.specify "users can reset their password via an emailed one-time link"
-/speckit.specify --new "a separate billing module"   # force create even if a spec exists
+/order.spec "users can reset their password via an emailed one-time link"
+/order.spec --new "a separate billing module"   # force create even if a spec exists
 ```
 </details>
 
@@ -115,8 +115,8 @@ Edits the contract **surgically**, never regenerates it. This is what makes cont
 - **Changelog** — a dated line records what changed.
 
 ```bash
-/speckit.specify "add rate-limiting to the login endpoint, 5 attempts per minute"
-/speckit.specify "the AC for REQ-007 should also cover the expired-token case"
+/order.spec "add rate-limiting to the login endpoint, 5 attempts per minute"
+/order.spec "the AC for REQ-007 should also cover the expired-token case"
 ```
 </details>
 
@@ -126,7 +126,7 @@ Edits the contract **surgically**, never regenerates it. This is what makes cont
 See [Handling Oversized Specs](#handling-oversized-specs-decomposition). Triggered by `--split`, or automatically when the scope-sizing heuristic fires.
 
 ```bash
-/speckit.specify --split        # break the current oversized spec into sub-specs
+/order.spec --split        # break the current oversized spec into sub-specs
 ```
 </details>
 
@@ -138,9 +138,9 @@ All four share one shape: **import the script's mechanical findings → run LLM 
 
 | Gate | Question it answers | Routes to |
 |------|--------------------|-----------|
-| **`spec-check`** | Is `spec.md` a complete, consistent, testable contract — *independent of how it's built*? Is it cohesive (not oversized)? | `/speckit.specify` |
-| **`plan-check`** | Is `plan.md` a correct, complete physical mapping of the contract onto the repo *as generated*? | `/speckit.plan` (or `/speckit.specify` for spec-rooted defects) |
-| **`tasks-check`** | Is `tasks.md` a faithful, well-ordered, fully-covering projection of the plan? | `/speckit.tasks` (or upstream owner) |
+| **`spec-check`** | Is `spec.md` a complete, consistent, testable contract — *independent of how it's built*? Is it cohesive (not oversized)? | `/order.spec` |
+| **`plan-check`** | Is `plan.md` a correct, complete physical mapping of the contract onto the repo *as generated*? | `/order.plan` (or `/order.spec` for spec-rooted defects) |
+| **`tasks-check`** | Is `tasks.md` a faithful, well-ordered, fully-covering projection of the plan? | `/order.tasks` (or upstream owner) |
 | **`analyze`** | Are spec, plan, tasks, repo & constitution mutually consistent *right now*? (drift, staleness, cross-artifact contradictions, whole-system constitution) | the owner of whichever layer is the source of truth |
 
 **Boundaries are strict and non-overlapping:**
@@ -186,7 +186,7 @@ When a gate can't auto-fix, it emits a **Routing block** — a batched, copy-pas
 **Why owner, not gate**: {changes meaning/scope OR fills a missing topic — must go through the author}
 **Impact if unresolved**: {what breaks downstream}
 **Suggested direction**: {1–2 advisory candidate resolutions}
-**Run**: `/speckit.specify "{ready-to-run request}"`
+**Run**: `/order.spec "{ready-to-run request}"`
 ```
 
 The `Run` line is a **recommendation, not an action**. The gate never executes it and never waits to apply an answer — there are no "ask-and-apply" mutations. You run it when you choose to.
@@ -222,12 +222,12 @@ Both sides detect oversize with the **same heuristic** (any two firing → overs
 
 > **Density ≠ oversize.** A dense but cohesive single domain stays one spec.
 
-- **`spec-check` (pass C8)** *detects* oversize on an existing spec and emits **one** Routing block → `/speckit.specify --split` (severity MEDIUM — advisory, not a hard block).
-- **`specify --split` / decompose mode** *acts*:
+- **`spec-check` (pass C8)** *detects* oversize on an existing spec and emits **one** Routing block → `/order.spec --split` (severity MEDIUM — advisory, not a hard block).
+- **`spec --split` / decompose mode** *acts*:
 
 ```mermaid
 graph TD
-    T["specify --split (or sizing gate fires)"] --> P["Produce a DECOMPOSITION PLAN<br/>(table of modules + boundaries + dependencies).<br/>Write nothing yet."]
+    T["spec --split (or sizing gate fires)"] --> P["Produce a DECOMPOSITION PLAN<br/>(table of modules + boundaries + dependencies).<br/>Write nothing yet."]
     P --> PR["Emit a ready-to-run prompt<br/>for EVERY module (copy-paste)"]
     PR --> A["Ask: which ONE module to build now?<br/>Recommend the core / most-depended-upon"]
     A --> B["Build EXACTLY that one focused spec.<br/>If --split: extract to a new dir +<br/>narrow the parent (tombstone moved IDs)."]
@@ -244,14 +244,14 @@ This keeps every pass **light enough for a weaker model** (one spec at a time), 
 <summary><b>Greenfield feature</b></summary>
 
 ```bash
-/speckit.specify "..."        # create the contract
-/speckit.spec-check           # (optional) inspect — route any gaps back to specify
-/speckit.plan                 # physical mapping
-/speckit.plan-check           # (optional) inspect
-/speckit.tasks                # ordered work
-/speckit.tasks-check          # (optional) inspect
-/speckit.analyze              # (optional) cross-stage integration before implement
-/speckit.implement
+/order.spec "..."        # create the contract
+/order.spec-check           # (optional) inspect — route any gaps back to spec
+/order.plan                 # physical mapping
+/order.plan-check           # (optional) inspect
+/order.tasks                # ordered work
+/order.tasks-check          # (optional) inspect
+/order.analyze              # (optional) cross-stage integration before code
+/order.code
 ```
 </details>
 
@@ -259,12 +259,12 @@ This keeps every pass **light enough for a weaker model** (one spec at a time), 
 <summary><b>Changing an existing contract</b></summary>
 
 ```bash
-/speckit.specify "add 2FA enrollment to the login journey"   # refine: surgical edit, IDs append-only
-# specify warns: plan.md / tasks.md may now be stale
-/speckit.plan                 # re-align downstream
-/speckit.tasks
-/speckit.analyze              # confirm the whole system is consistent again
-/speckit.implement
+/order.spec "add 2FA enrollment to the login journey"   # refine: surgical edit, IDs append-only
+# spec warns: plan.md / tasks.md may now be stale
+/order.plan                 # re-align downstream
+/order.tasks
+/order.analyze              # confirm the whole system is consistent again
+/order.code
 ```
 </details>
 
@@ -272,12 +272,12 @@ This keeps every pass **light enough for a weaker model** (one spec at a time), 
 <summary><b>A gate found something — the route loop</b></summary>
 
 ```bash
-/speckit.plan-check
+/order.plan-check
 # → 🔀 ROUTING REQUIRED: REQ-008 (P1) has no Mechanism Decision
-#   Run: /speckit.plan "add a mechanism for REQ-008 password-reset token expiry"
+#   Run: /order.plan "add a mechanism for REQ-008 password-reset token expiry"
 
-/speckit.plan "add a mechanism for REQ-008 ..."   # owner authors the fix
-/speckit.plan-check                               # re-run to confirm → ✅ PASS
+/order.plan "add a mechanism for REQ-008 ..."   # owner authors the fix
+/order.plan-check                               # re-run to confirm → ✅ PASS
 ```
 
 The loop is always: **gate routes → you run the owner command → re-run the gate.** Batch multiple routed requests into one owner call when convenient.
@@ -289,11 +289,11 @@ The loop is always: **gate routes → you run the owner command → re-run the g
 Wire gates as post-generation hooks so every artifact a small model produces is inspected immediately:
 
 ```yaml
-# .specify/extensions.yml
+# .orderspec/extensions.yml
 hooks:
-  after_specify: [{ command: speckit.spec-check, optional: false }]
-  after_plan:    [{ command: speckit.plan-check, optional: false }]
-  after_tasks:   [{ command: speckit.tasks-check, optional: false }]
+  after_spec: [{ command: order.spec-check, optional: false }]
+  after_plan:    [{ command: order.plan-check, optional: false }]
+  after_tasks:   [{ command: order.tasks-check, optional: false }]
 ```
 
 Because gates can't author content, an inspection by a weak model is *safe by construction* — worst case it over-routes, never corrupts.
@@ -306,7 +306,7 @@ Because gates can't author content, an inspection by a weak model is *safe by co
 ```mermaid
 graph LR
     subgraph Owners["Owners — author content"]
-        S["specify → spec.md"]
+        S["spec → spec.md"]
         P["plan → plan.md"]
         T["tasks → tasks.md"]
     end
@@ -328,7 +328,7 @@ graph LR
 
 | Concern | Owner |
 |---------|-------|
-| What the system must do, contracts, data model, invariants | `spec.md` via `specify` |
+| What the system must do, contracts, data model, invariants | `spec.md` via `spec` |
 | Mechanisms, paths, modules, stack, `[NEW]`/`[MOD]` | `plan.md` via `plan` |
 | Ordered, test-first, E-M-C tasks | `tasks.md` via `tasks` |
 | Mechanical IDs / coverage / paths / numbering | `validate-traceability.sh` |
@@ -342,7 +342,7 @@ graph LR
 Every gate first runs:
 
 ```bash
-.specify/scripts/bash/validate-traceability.sh --json "$FEATURE_DIR"
+.orderspec/scripts/bash/validate-traceability.sh --json "$FEATURE_DIR"
 ```
 
 It returns `summary`, `inventory`, `coverage`, and `findings` (IDs `M1`–`M14`): ID inventory, dangling references, numbering, `[P]` file-disjointness, `[NEW]`/`[MOD]` path existence, timestamp drift, the REQ→UJ→AC→Task chain. **Gates trust it and never re-count** mechanically — LLM tokens are spent only on meaning. If the script is missing, gates emit an `S0-001` "degraded mode" finding and do a brief manual spot-check.
@@ -351,9 +351,9 @@ It returns `summary`, `inventory`, `coverage`, and `findings` (IDs `M1`–`M14`)
 
 ## Extension Hooks
 
-Hooks let you inject commands before/after any stage via `.specify/extensions.yml`:
+Hooks let you inject commands before/after any stage via `.orderspec/extensions.yml`:
 
-- `before_*` / `after_*` per command (`before_specify`, `after_plan_check`, …).
+- `before_*` / `after_*` per command (`before_spec`, `after_plan_check`, …).
 - `enabled: false` disables a hook (absent = enabled).
 - `optional: true` → suggested (printed for you to run); `optional: false` → mandatory (`EXECUTE_COMMAND:` emitted).
 - Hooks with a non-empty `condition` are left to the HookExecutor; empty/absent condition = executable.
@@ -387,13 +387,13 @@ Because authoring a requirement is a *contract decision* — it changes what the
 <details>
 <summary><b>Do I have to run every gate?</b></summary>
 
-No. Gates are conditional. On a clean run by a capable model they're usually green. Run them when an artifact was hand-edited, time passed between stages, a weaker model was involved, or you're about to spend on an expensive `/speckit.implement`.
+No. Gates are conditional. On a clean run by a capable model they're usually green. Run them when an artifact was hand-edited, time passed between stages, a weaker model was involved, or you're about to spend on an expensive `/order.code`.
 </details>
 
 <details>
 <summary><b>What happened to <code>clarify</code>?</b></summary>
 
-It was folded into `/speckit.specify`. Elicitation (the numbered Q1–Q3 flow) is an *authoring* activity, so it belongs to the owner of the contract, not to a separate command or a gate.
+It was folded into `/order.spec`. Elicitation (the numbered Q1–Q3 flow) is an *authoring* activity, so it belongs to the owner of the contract, not to a separate command or a gate.
 </details>
 
 <details>

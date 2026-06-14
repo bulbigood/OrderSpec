@@ -1,4 +1,0 @@
-context_file: .kilocode/rules/specify-rules.md
-context_markers:
-  start: <!-- SPECKIT START -->
-  end: <!-- SPECKIT END -->
