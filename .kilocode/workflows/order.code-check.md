@@ -1,5 +1,5 @@
 ---
-description: Terminal verification gate — the only gate that inspects executable CODE rather than a Markdown artifact. Verifies that the written/merged code faithfully implements the contract (spec AC/INV/§12 + plan mechanisms), using tests as the primary oracle. Runs the test suite read-only, traces AC→test→code coverage, and spot-checks semantics only where tests are absent or weak. Operates whole-tree or on a git delta (PR / merged branch). NEVER modifies code — not even mechanically; code edits are never unambiguously reversible, so the gate is pure Route. Routes code defects to /order.code, contract-root defects to /order.spec/.plan, and cross-artifact desync to /order.sync-check. Degrades to spec-only verification if plan.md was archived after implementation.
+description: Terminal verification gate — the only gate that inspects executable CODE rather than a Markdown artifact. Verifies that the written/merged code faithfully implements the contract (spec AC/INV/§12 + plan mechanisms). Test execution, compilation, and builds are CONSTITUTION-GATED capabilities: the gate runs them ONLY when the constitution explicitly permits, and degrades to static inspection otherwise (it never violates governance to gather evidence). Where permitted, tests are the primary oracle; otherwise it spot-checks code against obligations directly. Operates whole-tree or on a git delta (PR / merged branch). NEVER modifies code — not even mechanically. Routes code defects to /order.code, contract-root defects to /order.spec/.plan, and cross-artifact desync to /order.sync-check. Linting/style is out of scope — wire it as an after_code_check hook.
 ---
 
 ## User Input
@@ -91,6 +91,7 @@ Detect and route. Never edit code.
 - **Artifact-vs-artifact consistency** (drift, merge collisions, repo-staleness of plan) → `/order.sync-check`.
 - **Style / lint / formatting** — not a contract concern. Flag only if a constitution MUST mandates a specific style and it is violated (→ Route).
 - **Performance micro-optimization** unless an NFR sets a measurable threshold the code provably misses.
+- **Style / lint / formatting** — not a contract concern and not this gate's job. Wire a linter as an `after_code_check` hook (`optional: true`) instead. Flag style only if a constitution MUST mandates a specific rule and the code provably violates it (→ Route).
 
 ## Operating Constraints
 
@@ -134,13 +135,38 @@ Run `.specify/scripts/bash/check-prerequisites.sh --json --require-tasks --inclu
 - Otherwise `DELTA_MODE = false` — verify the whole feature's implementation against the full contract.
 - If git is unavailable, fall back to whole-tree.
 
-### 2. Establish Test Reality (objective evidence first)
+### 2. Resolve Execution Capabilities (constitution-gated — fail-safe)
 
-Discover the test command (project manifest scripts, CI config, or convention). Then **run the suite read-only**:
-- Capture: build/compile success, pass/fail counts, failing test names + assertions, and (if cheaply available) which contract IDs the tests reference.
-- **If the suite does not build/compile** → emit CRITICAL `E0-001` (→ `/order.code`); most downstream verification is unreliable, so keep the rest of the pass brief and focused on the build break.
-- **If no runnable suite exists at all** → emit HIGH `E0-002`: "no executable tests — code-check degraded to static spot-check only." Methodology is test-first, so absence of tests is itself a finding (→ `/order.code` to add them, or `/order.tasks` if tasks never specified them).
-- Do NOT modify tests to make them pass. A failing test is evidence, not a defect to silence.
+Test execution, compilation, and builds are **capabilities the constitution may grant or withhold**. The gate gathers evidence by executing things ONLY with explicit permission — **silence means deny** (fail-safe: never run what the project did not sanction). Read `.specify/memory/constitution.md` (if absent, all execution is denied — pure static mode) and resolve three independent flags:
+
+| Capability | Granted when the constitution explicitly permits… | Effect when denied/unmentioned |
+|------------|---------------------------------------------------|--------------------------------|
+| `TESTS_EXPECTED` | tests are a required/allowed deliverable | absence of a test is **not** a finding; presence of a test may itself be a violation → Route |
+| `TEST_EXEC_OK` | running the test suite | do not run the suite; rely on static analysis (+ any test output the user supplied in `$ARGUMENTS`) |
+| `BUILD_OK` | compiling/building the project | do not compile; detect build breaks statically only (weaker, note the limitation) |
+
+`$ARGUMENTS` may **further restrict** but never expand these (a user can say "don't run tests this time"; a user cannot override a constitution prohibition).
+
+Set the **verification mode** from the flags and state it in the report header:
+
+**Scope**: {whole-tree | delta vs {base}} · Mode: {FULL | STATIC+TESTS | STATIC-ONLY} · Plan: {available | archived — S4 skipped} · Suite: {green N/N | red F failing | not run (constitution) | none}
+
+- **FULL** (`TEST_EXEC_OK` & `BUILD_OK`): run the suite + build; tests are the primary oracle (§3 onward as written).
+- **STATIC+TESTS** (`TESTS_EXPECTED` but execution/build denied): read tests as a specification of intended behavior, but do NOT run them; the oracle is static trace of code ↔ obligation, cross-checked against what the tests assert.
+- **STATIC-ONLY** (`TESTS_EXPECTED` false): the constitution does not want tests; the oracle is a direct static spot-check of code against each obligation. A test file existing here is a Route candidate (→ `/order.code` to remove, or `/order.spec` if the constitution is stale).
+
+Execution is **read-only** in every mode (running tests/builds inspects, never modifies code) — and only occurs in FULL.
+
+### 3. Establish the Oracle (mode-dependent)
+
+**FULL mode only — run the suite read-only**: discover the test command (manifest scripts, CI config, convention) and execute it. Capture build/compile success, pass/fail counts, failing test names + assertions, and which contract IDs tests reference.
+- Suite does not build → CRITICAL `E0-001` (→ `/order.code`); keep the rest brief, focused on the break.
+- `TESTS_EXPECTED` but no runnable suite exists → HIGH `E0-002` ("no executable tests where the constitution expects them" → `/order.code` to add, or `/order.tasks` if the test task was never specified).
+- Never modify a test to make it pass; a failing test is evidence.
+
+**STATIC+TESTS mode** — do NOT execute. Read test files as a declared behavior spec: each test names an obligation and an expected outcome. Verify statically that the code's behavior matches what the test asserts. If `$ARGUMENTS` includes externally-run test output (e.g., CI logs), use it as evidence but do not run anything yourself.
+
+**STATIC-ONLY mode** — there is no test oracle by design. Skip E0; the oracle for §4 is direct static reading of the implementation against each obligation. Note in the header that verification confidence is reduced (no executable evidence).
 
 ### 3. Build the Obligation Set
 
@@ -150,13 +176,17 @@ From spec (in DELTA_MODE, prioritize those touched by the change set): collect t
 
 Limit to 30 findings total; on overflow drop LOW first, aggregate, never drop a CRITICAL. Stable IDs per pass (E1-001…).
 
-#### E1. AC → Test → Code Traceability (the core pass)
+#### E1. Obligation → (Test) → Code Traceability (the core pass)
+
+The chain's middle link (a test) is required **only when `TESTS_EXPECTED` is true**. In STATIC-ONLY mode, verify obligation → code directly (skip the test link; absence of a test is not a finding).
 
 For each obligation in the set:
-- **E1a — backed by a test?** No test exercises this AC/INV/§12 → **Route** (→ `/order.code` to add the test+impl, or `/order.tasks` if the task that should have created it is missing). Severity by priority (P1/INV/§12 → HIGH+).
-- **E1b — test passes?** A test exists and **fails** → **Route** (→ `/order.code`). Quote the failing assertion as Evidence. CRITICAL if a P1 AC or an INV.
-- **E1c — test is real, not vacuous?** Spot-check that the test actually asserts the AC's Then-clause (not a trivially-true assertion, not skipped/`xit`, not asserting a stub returns a hardcoded value). A passing-but-vacuous test for a contract obligation → **Route** (→ `/order.code`).
-- **E1d — implementation is real, not a stub?** The code path the test exercises actually implements behavior (not `TODO`, `throw NotImplemented`, hardcoded fixture) → else **Route**.
+- **E1a — backed by evidence?**
+  - `TESTS_EXPECTED` true: no test exercises this AC/INV/§12 → **Route** (severity by priority). 
+  - STATIC-ONLY: no need for a test; instead, if you **cannot locate any code** implementing this obligation → **Route** (→ `/order.code`).
+- **E1b — does the evidence hold?** FULL: a test exists and **fails** → **Route** (→ `/order.code`), quote the assertion, CRITICAL if P1 AC/INV. STATIC+TESTS/STATIC-ONLY: the code statically contradicts the obligation's Then-clause → **Route**.
+- **E1c — evidence is real, not vacuous?** FULL/STATIC+TESTS: the test actually asserts the Then-clause (not trivially-true, skipped, or asserting a stub's hardcoded value) → else **Route**.
+- **E1d — implementation is real, not a stub?** The code path actually implements behavior (not `TODO`/`NotImplemented`/hardcoded fixture) → else **Route**. (Applies in all modes.)
 
 #### E2. No Un-Contracted Behavior
 
@@ -191,8 +221,8 @@ If you observe that spec and plan **disagree with each other** about what the co
 ### 5. Severity Assignment
 
 - **CRITICAL**: suite does not build (E0-001); a failing test for a P1 AC or an INV; an INV with no enforcement and violable by existing code paths; §12 failure-semantics breach risking data corruption; constitution MUST violation in code.
-- **HIGH**: a P1 AC with no test at all; a passing-but-vacuous test for a P1/INV/§12 obligation; §12 status/shape mismatch on an MVP endpoint; planned `[NEW]` file absent; no runnable suite (E0-002).
-- **MEDIUM**: missing test for a non-MVP AC; un-contracted behavior of low blast radius; plan-mechanism deviation that still meets the AC; plan-fidelity skipped (degraded, PLAN absent).
+- **HIGH**: a P1 AC unbacked by evidence (no test in test-expected modes, or no locatable implementing code in STATIC-ONLY); a passing-but-vacuous test for a P1/INV/§12 obligation; §12 status/shape mismatch on an MVP endpoint; planned `[NEW]` file absent; `TESTS_EXPECTED` but no runnable suite (E0-002).
+- **MEDIUM**: missing test for a non-MVP AC; un-contracted behavior of low blast radius; plan-mechanism deviation that still meets the AC; plan-fidelity skipped (degraded, PLAN absent); **a test file present while the constitution forbids tests (STATIC-ONLY) → Route to /order.code**; **reduced-confidence verification because execution/build was constitution-denied (informational)**.
 - **LOW**: cosmetic divergence with no contract impact; minor un-contracted helper with no external effect; style only-if-constitution-mandated near-misses.
 
 **MVP-scope**: obligations tied to P1 user journeys (spec §15). A HIGH on MVP blocks; off-MVP does not auto-block.
@@ -222,6 +252,7 @@ If you observe that spec and plan **disagree with each other** about what the co
 (✅ backed+passing+real / ⚠️ weak / ❌ missing-or-failing)
 
 ### Metrics
+- Capabilities: tests {expected|forbidden} · exec {allowed|denied} · build {allowed|denied}
 - Obligations verified: {n} (AC {a} · INV {i} · §12 {c})
 - Suite: {pass}/{total} ({fail} failing); coverage of obligations: {covered}/{total}
 - Findings by severity: C/H/M/L
@@ -269,11 +300,11 @@ Recommended loop: resolve routed findings via the named owner, re-run the suite,
 ## Operating Principles
 
 - **The only code-reading gate — and it still never writes code.** Zero auto-fix: code edits are never the unambiguous, reversible, meaning-preserving corrections that text gates' mechanical exception requires. Everything is Route.
-- **Tests are the oracle.** Prefer objective test evidence over prose reasoning; spend tokens on semantic spot-checks only where tests are absent/weak and the obligation is high-impact.
+- **Constitution gates the evidence method, not just the verdict.** Test execution, compilation, and builds run ONLY when the constitution explicitly permits — silence means deny. The gate degrades to static inspection rather than violate governance to get a better signal.
+- **Tests are the oracle WHERE permitted.** In FULL mode prefer objective test evidence; in static modes the oracle is direct code↔obligation tracing. Test-first is a constitution-default, not an axiom: where tests are forbidden, their absence is correct and their presence is a finding.
 - **Suspect the code, but find the real root.** Default route is `/order.code`; escape upstream to `/order.spec`/`/order.plan` when the contract is the actual problem, and to `/order.sync-check` when the artifacts disagree.
 - **Read + execute only.** Running the suite read-only is evidence-gathering, not modification. Never silence a failing test, never patch a stub.
 - **Code ↔ contract, not artifact ↔ artifact.** That second axis is `sync-check`; this gate verifies the implementation against an assumed-consistent contract.
-- **Test-first is contractual.** A missing test for an obligation is a finding, not an excuse to skip verification.
 - **Degrade, don't abort.** No plan → spec-only with a note. No suite → static spot-check with a HIGH finding. Build break → focused CRITICAL.
 - **NEVER hallucinate behavior** — base findings on quoted code, named tests, and cited obligation IDs.
 - Minimal high-signal tokens: cite file:line, test name, and obligation ID; cap at 30 findings; aggregate overflow.
