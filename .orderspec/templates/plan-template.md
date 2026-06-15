@@ -33,7 +33,6 @@ specs/[###-feature]/
 ├── plan.md              # This file: physical file mapping, stack verification, implementation mechanisms
 ├── research.md          # CONDITIONAL: generated only if unresolved technology/design questions exist
 └── tasks.md             # Generated later by /order.tasks: atomic execution order
-
 ```
 
 If no research was needed, write below the tree:
@@ -41,23 +40,25 @@ If no research was needed, write below the tree:
 
 ## Physical Project Structure (Source Code)
 
-<!-- Annotate EVERY file: [NEW] = file to be created, [MOD] = existing file to be modified.
-     Directories need no annotation. Every [MOD] path MUST exist in the repo at plan time;
-     every [NEW] path MUST NOT exist. Do not list untouched files. The tree MUST be a single well-formed hierarchy: [MOD] files appear nested inside their parent directory alongside [NEW] files — never as a flat list appended after the tree. -->
+<!-- Flat path manifest — NOT a tree. One FILE per line, never directories.
+     Format: <repo-relative-path>  [NEW]|[MOD]
+       [NEW] = file does NOT exist on disk now.
+       [MOD] = file DOES exist now and will be modified.
+     This is a physical fact verified by `test -e`, not a role inference:
+     do NOT tag [MOD] just because a file "logically should be touched" —
+     confirm it is actually present first. A mechanical check
+     (validate-traceability M9/M10) compares every line against the filesystem;
+     a [MOD] on a missing path, a [NEW] on an existing one, an untagged line,
+     or a listed directory is a blocking finding. `test -e` is the arbiter,
+     not your judgement. Paths are forward-slash, repo-relative, no leading ./ -->
 
-```text
-src/
-├── models/
-│   └── user.py                  [NEW]  User entity (Spec § Data Model)
-├── services/
-│   └── auth_service.py          [NEW]  Core logic for UJ-001
-├── api/
-│   └── routes.py                [MOD]  Register new endpoints (Spec § API Contracts)
-└── config/
-    └── settings.py              [MOD]  Add feature flag
-tests/
-└── integration/
-    └── test_auth_flow.py        [NEW]  Asserts AC-001, AC-002
+```pathmanifest
+src/models/user.py                      [NEW]
+src/services/auth_service.py            [NEW]
+src/api/routes.py                       [MOD]
+src/config/settings.py                  [MOD]
+tests/integration/test_auth_flow.py     [NEW]
+tests/unit/services/test_auth_service.py [NEW]
 ```
 
 **Structure & Path Decisions**:
@@ -75,17 +76,31 @@ tests/
 | Routes | [`...`] | [`...`] | [`...`] |
 | Tests/Fixtures | [`...`] | [`...`] | [`...`] |
 
-For multi-word entities: [same-layer precedent or explicit statement that no precedent exists, plus chosen convention and rationale].
+For multi-word entities: [same-layer precedent or explicit statement that no precedent exists, plus chosen convention and which rule fired].
 
-* **Architectural Mapping:** [How Spec containers/components map to the folder layout above]
+* **Architectural Mapping:** [How Spec containers/components map to the folders above]
 
 * **Mechanism Decisions:**
 
-| Spec ID | Mechanism | Primary Files | Test Type |
+<!-- MECHANISM-TABLE: machine-read by validate-traceability (T2a(d) source of truth).
+     This table is the SINGLE source of truth for each spec ID's Test Type.
+     Rules the validator depends on — do NOT break them:
+       - Columns in EXACTLY this order: Spec ID(s) | Mechanism | Primary Files | Test Type
+       - "Spec ID(s)" cell = one or more IDs, comma-separated, nothing else
+         (e.g. `AC-003, AC-004`). No prose, no parentheses around IDs.
+       - "Test Type" cell = EXACTLY one of: unit | integration | —
+         `—` means documented-only: NO executable task implements this ID, so it
+         can NEVER be tag-autofixed onto a task (validator enforces this).
+     Every AC/INV/EDGE/NFR/REQ that this plan addresses MUST appear in exactly
+     one row's Spec ID(s) cell. An ID absent from this table is treated as
+     documented-only by the validator. -->
+
+| Spec ID(s) | Mechanism | Primary Files | Test Type |
 | --- | --- | --- | --- |
-| [AC/INV/EDGE/NFR/REQ ID] | [Concrete implementation decision; no contract restatement] | [`path/to/file.js`] | [unit / integration / —] |
+| [AC/INV/EDGE/NFR/REQ ID(s), comma-separated when sharing one mechanism] | [Concrete implementation decision; no contract restatement] | [`path/to/file.js`] | [unit / integration / —] |
 
 * **Component Diagram:** Internal physical design of the planned implementation:
+
 ```mermaid
 graph TD
     Ctrl[Controller] --> Svc[Service] --> Repo[Repository]
@@ -97,5 +112,4 @@ graph TD
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 | --- | --- | --- |
-|  |  |  |
 |  |  |  |

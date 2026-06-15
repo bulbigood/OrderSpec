@@ -23,6 +23,66 @@ This command **executes** — it makes no design decisions. All decisions live i
 
 Run the **`before_code`** phase per `.orderspec/memory/hooks-protocol.md`.
 
+## Upstream Gate Guard
+
+Code must not be written without an approved task list. First resolve the feature
+directory, then run the deterministic guard (it only checks that `tasks.md` exists
+and reads its gate verdict):
+
+```bash
+FEATURE_DIR="$(jq -r '.feature_directory' .orderspec/feature.json)"
+
+.orderspec/scripts/bash/check-upstream-gate.sh \
+  --report        "$FEATURE_DIR/checklists/tasks-report.md" \
+  --artifact      "$FEATURE_DIR/tasks.md" \
+  --upstream-name "tasks.md" \
+  --this          "/order.code" \
+  --build         "/order.tasks" \
+  --fix           "/order.tasks" \
+  --recheck       "/order.tasks-check" \
+  $FORCE_FLAG
+```
+
+`$FORCE_FLAG` is `--force` iff the user input explicitly contains `--force` (or an
+unambiguous "implement anyway despite ROUTING/BLOCK"); otherwise empty.
+
+Act on the result by exit code / `status`:
+
+- **exit 2, `status: stop`** → **STOP. Write NO code.** There is no `tasks.md` to
+  implement. `--force` does NOT override this. Print the STOP message and end.
+- **exit 1, `status: halt`** → **STOP. Write NO code.** The task list has
+  unresolved gate findings. Print the HALT message and end. Do not implement any task.
+- **exit 0, `status: forced`** → emit a prominent warning. Code has no header to
+  stamp; instead record the override in the completion report:
+  `⚠ Implemented over non-PASS tasks gate (verdict: {verdict}) via --force` — then proceed.
+- **exit 0, `status: advisory`** → emit the `reason` as a one-line ⚠ warning, then
+  proceed (gate is optional, or tasks changed after PASS — not a hard stop).
+- **exit 0, `status: ok`** → task list approved; proceed silently.
+
+**STOP message (exit 2 — missing artifact):**
+
+```text
+CODE_STOPPED: no tasks to implement
+There is no tasks.md in this feature ({FEATURE_DIR}).
+Implementation executes an existing task list — the tasks must exist first.
+  1. Create the tasks:  /order.tasks
+  2. (recommended) Verify them: /order.tasks-check
+  3. Then run /order.code
+--force does NOT bypass this — there is genuinely nothing to implement.
+```
+
+**HALT message (exit 1 — gate not passed):**
+
+```text
+CODE_BLOCKED: tasks gate not passed
+Tasks gate verdict: {verdict} (from checklists/tasks-report.md, dated {date})
+The task list has unresolved findings. Resolve them first:
+  1. Action each Routing block in tasks-report.md via /order.tasks "..."
+  2. Re-run /order.tasks-check until the verdict is ✅ PASS
+  3. Then re-run /order.code
+To implement anyway (NOT recommended), re-run with --force.
+```
+
 ## Outline
 
 1. **Setup**: Run `.orderspec/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks` from repo root; parse FEATURE_DIR and AVAILABLE_DOCS. All paths absolute. For single quotes in args use `'I'\''m Groot'` or double quotes.
@@ -110,6 +170,7 @@ Context for execution: $ARGUMENTS
 
 ## Done When
 
+- [ ] **Upstream gate respected**: the guard returned `ok`/`advisory`/`forced` (not `halt`); on `forced`, a `--force` warning was in the completion report.
 - [ ] All tasks executed in phase + task-ID order and marked `[X]`, or a precise stopping point reported
 - [ ] `[P]` groups run concurrently ONLY after Files-Touched verification; otherwise sequential
 - [ ] All story checkpoints passed; GATE passed before any Contract task ran
