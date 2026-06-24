@@ -30,7 +30,7 @@ Each gate status is one of: PASS (verifiable now, cite evidence), DESIGN-OK (the
 ```text
 specs/[###-feature]/
 ├── spec.md              # Truth Source: requirements, logical architecture, data model, API contract
-├── plan.md              # This file: physical file mapping, stack verification, implementation mechanisms
+├── plan.md              # This file: physical file mapping, stack verification, structure decisions
 ├── research.md          # CONDITIONAL: generated only if unresolved technology/design questions exist
 └── tasks.md             # Generated later by /order.tasks: atomic execution order
 ```
@@ -79,25 +79,6 @@ tests/unit/services/test_auth_service.py [NEW]
 For multi-word entities: [same-layer precedent or explicit statement that no precedent exists, plus chosen convention and which rule fired].
 
 * **Architectural Mapping:** [How Spec containers/components map to the folders above]
-
-* **Mechanism Decisions:**
-
-<!-- MECHANISM-TABLE: machine-read by validate-traceability (T2a(d) source of truth).
-     This table is the SINGLE source of truth for each spec ID's Test Type.
-     Rules the validator depends on — do NOT break them:
-       - Columns in EXACTLY this order: Spec ID(s) | Mechanism | Primary Files | Test Type
-       - "Spec ID(s)" cell = one or more IDs, comma-separated, nothing else
-         (e.g. `AC-003, AC-004`). No prose, no parentheses around IDs.
-       - "Test Type" cell = EXACTLY one of: unit | integration | —
-         `—` means documented-only: NO executable task implements this ID, so it
-         can NEVER be tag-autofixed onto a task (validator enforces this).
-     Every AC/INV/EDGE/NFR/REQ that this plan addresses MUST appear in exactly
-     one row's Spec ID(s) cell. An ID absent from this table is treated as
-     documented-only by the validator. -->
-
-| Spec ID(s) | Mechanism | Primary Files | Test Type |
-| --- | --- | --- | --- |
-| [AC/INV/EDGE/NFR/REQ ID(s), comma-separated when sharing one mechanism] | [Concrete implementation decision; no contract restatement] | [`path/to/file.js`] | [unit / integration / —] |
 
 * **Component Diagram:** Internal physical design of the planned implementation:
 

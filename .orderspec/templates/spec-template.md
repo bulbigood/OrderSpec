@@ -29,7 +29,7 @@ Brief high-level description of the system, feature, or architectural change. (M
 ---
 
 ## 4. Functional Requirements
-<!-- One testable statement per REQ (MUST/MUST NOT). If ambiguous: [NEEDS CLARIFICATION: question] + paired Q-NNN in Open Questions. -->
+<!-- One testable statement per REQ (MUST/MUST NOT). -->
 - **REQ-001**: System MUST [specific capability]
 - **REQ-002**: System MUST [specific capability]
 
@@ -42,91 +42,85 @@ Brief high-level description of the system, feature, or architectural change. (M
 ---
 
 ## 6. Constraints
+<!-- Externally imposed: mandated tech, platforms, compliance. This is the ONLY section where
+     physical technology names (Mongoose, Joi, PostgreSQL) may appear. -->
 - **CON-001**: [e.g., "Must use PostgreSQL"]
 - **CON-002**: [e.g., "Must support iOS 17+"]
 
 ---
 
-# Architecture
-
-## 7. System Context Diagram
-```mermaid
-graph TD
-    User([User]) --> API[System Boundary]
-    API --> ExtSystem[External Service]
-```
-
-## 8. Container Diagram
-*(omit this section entirely if not applicable — do not create placeholder diagrams)*
-```mermaid
-graph LR
-    Client[Frontend App] --> API[Backend API]
-    API --> DB[(Database)]
-    API --> Queue[(Message Queue)]
-```
+## 7. Architecture & Behaviour
+<!-- Choose the MINIMAL set of Mermaid diagrams to fully describe the contract.
+     Use LOGICAL ROLES (Authentication, Validation, Application Service, Persistence),
+     NOT physical code names (Mongoose, Joi, Route Layer, catchAsync) from §6.
+     At minimum, include one diagram showing actor-system interaction or data flow.
+     Omit non-applicable diagrams entirely — never emit placeholder diagrams.
+     Mermaid safety: ALL node labels MUST use quoted form X["label"].
+     In sequenceDiagram, declare every participant at the top via participant X lines. -->
 
 ---
 
-# Behaviour
-
-## 9. Sequence Diagrams
-
-### Happy Path
-```mermaid
-sequenceDiagram
-    Client ->> API: Request
-    API ->> DB: Query
-    DB -->> API: Data
-    API -->> Client: Response (200 OK)
-```
-
-### Error Paths
-<!-- One diagram per significant failure scenario (validation failure, timeout, dependency down).
-     Cover at least the failures referenced by EDGE-NNN that involve cross-component interaction.
-     If no meaningful error flows exist, replace this subsection with one line: "No distinct error flows; errors covered by EDGE-NNN handling." -->
-```mermaid
-sequenceDiagram
-    Client ->> API: Request
-    API ->> DB: Query
-    DB -->> API: Error / Timeout
-    API -->> Client: Response (4xx/5xx + error contract)
-```
-
-## 10. State Machine Diagram
-*(omit this section entirely if not applicable — do not create placeholder diagrams)*
-```mermaid
-stateDiagram-v2
-    [*] --> Idle
-    Idle --> Processing: Action
-    Processing --> [*]
-```
-
----
-
-# Data & Contracts
-
-## 11. Data Model (ERD)
-*(omit this section entirely if not applicable — do not create placeholder diagrams)*
+## 8. Data Model (ERD)
+<!-- Omit entirely if not applicable. Verbose column details go in <details> blocks. -->
 ```mermaid
 erDiagram
-    USER ||--o{ SESSION : has
-    USER {
-        string id
-        string email
+    ENTITY_A ||--o{ ENTITY_B : has
+    ENTITY_A {
+        string id PK
+        string name
     }
 ```
 
 <details>
-<summary>View Database Columns & Implementation Details</summary>
+<summary>View Schema Details</summary>
 
-```sql
--- Implementation-specific schemas or verbose column details go here
-```
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+|       |      |          |         |             |
+
 </details>
 
-## 12. API Contracts
-*(omit this section entirely if not applicable — omit if no external interface)*
-### Endpoints / Event Schemas
+---
+
+## 9. API Contracts
+<!-- Omit entirely if no external interface. §9 is the single normative source for status codes
+     and response shapes. Define repeated structures ONCE in a shared <details> block;
+     per-endpoint entries reference them. Include full examples only for non-obvious shapes. -->
+
+### Authorization
+<!-- If the feature has mutating endpoints or cross-tenant reads, specify actor and permissions
+     per endpoint here. If unresolved, note "deferred to Clarification Protocol". Omit if not applicable. -->
+
+### Shared Structures
+
+<details>
+<summary>Pagination Envelope</summary>
+
+```json
+{
+  "results": [],
+  "page": 1,
+  "limit": 10,
+  "totalPages": 1,
+  "totalResults": 0
+}
+```
+
+</details>
+
+<details>
+<summary>Error Body</summary>
+
+```json
+{
+  "code": 400,
+  "message": "Error description"
+}
+```
+
+</details>
+
+### Endpoints
 - **POST** `/api/v1/...`
 
 <details>
@@ -138,42 +132,68 @@ erDiagram
   "response": {}
 }
 ```
+
 </details>
 
 ---
 
-# Consistency & Validation
+## 10. Invariants
+<!-- Conditions that must hold TRUE at all times (consistency rules), deterministic form.
+     Not requirements, not behaviors. -->
 
-## 13. Invariants
-<!-- Conditions that must hold TRUE at all times (consistency rules), deterministic form. Not requirements, not behaviors. -->
 - **INV-001**: [e.g., "Active session must have exactly one owner"]
 - **INV-002**: [e.g., "Transaction amount cannot be negative"]
 
+### Contradiction Grid
+<!-- Required. For each INV with absolute quantifier (exactly/always/never) check against
+     NFR and ASM with weakening qualifiers (best-effort/may fail/eventually).
+     Also add REQ×ASM narrowing pairs if any ASM narrows a REQ's semantics.
+     If no pairs exist, state "No absolute INV × weakening NFR/ASM pairs". -->
+
+| INV | Source | Tension | Verdict |
+|-----|--------|---------|---------|
+|     |        |         |         |
+
 ---
 
-## 14. Edge Cases
+## 11. Edge Cases
 - **EDGE-001**: [e.g., User disconnects in the middle of processing]
 - **EDGE-002**: [e.g., Boundary condition or concurrent update conflicts]
 
 ---
 
-## 15. Acceptance Criteria & User Journeys
-<!-- Each UJ = independently implementable & testable MVP slice, ordered P1..Pn. Every AC must trace to a REQ via "Covers". -->
-### UJ-001 - [Brief Title] (Priority: P1)
-**Covers**: REQ-001, REQ-002, NFR-001
-**Why this priority**: [...]
-**Independent Test**: [...]
+## 12. Acceptance Criteria & User Journeys
+<!-- Each UJ = independently implementable & testable MVP slice, ordered P1..Pn.
+     At most 2 UJs may be P1. Every AC must trace to a REQ via "Covers".
+     Each AC must directly test the REQ whose behavior it checks. -->
 
-- **AC-001**: **Given** [state], **When** [action], **Then** [outcome]
-- **AC-002**: **Given** [state], **When** [action], **Then** [outcome]
+- **UJ-001**: [Brief Title] (Priority: P1)
+  **Covers**: REQ-001, REQ-002
+  **Why this priority**: [...]
+  **Independent Test**: [...]
+  **Done when**: [observable outcome that proves this UJ is complete]
+
+  - **AC-001**: **Given** [state], **When** [action], **Then** [outcome]
+  - **AC-002**: **Given** [state], **When** [action], **Then** [outcome]
 
 ---
 
-## 16. Open Questions
+## 13. Open Questions
+<!-- High-impact forks surfaced via Clarification Protocol. If none, state "None — all
+     requirements are unambiguous and scoped." ONLY if you have verified Fork Awareness Areas. -->
 - **Q-001**: [Pending architectural or business decision]
-- **Q-002**: [Handled via order.clarify / NEEDS CLARIFICATION if needed]
 
 ---
 
-## 17. Assumptions
-- **ASM-001**: [Default chosen when input was ambiguous, e.g., "Existing auth system is reused"]
+## 14. Assumptions
+<!-- Kind tags: [default] = low-impact default; [narrowing REQ-NNN] = narrows a REQ's scope
+     (must be verified case/action-aware against that REQ); [deferred] = decision deferred to plan.md.
+     An ASM alone never carries behavior — if it changes observable behavior, also reflect in REQ or §9. -->
+- **ASM-001**: [default] [e.g., "Existing auth system is reused"]
+- **ASM-002**: [narrowing REQ-009] [e.g., "Snapshot captures full state, not diff"]
+
+---
+
+## 15. Changelog
+<!-- Populated in refine mode. One line per change: date | change | IDs affected -->
+<!-- Example: 2026-01-15 | Added REQ-010 for concurrent update semantics | REQ-010, INV-003 -->

@@ -32,7 +32,7 @@ and reads its gate verdict):
 ```bash
 FEATURE_DIR="$(jq -r '.feature_directory' .orderspec/feature.json)"
 
-.orderspec/scripts/bash/check-upstream-gate.sh \
+python3 .orderspec/scripts/upstream_gate.py \
   --report        "$FEATURE_DIR/checklists/tasks-report.md" \
   --artifact      "$FEATURE_DIR/tasks.md" \
   --upstream-name "tasks.md" \
@@ -85,7 +85,7 @@ To implement anyway (NOT recommended), re-run with --force.
 
 ## Outline
 
-1. **Setup**: Run `.orderspec/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks` from repo root; parse FEATURE_DIR and AVAILABLE_DOCS. All paths absolute. For single quotes in args use `'I'\''m Groot'` or double quotes.
+1. **Setup**: Run `python3 .orderspec/scripts/setup.py code --json` from repo root; parse FEATURE_DIR and AVAILABLE_DOCS. All paths absolute. For single quotes in args use `'I'\''m Groot'` or double quotes.
 
 2. **Checklists gate** (if `FEATURE_DIR/checklists/` exists):
    - For each checklist file count total (`- [ ]`, `- [x]`, `- [X]`), completed (`- [x]`/`- [X]`), incomplete (`- [ ]`) items; render a status table (Checklist | Total | Completed | Incomplete | Status).
