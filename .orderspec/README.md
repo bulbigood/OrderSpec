@@ -9,6 +9,27 @@
 >
 > There is **no installer yet**. Setup is manual: copy the OrderSpec `.orderspec/` directory into your project.
 
+## 🚀 Quick Start
+
+After copying the `.orderspec/` directory into your project, run this command in your terminal:
+
+```bash
+python3 .orderspec/scripts/agents_sync.py sync
+```
+
+The script will automatically detect installed AI agents and prompt you to select which ones to integrate. It will copy the OrderSpec prompts and register the skills directory for the selected agents.
+
+Once the sync is complete, you can launch the bootstrap command inside your AI agent:
+
+```text
+/order.bootstrap
+```
+
+> **Note:** You can also sync specific agents directly by passing their IDs:
+> `python3 .orderspec/scripts/agents_sync.py sync --agents kilocode claude_code`
+
+---
+
 OrderSpec is a spec-driven workflow that turns a feature idea into a verifiable implementation through explicit phases:
 
 ```text
@@ -505,7 +526,20 @@ The principles that shape OrderSpec:
 
 1. Copy the OrderSpec `.orderspec/` directory into your project.
 
-2. Run bootstrap:
+2. **Initial sync (required once):** Run this in your terminal to copy prompts to the agent's command directory:
+
+   ```bash
+   # For Kilo Code:
+   python3 .orderspec/scripts/agents_sync.py sync --agents kilocode
+
+   # For Claude Code:
+   python3 .orderspec/scripts/agents_sync.py sync --agents claude_code
+
+   # For both:
+   python3 .orderspec/scripts/agents_sync.py sync --agents kilocode claude_code
+   ```
+
+3. Run bootstrap:
 
    ```text
    /order.bootstrap

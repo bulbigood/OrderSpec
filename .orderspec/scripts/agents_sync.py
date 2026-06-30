@@ -242,7 +242,7 @@ Examples:
 
     # sync
     parser_sync = subparsers.add_parser("sync", help="Sync prompts and skills for enabled agents")
-    parser_sync.add_argument("--agents", nargs="+", required=True, help="List of agent_ids to sync")
+    parser_sync.add_argument("--agents", nargs="+", required=False, help="List of agent_ids to sync. If omitted, runs interactive detection.")
     parser_sync.add_argument("--json", action="store_true", help="Output as JSON")
 
     # read-rules
@@ -266,7 +266,45 @@ Examples:
                 print(f"[{status}] {r['display_name']} ({r['agent_id']}): {r['detection_reason']}")
 
     elif args.command == "sync":
-        report = sync_agents(args.agents)
+        enabled_ids = args.agents
+        
+        if not enabled_ids:
+            if args.json:
+                print(json.dumps({"error": "Interactive mode requires text output. Remove --json flag."}, indent=2))
+                return
+            
+            print("No --agents flag provided. Running interactive detection...")
+            detected = detect_all()
+            detected_agents = [a for a in detected if a.get("detected")]
+            
+            if not detected_agents:
+                print("\nNo supported AI agents detected in this project.")
+                print("Ensure your agent (e.g., Kilo Code or Claude Code) is installed and initialized.")
+                return
+            
+            print("\nDetected AI agents:")
+            for i, a in enumerate(detected_agents, 1):
+                print(f"  {i}. {a['display_name']} ({a['agent_id']})")
+            
+            while True:
+                choice = input("\nSelect agents to sync (comma-separated numbers, or 'all'): ").strip().lower()
+                if not choice:
+                    print("No agents selected. Exiting.")
+                    return
+                if choice == 'all':
+                    enabled_ids = [a['agent_id'] for a in detected_agents]
+                    break
+                try:
+                    indices = [int(x.strip()) for x in choice.split(',')]
+                    if all(1 <= i <= len(detected_agents) for i in indices):
+                        enabled_ids = list(set([detected_agents[i-1]['agent_id'] for i in indices]))
+                        break
+                    else:
+                        print("Invalid selection. Please enter valid numbers.")
+                except ValueError:
+                    print("Invalid input. Please enter comma-separated numbers or 'all'.")
+
+        report = sync_agents(enabled_ids)
         if args.json:
             print(json.dumps(report, indent=2, ensure_ascii=False))
         else:

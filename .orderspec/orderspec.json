@@ -1,0 +1,9 @@
+{
+  "framework_version": "0.3.0",
+  "schema_versions": {
+    "frontmatter": 1,
+    "artifacts": 1,
+    "lifecycle": 1,
+    "traceability": 1
+  }
+}

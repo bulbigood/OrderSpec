@@ -1,12 +1,6 @@
 ---
 orderspec:
   artifact: framework_rules
-  framework_version: "0.1.0"
-  schema_versions:
-    frontmatter: 1
-    artifacts: 1
-    lifecycle: 1
-    traceability: 1
   authority: framework
   customization: forbidden
 ---
@@ -95,7 +89,11 @@ Allowed values, required fields, enum values, lifecycle states, and validation r
 
 ## 5. Framework Version and Schema Versions
 
-The framework version and schema versions are defined only in the frontmatter of this file.
+The framework version and schema versions are defined in:
+
+- `.orderspec/orderspec.json`
+
+This file is the single source of truth for OrderSpec framework metadata.
 
 Other OrderSpec artifacts MUST NOT duplicate `framework_version`, `orderspec_version`, or `schema_version` unless explicitly required by a schema.
 

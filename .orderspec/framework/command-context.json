@@ -119,6 +119,13 @@
       "reason": "agents state validation schema",
       "usage": "parse",
       "authority": "framework"
+    },
+    "framework.meta": {
+      "path": ".orderspec/orderspec.json",
+      "kind": "framework_config",
+      "reason": "framework version and schema versions",
+      "usage": "parse",
+      "authority": "framework"
     }
   },
   "groups": {
@@ -165,6 +172,9 @@
     "required": [
       {
         "ref": "framework.rules"
+      },
+      {
+        "ref": "framework.meta"
       }
     ]
   },
