@@ -34,8 +34,8 @@ F = f".test-put-x-{os.getpid()}"
 SF = f".test-put-y-{os.getpid()}"
 SPECS_F = SPECS_ROOT / F
 SPECS_SF = SPECS_ROOT / SF
-SDIR_F = SPECS_F / ".orderspec"
-SDIR_SF = SPECS_SF / ".orderspec"
+SDIR_F = SPECS_F / ".orderspec-state"
+SDIR_SF = SPECS_SF / ".orderspec-state"
 TARGET = SDIR_F / "mechanisms.tsv"
 TAB = "\t"
 

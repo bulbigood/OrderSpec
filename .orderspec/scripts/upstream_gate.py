@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
 """upstream_gate.py — cascade gate guard.
 
-Deterministic; no LLM judgement. Two checks, in order:
+Deterministic; no LLM judgement. Checks, in order:
+
+  0. Invocation sanity: required path arguments must not be empty.
   1. The upstream ARTIFACT must exist — else HARD STOP (exit 2).
   2. If a gate REPORT exists, its verdict must be PASS — else HALT (exit 1).
 
 Output: single JSON line on stdout.
-Exit 0 = proceed (status ok | advisory | forced).
-Exit 1 = HALT (gate non-PASS, overridable via --force).
-Exit 2 = HARD STOP (missing artifact, NOT overridable).
 
-Portable: Python 3 standard library only.
+Exit 0  = proceed (status ok | advisory | forced).
+Exit 1  = HALT (gate non-PASS, overridable via --force).
+Exit 2  = HARD STOP (missing artifact, NOT overridable).
+Exit 64 = invocation error (usually empty shell variable).
 """
 
 import argparse
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -42,10 +43,16 @@ def output_json(data):
     print(json.dumps(data))
 
 
+def empty_arg(value):
+    return value is None or str(value).strip() == ""
+
+
 def parse_verdict(report_path):
     """Parse the verdict from a gate report file.
+
     Looks for a line starting with `**Verdict**:`.
-    Returns the verdict string or empty string if not found."""
+    Returns the verdict string or empty string if not found.
+    """
     try:
         with open(report_path, "r", encoding="utf-8") as f:
             for line in f:
@@ -58,8 +65,10 @@ def parse_verdict(report_path):
 
 def parse_date(report_path):
     """Parse the date from a gate report file.
+
     Looks for an HTML comment line `<!-- ... · YYYY-MM-DD · ... -->`.
-    Returns the date string or 'unknown' if not found."""
+    Returns the date string or 'unknown' if not found.
+    """
     try:
         with open(report_path, "r", encoding="utf-8") as f:
             for line in f:
@@ -71,6 +80,26 @@ def parse_date(report_path):
     except OSError:
         pass
     return "unknown"
+
+
+def verdict_is_pass(verdict):
+    """Return True only for an explicit PASS verdict.
+
+    Do not use substring `PASS in verdict`: strings like `NOT PASS` or
+    stale marker prose must not be interpreted as successful gates.
+    """
+    v = verdict.strip().upper()
+    return v in {"PASS", "✅ PASS"} or v.startswith("✅ PASS")
+
+
+def verdict_is_nonpass(verdict):
+    v = verdict.strip().upper()
+    return (
+        "ROUTING" in v
+        or "BLOCK" in v
+        or v.startswith("🔀")
+        or v.startswith("⛔")
+    )
 
 
 def main():
@@ -85,8 +114,35 @@ def main():
     recheck_cmd = args.recheck
     force = args.force
 
-    # ── Check 1: the upstream artifact MUST exist. No --force escape. ──
-    if not artifact or not Path(artifact).is_file():
+    # ── Check 0: invocation sanity ───────────────────────────────────────────
+    # Empty path arguments usually mean the prompt relied on shell variables
+    # that did not persist across tool invocations. Report that directly.
+    if empty_arg(artifact):
+        output_json({
+            "status": "error",
+            "block": True,
+            "reason": "empty --artifact argument; shell variables may not be initialized",
+            "artifact": "",
+            "upstream_name": upstream_name,
+            "this": this_cmd,
+            "build": build_cmd,
+        })
+        sys.exit(64)
+
+    if empty_arg(report):
+        output_json({
+            "status": "error",
+            "block": True,
+            "reason": "empty --report argument; shell variables may not be initialized",
+            "report": "",
+            "upstream_name": upstream_name,
+            "this": this_cmd,
+            "recheck": recheck_cmd,
+        })
+        sys.exit(64)
+
+    # ── Check 1: the upstream artifact MUST exist. No --force escape. ────────
+    if not Path(artifact).is_file():
         output_json({
             "status": "stop",
             "block": True,
@@ -98,8 +154,8 @@ def main():
         })
         sys.exit(2)
 
-    # ── Check 2: the gate report (optional) ──
-    if not report or not Path(report).is_file():
+    # ── Check 2: the gate report is optional ─────────────────────────────────
+    if not Path(report).is_file():
         output_json({
             "status": "advisory",
             "block": False,
@@ -111,8 +167,8 @@ def main():
     verdict = parse_verdict(report)
     date = parse_date(report)
 
-    if "PASS" in verdict:
-        # Check if artifact is newer than report (stale)
+    if verdict_is_pass(verdict):
+        # Check if artifact is newer than report (stale PASS).
         try:
             artifact_mtime = Path(artifact).stat().st_mtime
             report_mtime = Path(report).stat().st_mtime
@@ -127,6 +183,7 @@ def main():
                 sys.exit(0)
         except OSError:
             pass
+
         output_json({
             "status": "ok",
             "block": False,
@@ -134,7 +191,7 @@ def main():
         })
         sys.exit(0)
 
-    elif "ROUTING" in verdict or "BLOCK" in verdict:
+    if verdict_is_nonpass(verdict):
         if force:
             output_json({
                 "status": "forced",
@@ -143,6 +200,7 @@ def main():
                 "date": date,
             })
             sys.exit(0)
+
         output_json({
             "status": "halt",
             "block": True,
@@ -154,24 +212,24 @@ def main():
         })
         sys.exit(1)
 
-    else:
-        # Unparseable verdict
-        if force:
-            output_json({
-                "status": "forced",
-                "block": False,
-                "verdict": "unparseable",
-            })
-            sys.exit(0)
+    # Unparseable verdict.
+    if force:
         output_json({
-            "status": "halt",
-            "block": True,
+            "status": "forced",
+            "block": False,
             "verdict": "unparseable",
-            "this": this_cmd,
-            "fix": fix_cmd,
-            "recheck": recheck_cmd,
         })
-        sys.exit(1)
+        sys.exit(0)
+
+    output_json({
+        "status": "halt",
+        "block": True,
+        "verdict": "unparseable",
+        "this": this_cmd,
+        "fix": fix_cmd,
+        "recheck": recheck_cmd,
+    })
+    sys.exit(1)
 
 
 if __name__ == "__main__":

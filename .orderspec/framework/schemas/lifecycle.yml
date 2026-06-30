@@ -1,0 +1,24 @@
+spec_status:
+  - draft
+  - review
+  - approved
+
+changelog_types:
+  - Added
+  - Changed
+  - Removed
+  - Strengthened
+  - Weakened
+  - Moved
+  - Split
+  - Merged
+  - Clarified
+  - Renamed
+
+cross_spec_dependency_edges:
+  - requires
+  - uses
+
+contract_stability:
+  - Stable
+  - Experimental

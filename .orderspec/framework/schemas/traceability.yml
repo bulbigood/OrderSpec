@@ -1,0 +1,23 @@
+feature_id_pattern: '^FEAT-[0-9]{3}-[a-z0-9]+(-[a-z0-9]+)*$'
+
+feature_spec_id_prefixes:
+  - REQ
+  - NFR
+  - SC
+  - INV
+  - EDGE
+  - UJ
+  - AC
+  - Q
+  - ASM
+  - DEC
+  - IF
+
+project_contract_id_prefixes:
+  - STACK
+  - ARCH
+  - CONV
+
+id_anchor_pattern: '^- \*\*(REQ|NFR|SC|INV|EDGE|UJ|AC|Q|ASM|DEC|IF)-[0-9]{3}\*\*: .+'
+project_contract_id_pattern: '^(STACK|ARCH|CONV)-[0-9]{3}$'
+cross_feature_reference_pattern: '^FEAT-[0-9]{3}-[a-z0-9]+(-[a-z0-9]+)*:(REQ|NFR|SC|INV|EDGE|UJ|AC|Q|ASM|DEC|IF)-[0-9]{3}$'

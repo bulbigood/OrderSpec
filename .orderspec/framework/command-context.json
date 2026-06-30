@@ -1,0 +1,347 @@
+{
+  "version": 2,
+  "resources": {
+    "framework.rules": {
+      "path": ".orderspec/framework/orderspec-rules.md",
+      "kind": "framework_rules",
+      "reason": "global framework rules",
+      "usage": "apply",
+      "authority": "framework"
+    },
+    "protocol.tooling": {
+      "path": ".orderspec/framework/protocols/tooling-protocol.md",
+      "kind": "protocol",
+      "reason": "library and tooling documentation verification protocol",
+      "usage": "apply",
+      "authority": "framework"
+    },
+    "schema.frontmatter": {
+      "path": ".orderspec/framework/schemas/frontmatter.yml",
+      "kind": "schema",
+      "reason": "artifact frontmatter schema",
+      "usage": "parse",
+      "authority": "framework"
+    },
+    "schema.artifacts": {
+      "path": ".orderspec/framework/schemas/artifacts.yml",
+      "kind": "schema",
+      "reason": "OrderSpec artifact schema",
+      "usage": "parse",
+      "authority": "framework"
+    },
+    "schema.lifecycle": {
+      "path": ".orderspec/framework/schemas/lifecycle.yml",
+      "kind": "schema",
+      "reason": "artifact lifecycle schema",
+      "usage": "parse",
+      "authority": "framework"
+    },
+    "schema.traceability": {
+      "path": ".orderspec/framework/schemas/traceability.yml",
+      "kind": "schema",
+      "reason": "traceability and stable ID schema",
+      "usage": "parse",
+      "authority": "framework"
+    },
+    "template.spec": {
+      "path": ".orderspec/framework/templates/spec-template.md",
+      "kind": "template",
+      "reason": "feature specification output template",
+      "usage": "apply",
+      "authority": "framework"
+    },
+    "template.plan": {
+      "path": ".orderspec/framework/templates/plan-template.md",
+      "kind": "template",
+      "reason": "technical plan output template",
+      "usage": "apply",
+      "authority": "framework"
+    },
+    "template.tasks": {
+      "path": ".orderspec/framework/templates/tasks-template.md",
+      "kind": "template",
+      "reason": "implementation tasks output template",
+      "usage": "apply",
+      "authority": "framework"
+    },
+    "template.report": {
+      "path": ".orderspec/framework/templates/report-template.md",
+      "kind": "template",
+      "reason": "check report output template",
+      "usage": "apply",
+      "authority": "framework"
+    },
+    "project.constitution": {
+      "path": "constitution.md",
+      "kind": "project_contract",
+      "reason": "project governance",
+      "usage": "constrain",
+      "authority": "project"
+    },
+    "project.stack": {
+      "path": "stack.md",
+      "kind": "project_contract",
+      "reason": "project stack contract",
+      "usage": "constrain",
+      "authority": "project"
+    },
+    "project.architecture": {
+      "path": "architecture.md",
+      "kind": "project_contract",
+      "reason": "project architecture contract",
+      "usage": "constrain",
+      "authority": "project"
+    },
+    "project.conventions": {
+      "path": "conventions.md",
+      "kind": "project_contract",
+      "reason": "project conventions contract",
+      "usage": "constrain",
+      "authority": "project"
+    },
+    "config.tooling": {
+      "path": ".orderspec/config/tooling.json",
+      "kind": "tooling_config",
+      "reason": "tooling and documentation verification policy override",
+      "usage": "parse",
+      "authority": "operator_config"
+    },
+    "state.agents": {
+      "path": ".orderspec/state/agents.json",
+      "kind": "runtime_state",
+      "reason": "multi-agent configuration and sync state",
+      "usage": "parse",
+      "authority": "runtime"
+    },
+    "schema.agents_state": {
+      "path": ".orderspec/framework/schemas/agents-state.schema.json",
+      "kind": "schema",
+      "reason": "agents state validation schema",
+      "usage": "parse",
+      "authority": "framework"
+    }
+  },
+  "groups": {
+    "artifact.schemas": [
+      {
+        "ref": "schema.frontmatter"
+      },
+      {
+        "ref": "schema.artifacts"
+      },
+      {
+        "ref": "schema.lifecycle"
+      },
+      {
+        "ref": "schema.traceability"
+      }
+    ],
+    "project.contracts": [
+      {
+        "ref": "project.constitution"
+      },
+      {
+        "ref": "project.stack"
+      },
+      {
+        "ref": "project.architecture"
+      },
+      {
+        "ref": "project.conventions"
+      }
+    ],
+    "tooling.optional": [
+      {
+        "ref": "config.tooling"
+      }
+    ],
+    "runtime.agents": [
+      {
+        "ref": "state.agents"
+      }
+    ]
+  },
+  "defaults": {
+    "required": [
+      {
+        "ref": "framework.rules"
+      }
+    ]
+  },
+  "commands": {
+    "order.bootstrap": {
+      "read_if_exists": [
+        {
+          "group": "project.contracts"
+        },
+        {
+          "group": "runtime.agents"
+        }
+      ]
+    },
+    "order.spec": {
+      "required": [
+        {
+          "group": "artifact.schemas"
+        },
+        {
+          "ref": "template.spec"
+        },
+        {
+          "group": "project.contracts"
+        }
+      ]
+    },
+    "order.spec-check": {
+      "required": [
+        {
+          "group": "artifact.schemas"
+        },
+        {
+          "group": "project.contracts"
+        }
+      ],
+      "feature_context": {
+        "mode": "if_active",
+        "artifacts": [
+          "spec"
+        ]
+      }
+    },
+    "order.plan": {
+      "required": [
+        {
+          "ref": "protocol.tooling"
+        },
+        {
+          "group": "artifact.schemas"
+        },
+        {
+          "ref": "template.plan"
+        },
+        {
+          "group": "project.contracts"
+        }
+      ],
+      "read_if_exists": [
+        {
+          "group": "tooling.optional"
+        }
+      ]
+    },
+    "order.plan-check": {
+      "required": [
+        {
+          "ref": "protocol.tooling"
+        },
+        {
+          "group": "artifact.schemas"
+        },
+        {
+          "ref": "template.report"
+        },
+        {
+          "group": "project.contracts"
+        }
+      ],
+      "read_if_exists": [
+        {
+          "group": "tooling.optional"
+        }
+      ]
+    },
+    "order.tasks": {
+      "required": [
+        {
+          "ref": "protocol.tooling"
+        },
+        {
+          "group": "artifact.schemas"
+        },
+        {
+          "ref": "template.tasks"
+        },
+        {
+          "group": "project.contracts"
+        }
+      ],
+      "read_if_exists": [
+        {
+          "group": "tooling.optional"
+        }
+      ]
+    },
+    "order.tasks-check": {
+      "required": [
+        {
+          "ref": "protocol.tooling"
+        },
+        {
+          "group": "artifact.schemas"
+        },
+        {
+          "ref": "template.report"
+        },
+        {
+          "group": "project.contracts"
+        }
+      ],
+      "read_if_exists": [
+        {
+          "group": "tooling.optional"
+        }
+      ]
+    },
+    "order.code": {
+      "required": [
+        {
+          "ref": "protocol.tooling"
+        },
+        {
+          "group": "project.contracts"
+        }
+      ],
+      "read_if_exists": [
+        {
+          "group": "tooling.optional"
+        }
+      ]
+    },
+    "order.code-check": {
+      "required": [
+        {
+          "ref": "protocol.tooling"
+        },
+        {
+          "ref": "template.report"
+        },
+        {
+          "group": "project.contracts"
+        }
+      ],
+      "read_if_exists": [
+        {
+          "group": "tooling.optional"
+        }
+      ]
+    },
+    "order.sync-check": {
+      "required": [
+        {
+          "group": "artifact.schemas"
+        },
+        {
+          "ref": "template.report"
+        },
+        {
+          "group": "project.contracts"
+        }
+      ],
+      "read_if_exists": [
+        {
+          "group": "runtime.agents"
+        }
+      ]
+    }
+  }
+}

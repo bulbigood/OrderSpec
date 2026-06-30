@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OrderSpec Agents State",
+  "description": "State file for multi-agent configuration. Lives at .orderspec/state/agents.json",
+  "type": "object",
+  "required": ["version", "enabled_agents", "agents"],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 timestamp of last update"
+    },
+    "enabled_agents": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of agent_id strings that are enabled for this project"
+    },
+    "agents": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "agent_id": { "type": "string" },
+          "display_name": { "type": "string" },
+          "detected": { "type": "boolean" },
+          "detection_reason": { "type": "string" },
+          "config_paths": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "prompts_dir": { "type": "string" },
+          "supports_symlinks": { "type": "boolean" },
+          "rules_files": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "enabled": { "type": "boolean" },
+          "sync_state": {
+            "type": "object",
+            "properties": {
+              "skills": { "type": "object" },
+              "prompts": {
+                "type": "object",
+                "properties": {
+                  "copied": { "type": "array", "items": { "type": "string" } },
+                  "skipped": { "type": "array", "items": { "type": "string" } },
+                  "last_sync": { "type": "string", "format": "date-time" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "last_sync": {
+      "type": "object",
+      "properties": {
+        "timestamp": { "type": "string", "format": "date-time" },
+        "enabled_agents": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

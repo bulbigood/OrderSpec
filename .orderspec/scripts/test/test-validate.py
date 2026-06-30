@@ -18,7 +18,7 @@ if not TRACE.exists():
     sys.exit(2)
 
 # ── Configuration ────────────────────────────────────────────────────────────
-LOG_TO_FILE = False  # Set to True to also write test results to test/test-validate.log
+LOG_TO_FILE = False
 
 TEST_DIR = SCRIPT_DIR / "test"
 TEST_DIR.mkdir(parents=True, exist_ok=True)
@@ -33,7 +33,7 @@ SPECS_ROOT.mkdir(parents=True, exist_ok=True)
 
 F = f".test-validate-{os.getpid()}"
 SPECS = SPECS_ROOT / F
-SDIR = SPECS / ".orderspec"
+SDIR = SPECS / ".orderspec-state"
 
 pass_count = 0
 fail_count = 0
@@ -80,6 +80,30 @@ def run_trace(*args, input_text=None):
     return proc.returncode, proc.stdout, proc.stderr
 
 TAB = "\t"
+
+def put_mechanisms(*rows):
+    text = "\n".join(rows)
+    if text and not text.endswith("\n"):
+        text += "\n"
+    return run_trace("put-mechanisms", F, input_text=text)
+
+
+VALID_SPEC_FRONTMATTER = """---
+orderspec:
+  artifact: spec
+  feature_id: FEAT-001-test-validate
+  slug: test-validate
+  status: draft
+---
+"""
+
+
+def write_spec(body):
+    """Write spec.md with valid Phase 2 OrderSpec YAML frontmatter."""
+    (SPECS / "spec.md").write_text(
+        VALID_SPEC_FRONTMATTER + body,
+        encoding="utf-8",
+    )
 
 # ── check-plan tests ─────────────────────────────────────────────────────────
 
@@ -197,7 +221,7 @@ else:
 
 # V1: clean spec → exit 0
 reset_feature()
-(SPECS / "spec.md").write_text("""- **REQ-001** user can log in
+write_spec("""- **REQ-001** user can log in
 - **UJ-001** Login journey
   Covers: REQ-001
 """)
@@ -205,11 +229,11 @@ rc, out, err = run_trace("validate", "--stage", "spec", F)
 if rc == 0:
     ok("validate: clean spec → exit 0")
 else:
-    no("validate clean spec", f"rc={rc}")
+    no("validate clean spec", f"rc={rc} out={out} err={err}")
 
 # V2: REQ without Covers → M1
 reset_feature()
-(SPECS / "spec.md").write_text("""- **REQ-001** user can log in
+write_spec("""- **REQ-001** user can log in
 - **UJ-001** Login journey
   Covers: (none)
 """)
@@ -217,11 +241,11 @@ rc, out, err = run_trace("validate", "--stage", "spec", F)
 if rc == 1 and "M1" in out:
     ok("validate: REQ without Covers → M1")
 else:
-    no("validate M1", f"rc={rc} out={out}")
+    no("validate M1", f"rc={rc} out={out} err={err}")
 
 # V3: dangling plan ref → M5
 reset_feature()
-(SPECS / "spec.md").write_text("""- **REQ-001** user can log in
+write_spec("""- **REQ-001** user can log in
 - **UJ-001** Login journey
   Covers: REQ-001
 """)
@@ -234,11 +258,11 @@ rc, out, err = run_trace("validate", "--stage", "plan", F)
 if rc == 1 and "M5" in out:
     ok("validate: dangling plan ref → M5")
 else:
-    no("validate M5 plan", f"rc={rc} out={out}")
+    no("validate M5 plan", f"rc={rc} out={out} err={err}")
 
 # V4: [MOD] missing file → M10
 reset_feature()
-(SPECS / "spec.md").write_text("""- **REQ-001** user can log in
+write_spec("""- **REQ-001** user can log in
 - **UJ-001** Login journey
   Covers: REQ-001
 """)
@@ -250,12 +274,52 @@ rc, out, err = run_trace("validate", "--stage", "plan", F)
 if rc == 1 and "M10" in out:
     ok("validate: [MOD] missing → M10")
 else:
-    no("validate M10", f"rc={rc} out={out}")
+    no("validate M10", f"rc={rc} out={out} err={err}")
+
+# V_CONFIG_B_1: mechanism primary file not in pathmanifest → M16
+reset_feature()
+write_spec("""- **REQ-001** user can log in
+- **UJ-001** Login journey
+  Covers: REQ-001
+""")
+(SPECS / "plan.md").write_text("""```pathmanifest
+src/models/user.py  [NEW]
+```
+""")
+put_mechanisms(
+    f"REQ-001{TAB}direct{TAB}login service{TAB}src/services/auth.py{TAB}unit",
+)
+rc, out, err = run_trace("validate", "--stage", "plan", F)
+if rc == 1 and "M16" in out:
+    ok("validate: mechanism primary file not in manifest → M16")
+else:
+    no("validate M16", f"rc={rc} out={out} err={err}")
+
+# V_CONFIG_B_2: documented primary file outside plan.md or manifest → M26
+reset_feature()
+write_spec("""- **REQ-001** user can log in
+- **NFR-001** audit decision is documented
+- **UJ-001** Login journey
+  Covers: REQ-001
+""")
+(SPECS / "plan.md").write_text("""```pathmanifest
+src/models/user.py  [NEW]
+```
+""")
+put_mechanisms(
+    f"REQ-001{TAB}direct{TAB}login model{TAB}src/models/user.py{TAB}unit",
+    f"NFR-001{TAB}documented{TAB}documented audit decision{TAB}docs/audit.md{TAB}documented",
+)
+rc, out, err = run_trace("validate", "--stage", "plan", F)
+if rc == 0 and "M26" in out:
+    ok("validate: documented primary file outside manifest → M26")
+else:
+    no("validate M26", f"rc={rc} out={out} err={err}")
 
 # V5: uncovered AC → M2
 reset_feature()
-(SPECS / "spec.md").write_text("""- **REQ-001** user can log in
-- **AC-001** valid creds return 200
+write_spec("""- **REQ-001** user can log in
+- **AC-001** [Covers: REQ-001] valid creds return 200
 - **UJ-001** Login journey
   Covers: REQ-001, AC-001
 """)
@@ -263,17 +327,21 @@ reset_feature()
 src/models/user.py  [NEW]
 ```
 """)
+put_mechanisms(
+    f"REQ-001{TAB}direct{TAB}login model{TAB}src/models/user.py{TAB}unit",
+    f"AC-001{TAB}direct{TAB}valid credential acceptance path{TAB}src/models/user.py{TAB}unit",
+)
 (SPECS / "tasks.md").write_text("""- [ ] T001 [US1] | src/models/user.py | REQ-001 | user model
 """)
 rc, out, err = run_trace("validate", "--stage", "tasks", F)
 if rc == 1 and "M2" in out:
     ok("validate: uncovered AC → M2")
 else:
-    no("validate M2", f"rc={rc} out={out}")
+    no("validate M2", f"rc={rc} out={out} err={err}")
 
 # V6: placeholder → M13 (LOW severity, rc=0)
 reset_feature()
-(SPECS / "spec.md").write_text("""- **REQ-001** user can log in
+write_spec("""- **REQ-001** user can log in
 - **UJ-001** Login journey
   Covers: REQ-001
 TODO: finish this
@@ -282,11 +350,11 @@ rc, out, err = run_trace("validate", "--stage", "spec", F)
 if rc == 0 and "M13" in out:
     ok("validate: placeholder → M13")
 else:
-    no("validate M13", f"rc={rc} out={out}")
+    no("validate M13", f"rc={rc} out={out} err={err}")
 
 # V7: JSON output
 reset_feature()
-(SPECS / "spec.md").write_text("""- **REQ-001** user can log in
+write_spec("""- **REQ-001** user can log in
 - **UJ-001** Login journey
   Covers: REQ-001
 """)
@@ -298,11 +366,11 @@ try:
     else:
         no("validate JSON", f"out={out}")
 except json.JSONDecodeError:
-    no("validate JSON", f"invalid JSON: {out}")
+    no("validate JSON", f"rc={rc} out={out} err={err}")
 
 # V8: task gap → M7 (MEDIUM severity, rc=0)
 reset_feature()
-(SPECS / "spec.md").write_text("""- **REQ-001** user can log in
+write_spec("""- **REQ-001** user can log in
 - **UJ-001** Login journey
   Covers: REQ-001
 """)
@@ -310,6 +378,9 @@ reset_feature()
 src/models/user.py  [NEW]
 ```
 """)
+put_mechanisms(
+    f"REQ-001{TAB}direct{TAB}login model{TAB}src/models/user.py{TAB}unit",
+)
 (SPECS / "tasks.md").write_text("""- [ ] T001 [US1] | src/models/user.py | REQ-001 | user model
 - [ ] T003 [US1] | src/models/user.py | REQ-001 | another task
 """)
@@ -317,11 +388,11 @@ rc, out, err = run_trace("validate", "--stage", "tasks", F)
 if rc == 0 and "M7" in out:
     ok("validate: task gap → M7")
 else:
-    no("validate M7 gap", f"rc={rc} out={out}")
+    no("validate M7 gap", f"rc={rc} out={out} err={err}")
 
 # V9: [USn] without matching UJ → M14
 reset_feature()
-(SPECS / "spec.md").write_text("""- **REQ-001** user can log in
+write_spec("""- **REQ-001** user can log in
 - **UJ-001** Login journey
   Covers: REQ-001
 """)
@@ -329,17 +400,20 @@ reset_feature()
 src/models/user.py  [NEW]
 ```
 """)
+put_mechanisms(
+    f"REQ-001{TAB}direct{TAB}login model{TAB}src/models/user.py{TAB}unit",
+)
 (SPECS / "tasks.md").write_text("""- [ ] T001 [US2] | src/models/user.py | REQ-001 | user model
 """)
 rc, out, err = run_trace("validate", "--stage", "tasks", F)
 if rc == 1 and "M14" in out:
     ok("validate: [US2] without UJ-002 → M14")
 else:
-    no("validate M14", f"rc={rc} out={out}")
+    no("validate M14", f"rc={rc} out={out} err={err}")
 
 # V10: dangling task ref → M5
 reset_feature()
-(SPECS / "spec.md").write_text("""- **REQ-001** user can log in
+write_spec("""- **REQ-001** user can log in
 - **UJ-001** Login journey
   Covers: REQ-001
 """)
@@ -347,19 +421,163 @@ reset_feature()
 src/models/user.py  [NEW]
 ```
 """)
+put_mechanisms(
+    f"REQ-001{TAB}direct{TAB}login model{TAB}src/models/user.py{TAB}unit",
+)
 (SPECS / "tasks.md").write_text("""- [ ] T001 [US1] | src/models/user.py | REQ-999 | user model
 """)
 rc, out, err = run_trace("validate", "--stage", "tasks", F)
 if rc == 1 and "M5" in out:
     ok("validate: dangling task ref → M5")
 else:
-    no("validate M5 task", f"rc={rc} out={out}")
+    no("validate M5 task", f"rc={rc} out={out} err={err}")
+
+# V_M18: missing IF fields → M18 (HIGH)
+reset_feature()
+write_spec("""- **REQ-001** user can log in
+- **UJ-001** Login journey
+  Covers: REQ-001
+## 9. Interface Contracts
+- **IF-001**: Get Task
+  | Field | Value |
+  |-------|-------|
+  | Kind | HTTP endpoint |
+""")
+rc, out, err = run_trace("validate", "--stage", "spec", F)
+if rc == 1 and "M18" in out:
+    ok("validate: missing IF fields → M18")
+else:
+    no("validate M18", f"rc={rc} out={out} err={err}")
+
+# V_M19: IF-AC status mismatch → M19 (MEDIUM)
+reset_feature()
+write_spec("""- **REQ-001** user can log in
+- **UJ-001** Login journey
+  Covers: REQ-001
+## 9. Interface Contracts
+- **IF-001**: Get Task
+  | Field | Value |
+  |-------|-------|
+  | Kind | HTTP endpoint |
+  | Operation | Get Task |
+  | Actor | Authenticated user |
+  | Success | 200 OK |
+  | Failure | 404 Not Found |
+  | Covers | REQ-001 |
+## 12. Acceptance Criteria
+- **UJ-002** Journey
+  Covers: REQ-001
+  - **AC-001** [Covers: IF-001] returns 500
+""")
+rc, out, err = run_trace("validate", "--stage", "spec", F)
+if rc == 0 and "M19" in out:
+    ok("validate: IF-AC status mismatch → M19")
+else:
+    no("validate M19", f"rc={rc} out={out} err={err}")
+
+# V_M20: IF uncovered by AC → M20 (HIGH)
+reset_feature()
+write_spec("""- **REQ-001** user can log in
+- **UJ-001** Login journey
+  Covers: REQ-001
+## 9. Interface Contracts
+- **IF-001**: Get Task
+  | Field | Value |
+  |-------|-------|
+  | Kind | HTTP endpoint |
+  | Operation | Get Task |
+  | Actor | Authenticated user |
+  | Success | 200 OK |
+  | Failure | 404 Not Found |
+  | Covers | REQ-001 |
+""")
+rc, out, err = run_trace("validate", "--stage", "spec", F)
+if rc == 1 and "M20" in out:
+    ok("validate: IF uncovered by AC → M20")
+else:
+    no("validate M20", f"rc={rc} out={out} err={err}")
+
+# V_M22: AC field alignment → M22 (LOW)
+reset_feature()
+write_spec("""- **REQ-001** user can log in
+- **UJ-001** Login journey
+  Covers: REQ-001
+## 8. Information Model
+### Entity: Task
+| Field | Type |
+|-------|------|
+| title | string |
+## 12. Acceptance Criteria
+- **UJ-002** Journey
+  Covers: REQ-001
+  - **AC-001** [Covers: REQ-001] response contains `nonExistentField`
+""")
+rc, out, err = run_trace("validate", "--stage", "spec", F)
+if rc == 0 and "M22" in out:
+    ok("validate: AC field alignment → M22")
+else:
+    no("validate M22", f"rc={rc} out={out} err={err}")
+
+# V_M23: Grid reference validity → M23 (MEDIUM)
+reset_feature()
+write_spec("""- **REQ-001** user can log in
+- **UJ-001** Login journey
+  Covers: REQ-001
+## 10. Invariants
+### Contradiction Grid
+| INV | Source | Verdict |
+|-----|--------|---------|
+| INV-999 × NFR-001 | INV-999 defines X | Compatible |
+""")
+rc, out, err = run_trace("validate", "--stage", "spec", F)
+if rc == 0 and "M23" in out:
+    ok("validate: Grid reference validity → M23")
+else:
+    no("validate M23", f"rc={rc} out={out} err={err}")
+
+# V_M24: Grid completeness → M24 (MEDIUM)
+reset_feature()
+write_spec("""- **REQ-001** user can log in
+- **UJ-001** Login journey
+  Covers: REQ-001
+## 10. Invariants
+- **INV-001**: Always do X.
+### Contradiction Grid
+| INV | Source | Verdict |
+|-----|--------|---------|
+| NFR-001 × REQ-001 | NFR-001 requires Y | Compatible |
+""")
+rc, out, err = run_trace("validate", "--stage", "spec", F)
+if rc == 0 and "M24" in out:
+    ok("validate: Grid completeness → M24")
+else:
+    no("validate M24", f"rc={rc} out={out} err={err}")
+
+# V_M25: duplicate grid rows with ID in 2nd column → M25 (MEDIUM)
+reset_feature()
+write_spec("""- **REQ-001** user can log in
+- **UJ-001** Login journey
+  Covers: REQ-001
+## 10. Invariants
+- **INV-001**: Always do X.
+- **NFR-001**: Must be fast.
+### Contradiction Grid
+| INV | Source | Verdict |
+|-----|--------|---------|
+| INV-001 × NFR-001 | INV-001 defines state; NFR-001 requires consistency | Compatible |
+| INV-001 × NFR-001 | INV-001 defines state; NFR-001 requires consistency | Compatible |
+""")
+rc, out, err = run_trace("validate", "--stage", "spec", F)
+if rc == 0 and "M25" in out:
+    ok("validate: duplicate grid rows (3-col) → M25")
+else:
+    no("validate M25", f"rc={rc} out={out} err={err}")
 
 # ── extract-trace / render round-trip ────────────────────────────────────────
 
 # V11: extract-trace + render round-trip
 reset_feature()
-(SPECS / "spec.md").write_text("""- **REQ-001** user can log in
+write_spec("""- **REQ-001** user can log in
 - **UJ-001** Login journey
   Covers: REQ-001
 """)
@@ -375,13 +593,13 @@ rc, out, err = run_trace("extract-trace", F)
 if rc == 0:
     ok("extract-trace: basic round-trip → rc=0")
 else:
-    no("extract-trace basic", f"rc={rc} err={err}")
+    no("extract-trace basic", f"rc={rc} out={out} err={err}")
 
 rc, out, err = run_trace("render", F)
 if rc == 0:
     ok("render: basic round-trip → rc=0")
 else:
-    no("render basic", f"rc={rc} err={err}")
+    no("render basic", f"rc={rc} out={out} err={err}")
 
 if (SDIR / "traceability.md").exists():
     md = (SDIR / "traceability.md").read_text()
@@ -406,13 +624,13 @@ rc, out, err = run_trace("render", F)
 if rc == 2 and "stale" in err:
     ok("render: stale tasks.md → rc=2")
 else:
-    no("render stale", f"rc={rc} err={err}")
+    no("render stale", f"rc={rc} out={out} err={err}")
 
 rc, out, err = run_trace("get", F, "trace")
 if rc != 0 and "stale" in err:
     ok("get trace: stale → nonzero")
 else:
-    no("get trace stale", f"rc={rc} err={err}")
+    no("get trace stale", f"rc={rc} out={out} err={err}")
 
 run_trace("extract-trace", F)
 rc, out, err = run_trace("render", F)
@@ -437,7 +655,7 @@ rc, out, err = run_trace("extract-trace", F)
 if rc == 0:
     ok("empty refs on infra task → extract-trace rc=0")
 else:
-    no("C1 empty refs", f"rc={rc} err={err}")
+    no("C1 empty refs", f"rc={rc} out={out} err={err}")
 
 # V14: filler ref → rc=3
 reset_feature()
@@ -450,7 +668,7 @@ rc, out, err = run_trace("extract-trace", F)
 if rc == 3:
     ok("filler ref (path not in primary_files) → rc=3")
 else:
-    no("C2 filler ref", f"rc={rc} err={err}")
+    no("C2 filler ref", f"rc={rc} out={out} err={err}")
 
 # V15: true-path ref → accepted
 reset_feature()
@@ -492,7 +710,7 @@ rc, out, err = run_trace("extract-trace", F)
 if rc == 3:
     ok("delegated AC id as ref → rc=3")
 else:
-    no("C5 delegated ref", f"rc={rc} err={err}")
+    no("C5 delegated ref", f"rc={rc} out={out} err={err}")
 
 # V18: documented id as ref → rc=3
 reset_feature()
@@ -506,7 +724,7 @@ rc, out, err = run_trace("extract-trace", F)
 if rc == 3:
     ok("documented id as ref → rc=3")
 else:
-    no("C6 documented ref", f"rc={rc} err={err}")
+    no("C6 documented ref", f"rc={rc} out={out} err={err}")
 
 # ── Cleanup ──────────────────────────────────────────────────────────────────
 

@@ -1,0 +1,50 @@
+artifact_types:
+  - framework_rules
+  - command_prompt
+  - schema
+  - protocol
+  - spec
+  - plan
+  - tasks
+  - project_contract
+  - governance
+  - framework_config
+  - tooling_config
+  - runtime_state
+  - gate_report
+
+command_prompt_required_fields:
+  - orderspec.artifact
+  - orderspec.command
+  - orderspec.prompt_version
+  - orderspec.phase
+
+spec_required_fields:
+  - orderspec.artifact
+  - orderspec.feature_id
+  - orderspec.slug
+  - orderspec.status
+
+spec_field_constraints:
+  orderspec.artifact:
+    const: spec
+  orderspec.feature_id:
+    pattern: '^FEAT-[0-9]{3}-[a-z0-9]+(-[a-z0-9]+)*$'
+    example: FEAT-001-user-auth
+  orderspec.slug:
+    pattern: '^[a-z0-9]+(-[a-z0-9]+)*$'
+    example: user-auth
+  orderspec.status:
+    enum:
+      - draft
+      - review
+      - approved
+
+project_contract_required_fields:
+  common:
+    - orderspec.artifact
+    - orderspec.kind
+  id_prefix_required_for:
+    - stack
+    - architecture
+    - conventions

@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "orderspec://schemas/command-context.schema.json",
+  "title": "OrderSpec Command Context Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "commands"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 2
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/concreteContextEntry"
+      }
+    },
+    "groups": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/contextEntrySelector"
+        }
+      }
+    },
+    "defaults": {
+      "$ref": "#/$defs/contextGroup"
+    },
+    "commands": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/contextGroup"
+      }
+    }
+  },
+  "$defs": {
+    "contextGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/contextEntrySelector"
+          }
+        },
+        "read_if_exists": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/contextEntrySelector"
+          }
+        },
+        "feature_context": {
+          "$ref": "#/$defs/featureContext"
+        }
+      }
+    },
+    "contextEntrySelector": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/concreteContextEntry"
+        },
+        {
+          "$ref": "#/$defs/refEntry"
+        },
+        {
+          "$ref": "#/$defs/groupEntry"
+        }
+      ]
+    },
+    "concreteContextEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "kind",
+        "usage",
+        "authority",
+        "reason"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Safe repository-relative path or glob."
+        },
+        "kind": {
+          "type": "string",
+          "minLength": 1
+        },
+        "usage": {
+          "type": "string",
+          "enum": [
+            "apply",
+            "constrain",
+            "parse",
+            "inspect",
+            "reference"
+          ]
+        },
+        "authority": {
+          "type": "string",
+          "enum": [
+            "framework",
+            "project",
+            "operator_config",
+            "runtime",
+            "feature",
+            "external"
+          ]
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expand": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "refEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ref"
+      ],
+      "properties": {
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "groupEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "group"
+      ],
+      "properties": {
+        "group": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "featureContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "artifacts"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "none",
+            "if_active",
+            "required"
+          ]
+        },
+        "artifacts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "spec",
+              "plan",
+              "tasks"
+            ]
+          },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

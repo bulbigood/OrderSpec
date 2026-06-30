@@ -1,25 +1,46 @@
 #!/usr/bin/env python3
-"""traceability.py — deterministic source of truth for spec→task traceability.
+"""traceability.py — deterministic source of truth for OrderSpec traceability.
 
 Portable: Python 3 standard library only. No external dependencies.
+
+This script owns machine-readable feature state under:
+
+    <feature-dir>/.orderspec-state/
+
+It intentionally supports both path models:
+
+1. Legacy basename mode:
+      traceability.py -C <repo> init <feature-basename>
+      → <repo>/specs/<feature-basename>
+
+2. Current OrderSpec:
+      SPECIFY_FEATURE_DIRECTORY / .orderspec/state/active-feature.json / --feature-dir
+      → arbitrary repo-relative or absolute feature directory
+
+Prompts should prefer the current model. Legacy basename mode is retained for
+older tests and prompts.
 """
 
 import argparse
+import json
 import os
 import re
 import shutil
-import subprocess
 import sys
-import tempfile
 from pathlib import Path
+
+# Import canonical paths from common.py when available.
+# traceability.py must remain portable, so keep a local fallback.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    from common import ACTIVE_FEATURE_STATE
+except ImportError:
+    ACTIVE_FEATURE_STATE = Path(".orderspec") / "state" / "active-feature.json"
 
 SCHEMA_VERSION = "v1"
 TAB = "\t"
 
-# Feature state directory name.
-# IMPORTANT: must NOT be ".orderspec" — that collides with the repo-level
-# .orderspec/ directory and breaks find_orderspec_root() in common.py.
-FEATURE_STATE_DIRNAME = ".specify-state"
+FEATURE_STATE_DIRNAME = ".orderspec-state"
 
 MECH_MARKER = "#orderspec mechanisms v1"
 MECH_COLNAMES = f"spec_id{TAB}coverage_kind{TAB}mechanism{TAB}primary_files{TAB}test_type"
@@ -30,83 +51,226 @@ TRACE_COLNAMES = f"spec_id{TAB}task_ids{TAB}files{TAB}source"
 SPECIDS_MARKER = "#orderspec spec-ids v1"
 SPECIDS_COLNAMES = f"spec_id{TAB}kind{TAB}section"
 
-SPEC_PREFIXES = ["REQ", "NFR", "CON", "SC", "INV", "EDGE", "UJ", "AC", "Q", "ASM"]
-# \s* allows extraction of IDs that are indented (e.g., nested ACs under UJs)
+SPEC_PREFIXES = ["REQ", "NFR", "SC", "INV", "EDGE", "UJ", "AC", "Q", "ASM", "DEC", "IF"]
+REQUIRED_MECHANISM_PREFIXES = {"REQ", "NFR", "INV", "EDGE", "AC", "IF"}
+FORBIDDEN_MECHANISM_PREFIXES = {"SC", "UJ", "Q", "DEC"}
+
 SPEC_PREFIX_RE = re.compile(r"^\s*- \*\*(" + "|".join(SPEC_PREFIXES) + r")-(\d{3})\*\*")
-
 ID_RE = re.compile(r"\b(" + "|".join(SPEC_PREFIXES) + r")-(\d{3})\b")
-
 TASK_LINE_RE = re.compile(r"^- \[[ xX]\] T(\d{3})")
-
-# Narrowed Covers regex: matches lines starting with **Covers** or Covers
-# (case-insensitive), to avoid false positives from prose containing "covers".
 COVERS_RE = re.compile(r"^\s*\*{0,2}Covers?\*{0,2}\s*:", re.IGNORECASE)
+AC_COVERS_RE = re.compile(r"\[Covers:\s*([^\]]+)\]", re.IGNORECASE)
 
 SECTION_MAP = {
-    "REQ": "functional", "NFR": "non-functional", "CON": "constraints",
-    "SC": "success-criteria", "INV": "invariants", "EDGE": "edge-cases",
-    "UJ": "user-journeys", "AC": "acceptance", "Q": "open-questions",
+    "REQ": "functional",
+    "NFR": "non-functional",
+    "SC": "success-criteria",
+    "INV": "invariants",
+    "EDGE": "edge-cases",
+    "UJ": "user-journeys",
+    "AC": "acceptance",
+    "Q": "open-questions",
     "ASM": "assumptions",
+    "IF": "interface-contracts",
+    "DEC": "decisions",
 }
 
-# Default root is two levels up from the script, but can be overridden via -C or ENV
+IF_REQUIRED_FIELDS = [
+    ("Kind", "HIGH"),
+    ("Operation", "HIGH"),
+    ("Actor", "HIGH"),
+    ("Success", "HIGH"),
+    ("Failure", "MEDIUM"),
+    ("Covers", "HIGH"),
+]
+
+ABSOLUTE_QUANTIFIERS = (
+    "exactly",
+    "always",
+    "never",
+    "must produce",
+    "must have",
+)
+
+_PATH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
+_SPEC_ID_RE = re.compile(r"^(" + "|".join(SPEC_PREFIXES) + r")-\d{3}$")
+_TASK_ID_RE = re.compile(r"^T\d{3}$")
+
 _ROOT = Path(__file__).resolve().parent.parent
+_FEATURE_DIR_OVERRIDE = None
+
+
+# ── basic utilities ──────────────────────────────────────────────────────────
 
 def die(msg, rc=2):
     print(f"FATAL: {msg}", file=sys.stderr)
     sys.exit(rc)
 
+
 def script_dir():
     return Path(__file__).resolve().parent
+
 
 def resolved_root():
     return _ROOT
 
-def feature_dir(feature):
-    return resolved_root() / "specs" / feature
 
-def state_dir(feature):
-    return feature_dir(feature) / FEATURE_STATE_DIRNAME
+def _read_json_file(path):
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
 
 
-# ── TSV helpers ─────────────────────────────────────────────────────────────
+def _repo_relative_or_abs(path_value):
+    p = Path(path_value)
+    if p.is_absolute():
+        return p.resolve()
+    return (resolved_root() / p).resolve()
+
+
+def _active_feature_state_path():
+    return resolved_root() / ACTIVE_FEATURE_STATE
+
+
+def _read_active_feature_dir_from_active_feature_state():
+    state_file = _active_feature_state_path()
+    data = _read_json_file(state_file)
+    if not isinstance(data, dict):
+        return None
+    value = data.get("feature_directory")
+    if not value:
+        return None
+    return _repo_relative_or_abs(str(value))
+
+
+def _read_active_feature_dir_from_feature_json():
+    """Compatibility wrapper for old internal callers.
+
+    Canonical active feature state is read from ACTIVE_FEATURE_STATE.
+    """
+    return _read_active_feature_dir_from_active_feature_state()
+
+
+def resolve_feature_dir(feature=None):
+    """Resolve a feature directory.
+
+    Priority:
+      1. --feature-dir override
+      2. SPECIFY_FEATURE_DIRECTORY
+      3. explicit feature argument containing a slash or absolute path
+      4. .orderspec/state/active-feature.json if feature is empty or basename matches
+      5. legacy <repo>/specs/<feature>
+    """
+    if _FEATURE_DIR_OVERRIDE:
+        return _repo_relative_or_abs(_FEATURE_DIR_OVERRIDE)
+
+    env_fd = os.environ.get("SPECIFY_FEATURE_DIRECTORY")
+    if env_fd:
+        return _repo_relative_or_abs(env_fd)
+
+    if feature:
+        fp = Path(feature)
+        if fp.is_absolute() or "/" in feature or "\\" in feature:
+            return _repo_relative_or_abs(feature)
+
+    active = _read_active_feature_dir_from_feature_json()
+    if active is not None:
+        if not feature or active.name == feature:
+            return active
+
+    if feature:
+        return (resolved_root() / "specs" / feature).resolve()
+
+    die(
+        "feature directory not found. Pass a feature name/path, use --feature-dir, "
+        "set SPECIFY_FEATURE_DIRECTORY, or ensure .orderspec/state/active-feature.json "
+        "contains feature_directory."
+    )
+
+
+def feature_name(feature=None):
+    return resolve_feature_dir(feature).name
+
+
+def state_dir_for_feature_dir(fdir):
+    return Path(fdir) / FEATURE_STATE_DIRNAME
+
+
+def state_dir(feature=None):
+    return state_dir_for_feature_dir(resolve_feature_dir(feature))
+
+
+def spec_path(feature=None):
+    return resolve_feature_dir(feature) / "spec.md"
+
+
+def plan_path(feature=None):
+    return resolve_feature_dir(feature) / "plan.md"
+
+
+def tasks_path(feature=None):
+    return resolve_feature_dir(feature) / "tasks.md"
+
+
+# ── TSV helpers ──────────────────────────────────────────────────────────────
 
 def _read_tsv_lines(path):
-    """Read raw lines with strict LF validation. Raises ValueError on CRLF or blank data lines."""
     with open(path, "r", encoding="utf-8", newline="") as f:
         lines = f.readlines()
+
     for i, line in enumerate(lines, start=1):
         if "\r" in line:
             raise ValueError(f"CRLF line ending at line {i}")
         if i > 2 and line.rstrip("\n") == "":
             raise ValueError(f"blank data line at line {i}")
+
     return lines
 
 
-def _tsv_lines_to_rows(lines):
-    """Convert validated TSV lines (skip marker+header) to list of dicts."""
+def _tsv_lines_to_rows(lines, expected_colnames=None, exact=True):
     rows = []
     if len(lines) < 2:
         return rows
+
     colnames = lines[1].rstrip("\n").split(TAB)
-    for line in lines[2:]:
+
+    if expected_colnames is not None:
+        expected_cols = expected_colnames.split(TAB)
+        if colnames != expected_cols:
+            raise ValueError("wrong column names")
+    else:
+        expected_cols = colnames
+
+    expected_len = len(expected_cols)
+
+    for i, line in enumerate(lines[2:], start=3):
         line = line.rstrip("\n")
         if not line:
             continue
+
         parts = line.split(TAB)
-        rows.append(dict(zip(colnames, parts)))
+        if exact and len(parts) != expected_len:
+            raise ValueError(
+                f"line {i}: wrong column count: got {len(parts)}, expected {expected_len}"
+            )
+        if len(parts) < expected_len:
+            parts = parts + [""] * (expected_len - len(parts))
+        if len(parts) > expected_len:
+            parts = parts[:expected_len]
+
+        rows.append(dict(zip(expected_cols, parts)))
+
     return rows
 
 
-def read_tsv_body(path):
-    """Read TSV file, skip marker + header, return list of dicts.
-    Raises ValueError on CRLF or blank data lines."""
+def read_tsv_body(path, expected_colnames=None):
     lines = _read_tsv_lines(path)
-    return _tsv_lines_to_rows(lines)
+    return _tsv_lines_to_rows(lines, expected_colnames=expected_colnames, exact=True)
 
 
 def write_tsv_atomic(path, marker, colnames, rows):
-    """Write TSV atomically via temp file. rows is list of lists/tuples."""
+    path = Path(path)
     tmp = path.with_suffix(f".tmp.{os.getpid()}")
     with open(tmp, "w", encoding="utf-8", newline="") as f:
         f.write(marker + "\n")
@@ -116,13 +280,634 @@ def write_tsv_atomic(path, marker, colnames, rows):
     shutil.move(str(tmp), str(path))
 
 
-# ── lint engine ─────────────────────────────────────────────────────────────
+def _read_table(path, kind):
+    expected_marker = {
+        "mechanisms": MECH_MARKER,
+        "trace": TRACE_MARKER,
+        "specids": SPECIDS_MARKER,
+    }[kind]
+    expected_header = {
+        "mechanisms": MECH_COLNAMES,
+        "trace": TRACE_COLNAMES,
+        "specids": SPECIDS_COLNAMES,
+    }[kind]
+
+    if not Path(path).exists():
+        raise ValueError(f"{path} not found")
+
+    lines = _read_tsv_lines(path)
+    if len(lines) < 2:
+        raise ValueError(f"{path} empty or missing header")
+
+    marker = lines[0].rstrip("\n")
+    header = lines[1].rstrip("\n")
+
+    if marker != expected_marker:
+        raise ValueError(f"{kind} wrong version marker")
+    if header != expected_header:
+        raise ValueError(f"{kind} wrong column names")
+
+    return _tsv_lines_to_rows(lines, expected_colnames=expected_header, exact=True)
+
+
+# ── markdown helpers ─────────────────────────────────────────────────────────
+
+def _extract_pathmanifest(plan_file):
+    result = []
+    in_block = False
+
+    if not Path(plan_file).exists():
+        return result
+
+    with open(plan_file, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.rstrip("\n")
+            if re.match(r"^\s*```\s*pathmanifest\s*$", line):
+                in_block = True
+                continue
+            if in_block and re.match(r"^\s*```\s*$", line):
+                break
+            if in_block:
+                result.append(line)
+
+    return result
+
+
+def _parse_pathmanifest(plan_file):
+    """Return (paths, findings).
+
+    paths: dict repo-relative path -> tag `[NEW]`/`[MOD]`
+    findings: list of error strings
+    """
+    findings = []
+    paths = {}
+    manifest = _extract_pathmanifest(plan_file)
+
+    if not manifest:
+        findings.append("No pathmanifest block found")
+        return paths, findings
+
+    for raw in manifest:
+        line = raw.strip()
+        if not line or line.startswith("#") or line.startswith("<!--"):
+            continue
+
+        parts = line.split()
+        if not parts:
+            continue
+
+        path = parts[0]
+        tag = ""
+
+        if "[NEW]" in parts:
+            tag = "[NEW]"
+        if "[MOD]" in parts:
+            if tag:
+                findings.append(f"Multiple tags on manifest line: {line}")
+                continue
+            tag = "[MOD]"
+
+        if path.endswith("/"):
+            findings.append(f"Manifest lists directory: {path}")
+            continue
+
+        if not tag:
+            findings.append(f"Missing [NEW]/[MOD] tag: {path}")
+            continue
+
+        if not _PATH_RE.match(path):
+            findings.append(f"Bad path token: {path}")
+            continue
+
+        paths[path.lstrip("./")] = tag
+
+    return paths, findings
+
+
+def _extract_defined_ids_from_spec_text(spec_text):
+    result = set()
+    for line in spec_text.splitlines():
+        m = SPEC_PREFIX_RE.match(line)
+        if m:
+            result.add(f"{m.group(1)}-{m.group(2)}")
+    return result
+
+
+def _extract_all_id_refs(text):
+    return {f"{m[0]}-{m[1]}" for m in ID_RE.findall(text)}
+
+def _extract_section(text, header_prefix):
+    """Extract markdown section content by header prefix, e.g. '## 9.'."""
+    lines = text.splitlines()
+    start_idx = -1
+
+    for i, line in enumerate(lines):
+        if line.strip().startswith(header_prefix):
+            start_idx = i
+            break
+
+    if start_idx == -1:
+        return ""
+
+    level = len(lines[start_idx]) - len(lines[start_idx].lstrip("#"))
+    end_idx = len(lines)
+
+    for i in range(start_idx + 1, len(lines)):
+        stripped = lines[i].lstrip()
+        if stripped.startswith("#"):
+            this_level = len(lines[i]) - len(lines[i].lstrip("#"))
+            if this_level <= level:
+                end_idx = i
+                break
+
+    return "\n".join(lines[start_idx:end_idx])
+
+
+def _parse_field_table(lines, start_idx):
+    """Parse a markdown | Field | Value | table after start_idx."""
+    i = start_idx
+
+    while i < len(lines) and not lines[i].strip():
+        i += 1
+
+    if i >= len(lines):
+        return {}
+
+    if not re.match(r"^\s*\|.*\|\s*$", lines[i]):
+        return {}
+
+    i += 1
+
+    if i < len(lines) and re.match(r"^\s*\|[\s\-:|]+\|\s*$", lines[i]):
+        i += 1
+
+    result = {}
+
+    while i < len(lines):
+        m = re.match(r"^\s*\|(.*)\|\s*$", lines[i])
+        if not m:
+            break
+
+        parts = [p.strip() for p in m.group(1).split("|")]
+        if len(parts) >= 2:
+            key = parts[0]
+            value = " | ".join(parts[1:]) if len(parts) > 2 else parts[1]
+            if key:
+                result[key] = value
+
+        i += 1
+
+    return result
+
+
+def _extract_if_records(section_9_text):
+    """Extract IF-NNN records and their structured tables from §9."""
+    lines = section_9_text.splitlines()
+    result = {}
+
+    for i, line in enumerate(lines):
+        m = re.match(r"^\s*- \*\*(IF-\d{3})\*\*", line)
+        if not m:
+            continue
+
+        if_id = m.group(1)
+        fields = _parse_field_table(lines, i + 1)
+        result[if_id] = {
+            "anchor_line": i,
+            "fields": fields,
+        }
+
+    return result
+
+
+def _extract_information_model(section_8_text):
+    """Extract entities, structures, and value sets from §8.
+
+    Returns:
+      {name: set(field_names)}
+    """
+    lines = section_8_text.splitlines()
+    result = {}
+    i = 0
+
+    while i < len(lines):
+        line = lines[i]
+        m = re.match(r"^### (?:Entity|Structure|Value Set):\s*(.+?)\s*$", line)
+
+        if not m:
+            i += 1
+            continue
+
+        name = m.group(1).strip()
+        result[name] = set()
+        i += 1
+
+        while i < len(lines):
+            if re.match(r"^##\s", lines[i]) or re.match(r"^###\s", lines[i]):
+                break
+
+            tbl_m = re.match(r"^\s*\|(.*)\|\s*$", lines[i])
+            if tbl_m:
+                parts = [p.strip() for p in tbl_m.group(1).split("|")]
+                if parts and parts[0].lower() == "field":
+                    i += 1
+                    if i < len(lines) and re.match(r"^\s*\|[\s\-:|]+\|\s*$", lines[i]):
+                        i += 1
+
+                    while i < len(lines):
+                        row_m = re.match(r"^\s*\|(.*)\|\s*$", lines[i])
+                        if not row_m:
+                            break
+
+                        row_parts = [p.strip() for p in row_m.group(1).split("|")]
+                        if row_parts and row_parts[0]:
+                            result[name].add(row_parts[0])
+
+                        i += 1
+
+                    continue
+
+            i += 1
+
+    return result
+
+
+def _extract_ac_inline_covers(section_12_text):
+    """Return {AC-ID: [covered spec IDs]} from inline [Covers: ...]."""
+    result = {}
+
+    for line in section_12_text.splitlines():
+        m_ac = re.match(r"^\s*- \*\*(AC-\d{3})\*\*", line)
+        if not m_ac:
+            continue
+
+        ac_id = m_ac.group(1)
+        covers = []
+
+        for m in AC_COVERS_RE.finditer(line):
+            for part in m.group(1).split(","):
+                part = part.strip()
+                if _SPEC_ID_RE.match(part):
+                    covers.append(part)
+
+        result[ac_id] = covers
+
+    return result
+
+
+def _extract_status_codes(text):
+    """Extract contextual HTTP-like status codes from text."""
+    statuses = set()
+    http_keywords = [
+        "status",
+        "response",
+        "returns",
+        "return",
+        "http",
+        "bad request",
+        "not found",
+        "gone",
+        "error",
+        "forbidden",
+        "unauthorized",
+        "server error",
+        "success",
+        "created",
+        "no content",
+        "accepted",
+        "conflict",
+        "unprocessable",
+    ]
+
+    lines = text.splitlines()
+
+    for i, line in enumerate(lines):
+        numbers = re.findall(r"\b([1-5]\d{2})\b", line)
+        if not numbers:
+            continue
+
+        context = line.lower()
+
+        if i > 0:
+            context = lines[i - 1].lower() + " " + context
+
+        if i < len(lines) - 1:
+            context = context + " " + lines[i + 1].lower()
+
+        for num in numbers:
+            if num in {
+                "200", "201", "202", "204",
+                "400", "401", "403", "404", "409", "410", "422",
+                "500", "503",
+            }:
+                if any(kw in context for kw in http_keywords):
+                    statuses.add(num)
+
+    return statuses
+
+
+def _extract_grid_rows(section_10_text):
+    """Parse §10 Contradiction Grid.
+
+    Returns list of (left_id, right_id) tuples.
+    Reads IDs primarily from the first table column, e.g.:
+      INV-001 × NFR-001
+    """
+    rows = []
+    in_table = False
+
+    for line in section_10_text.splitlines():
+        if re.match(r"^\s*\|.*\|\s*$", line):
+            if re.match(r"^\s*\|[\s\-:|]+\|\s*$", line):
+                continue
+
+            parts = [p.strip() for p in re.match(r"^\s*\|(.*)\|\s*$", line).group(1).split("|")]
+
+            if not in_table:
+                joined = " ".join(parts).lower()
+                if any(kw in joined for kw in ("invariant", "requirement", "inv", "req", "pair", "left", "source")):
+                    in_table = True
+                    continue
+
+            if in_table or (parts and ID_RE.search(parts[0])):
+                in_table = True
+                pair_text = parts[0] if parts else ""
+                ids_in_col = ID_RE.findall(pair_text)
+
+                if len(ids_in_col) >= 2:
+                    left_id = f"{ids_in_col[0][0]}-{ids_in_col[0][1]}"
+                    right_id = f"{ids_in_col[1][0]}-{ids_in_col[1][1]}"
+                    rows.append((left_id, right_id))
+                elif len(ids_in_col) == 1:
+                    left_id = f"{ids_in_col[0][0]}-{ids_in_col[0][1]}"
+                    rows.append((left_id, None))
+        else:
+            if in_table and line.strip() and not line.strip().startswith("|"):
+                in_table = False
+
+    return rows
+
+
+def _extract_inv_texts(spec_text):
+    """Return {INV-ID: anchor line text}."""
+    result = {}
+
+    for line in spec_text.splitlines():
+        m = re.match(r"^\s*- \*\*(INV-\d{3})\*\*\s*:?\s*(.*)$", line)
+        if m:
+            result[m.group(1)] = m.group(2)
+
+    return result
+
+# ── YAML frontmatter ─────────────────────────────────────────────────────────
+
+SPEC_REQUIRED_METADATA_FIELDS = ["artifact", "feature_id", "slug", "status"]
+SPEC_STATUS_VALUES = {"draft", "review", "approved"}
+FEATURE_ID_RE = re.compile(r"^FEAT-[0-9]{3}-[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+
+def _strip_quotes(value):
+    """Remove surrounding single or double quotes from a scalar value."""
+    if len(value) >= 2:
+        if (value.startswith('"') and value.endswith('"')) or \
+           (value.startswith("'") and value.endswith("'")):
+            return value[1:-1]
+    return value
+
+
+def _parse_yaml_scalar(value):
+    """Parse a minimal YAML scalar.
+
+    This intentionally supports only the subset needed by OrderSpec frontmatter:
+    strings, booleans, null, and simple inline arrays.
+    """
+    value = value.strip()
+
+    if value == "":
+        return ""
+
+    lowered = value.lower()
+
+    if lowered in {"null", "~"}:
+        return None
+
+    if lowered == "true":
+        return True
+
+    if lowered == "false":
+        return False
+
+    if value.startswith("[") and value.endswith("]"):
+        body = value[1:-1].strip()
+        if not body:
+            return []
+        return [_strip_quotes(part.strip()) for part in body.split(",")]
+
+    return _strip_quotes(value)
+
+
+def _extract_yaml_frontmatter(text):
+    """Extract YAML frontmatter from text starting with --- ... ---.
+
+    This is a small deterministic parser for the OrderSpec frontmatter subset.
+    It supports nested mappings such as:
+
+        orderspec:
+          artifact: spec
+          refs:
+            framework_rules: ".orderspec/framework/orderspec-rules.md"
+
+    It is not a full YAML parser and intentionally avoids external dependencies.
+    """
+    if not text.startswith("---"):
+        return {}
+
+    lines = text.splitlines()
+    end_idx = None
+
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            end_idx = i
+            break
+
+    if end_idx is None:
+        return {}
+
+    yaml_lines = lines[1:end_idx]
+    root = {}
+    stack = [(-1, root)]
+
+    for raw_line in yaml_lines:
+        if not raw_line.strip() or raw_line.strip().startswith("#"):
+            continue
+
+        # Ignore list items for now. Current traceability validation only needs
+        # mapping fields under `orderspec`.
+        stripped = raw_line.strip()
+        if stripped.startswith("- "):
+            continue
+
+        if ":" not in raw_line:
+            continue
+
+        indent = len(raw_line) - len(raw_line.lstrip(" "))
+        key, _, value = raw_line.strip().partition(":")
+        key = key.strip()
+        value = value.strip()
+
+        while stack and indent <= stack[-1][0]:
+            stack.pop()
+
+        if not stack:
+            stack = [(-1, root)]
+
+        parent = stack[-1][1]
+
+        if value == "":
+            node = {}
+            parent[key] = node
+            stack.append((indent, node))
+        else:
+            parent[key] = _parse_yaml_scalar(value)
+
+    return root
+
+
+def _extract_id_texts(spec_text):
+    """Extract {ID: anchor_line_text} from spec text."""
+    result = {}
+    for line in spec_text.splitlines():
+        m = SPEC_PREFIX_RE.match(line)
+        if m:
+            sid = f"{m.group(1)}-{m.group(2)}"
+            result[sid] = line.strip()
+    return result
+
+
+
+def _normalize_frontmatter_scalar(value):
+    if not isinstance(value, str):
+        return value
+
+    text = value.strip()
+
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in {"'", '"'}:
+        return text[1:-1]
+
+    return text
+
+def _looks_like_unresolved_placeholder(value):
+    if value is None:
+        return True
+
+    s = str(value).strip()
+
+    if not s:
+        return True
+
+    return (
+        s.startswith("__")
+        or s.endswith("__")
+        or s.startswith("[")
+        or s.endswith("]")
+        or "TODO" in s.upper()
+        or "TKTK" in s.upper()
+    )
+
+
+def _validate_yaml_frontmatter(spec_text):
+    """Validate spec.md YAML frontmatter.
+
+    Current required spec frontmatter shape is:
+
+        orderspec:
+          artifact: spec
+          feature_id: ...
+          slug: ...
+          status: draft|review|approved
+
+    Returns list of (field, message) errors.
+    """
+    errors = []
+
+    fm = _extract_yaml_frontmatter(spec_text)
+
+    if not fm:
+        errors.append(("__frontmatter", "No YAML frontmatter block found"))
+        return errors
+
+    orderspec = fm.get("orderspec", {})
+    if not isinstance(orderspec, dict):
+        errors.append(("orderspec", "orderspec block is not a mapping"))
+        return errors
+
+    for field in SPEC_REQUIRED_METADATA_FIELDS:
+        value = orderspec.get(field)
+        if _looks_like_unresolved_placeholder(value):
+            errors.append((field, f"Required metadata field 'orderspec.{field}' is missing, empty, or unresolved"))
+
+    artifact = orderspec.get("artifact")
+    if artifact and artifact != "spec":
+        errors.append(("artifact", f"orderspec.artifact must be 'spec', got '{artifact}'"))
+
+    feature_id = orderspec.get("feature_id")
+    feature_id_value = _normalize_frontmatter_scalar(feature_id)
+    if (
+        feature_id_value is not None
+        and not _looks_like_unresolved_placeholder(feature_id_value)
+        and (not isinstance(feature_id_value, str) or not FEATURE_ID_RE.match(feature_id_value))
+    ):
+        errors.append((
+            "feature_id",
+            "orderspec.feature_id must match FEAT-NNN-slug, e.g. FEAT-001-user-auth",
+        ))
+
+    status = orderspec.get("status")
+    if status and status not in SPEC_STATUS_VALUES:
+        errors.append((
+            "status",
+            f"orderspec.status must be one of {sorted(SPEC_STATUS_VALUES)}, got '{status}'",
+        ))
+
+    return errors
+
+
+def _load_specids(feature=None):
+    sdir = state_dir(feature)
+    path = sdir / "spec-ids.tsv"
+    if not path.exists():
+        return {}
+
+    rows = _read_table(path, "specids")
+    return {row["spec_id"]: row for row in rows}
+
+
+def _defined_ids(feature=None):
+    specids = _load_specids(feature)
+    if specids:
+        return set(specids.keys())
+
+    sp = spec_path(feature)
+    if not sp.exists():
+        return set()
+
+    return _extract_defined_ids_from_spec_text(sp.read_text(encoding="utf-8"))
+
+
+def _sort_spec_id(sid):
+    prefix, num = sid.split("-")
+    return (SPEC_PREFIXES.index(prefix) if prefix in SPEC_PREFIXES else 999, int(num))
+
+
+# ── lint engines ─────────────────────────────────────────────────────────────
 
 def lint_mechanisms(rows):
     errors = []
     seen_ids = set()
     valid_ck = {"direct", "documented"}
     valid_tt = {"unit", "integration", "documented"}
+    rows_by_id = {}
+
     for i, row in enumerate(rows, start=3):
         spec_id = row.get("spec_id", "")
         ck = row.get("coverage_kind", "")
@@ -133,13 +918,23 @@ def lint_mechanisms(rows):
         if not spec_id:
             errors.append(f"ERROR {i}: empty spec_id")
             continue
-        if not re.match(r"^(" + "|".join(SPEC_PREFIXES) + r")-(\d{3})$", spec_id):
+
+        if not _SPEC_ID_RE.match(spec_id):
             errors.append(f"ERROR {i}: bad spec_id \"{spec_id}\"")
             continue
+
         if spec_id in seen_ids:
             errors.append(f"ERROR {i}: duplicate spec_id \"{spec_id}\"")
             continue
+
         seen_ids.add(spec_id)
+        rows_by_id[spec_id] = row
+
+        prefix = spec_id.split("-")[0]
+        if prefix in FORBIDDEN_MECHANISM_PREFIXES:
+            errors.append(
+                f"ERROR {i}: {prefix} IDs must not have mechanism rows ({spec_id})"
+            )
 
         if not mech:
             errors.append(f"ERROR {i}: empty mechanism for \"{spec_id}\"")
@@ -153,31 +948,72 @@ def lint_mechanisms(rows):
 
         if ck == "direct" and tt not in {"unit", "integration"}:
             errors.append(
-                f"ERROR {i}: coverage_kind=direct requires test_type unit|integration (got \"{tt}\") for \"{spec_id}\""
+                f"ERROR {i}: coverage_kind=direct requires test_type unit|integration "
+                f"(got \"{tt}\") for \"{spec_id}\""
             )
         elif ck == "documented" and tt != "documented":
             errors.append(
-                f"ERROR {i}: coverage_kind=documented requires test_type=documented (got \"{tt}\") for \"{spec_id}\""
+                f"ERROR {i}: coverage_kind=documented requires test_type=documented "
+                f"(got \"{tt}\") for \"{spec_id}\""
             )
         elif tt == "documented" and ck != "documented":
             errors.append(
-                f"ERROR {i}: test_type=documented requires coverage_kind=documented (got \"{ck}\") for \"{spec_id}\""
+                f"ERROR {i}: test_type=documented requires coverage_kind=documented "
+                f"(got \"{ck}\") for \"{spec_id}\""
             )
         elif ck.startswith("delegated:"):
-            tgt = ck[len("delegated:") :]
+            tgt = ck[len("delegated:"):]
             if tgt == spec_id:
                 errors.append(f"ERROR {i}: delegated coverage points to itself for \"{spec_id}\"")
-            if not re.match(r"^(" + "|".join(SPEC_PREFIXES) + r")-(\d{3})$", tgt):
+            if not _SPEC_ID_RE.match(tgt):
                 errors.append(f"ERROR {i}: bad delegated target \"{tgt}\" for \"{spec_id}\"")
+            if tt not in {"unit", "integration"}:
+                errors.append(
+                    f"ERROR {i}: delegated coverage requires test_type unit|integration "
+                    f"(got \"{tt}\") for \"{spec_id}\""
+                )
 
         if not files:
             errors.append(f"ERROR {i}: empty primary_files for \"{spec_id}\"")
         else:
-            for p in files.split(";"):
-                if not p:
-                    errors.append(f"ERROR {i}: empty path token in primary_files for \"{spec_id}\"")
-                elif " " in p or not re.match(r"^[A-Za-z0-9._/-]+$", p):
-                    errors.append(f"ERROR {i}: bad path token \"{p}\" for \"{spec_id}\"")
+            if ";" in files:
+                errors.append(
+                    f"ERROR {i}: primary_files must contain exactly one file, got list \"{files}\" "
+                    f"for \"{spec_id}\""
+                )
+            elif " " in files or not _PATH_RE.match(files):
+                errors.append(f"ERROR {i}: bad path token \"{files}\" for \"{spec_id}\"")
+            elif files.endswith("/"):
+                errors.append(f"ERROR {i}: primary_files must be a file, got directory \"{files}\"")
+
+    # delegated target existence
+    for i, row in enumerate(rows, start=3):
+        spec_id = row.get("spec_id", "")
+        ck = row.get("coverage_kind", "")
+        if ck.startswith("delegated:"):
+            tgt = ck[len("delegated:"):]
+            if _SPEC_ID_RE.match(tgt) and tgt not in rows_by_id:
+                errors.append(
+                    f"ERROR {i}: delegated target \"{tgt}\" for \"{spec_id}\" has no mechanism row"
+                )
+
+    # delegated cycle detection
+    graph = {}
+    for row in rows:
+        spec_id = row.get("spec_id", "")
+        ck = row.get("coverage_kind", "")
+        if spec_id and ck.startswith("delegated:"):
+            graph[spec_id] = ck[len("delegated:"):]
+
+    for sid in graph:
+        seen = set()
+        cur = sid
+        while cur in graph:
+            if cur in seen:
+                errors.append(f"ERROR: delegated coverage cycle involving \"{sid}\"")
+                break
+            seen.add(cur)
+            cur = graph[cur]
 
     return errors
 
@@ -185,8 +1021,7 @@ def lint_mechanisms(rows):
 def lint_trace(rows):
     errors = []
     seen_ids = set()
-    task_re = re.compile(r"^T\d{3}$")
-    path_re = re.compile(r"^[A-Za-z0-9._/-]+$")
+
     for i, row in enumerate(rows, start=3):
         spec_id = row.get("spec_id", "")
         tasks = row.get("task_ids", "")
@@ -196,12 +1031,15 @@ def lint_trace(rows):
         if not spec_id:
             errors.append(f"ERROR {i}: empty spec_id")
             continue
-        if not re.match(r"^(" + "|".join(SPEC_PREFIXES) + r")-(\d{3})$", spec_id):
+
+        if not _SPEC_ID_RE.match(spec_id):
             errors.append(f"ERROR {i}: bad spec_id \"{spec_id}\"")
             continue
+
         if spec_id in seen_ids:
             errors.append(f"ERROR {i}: duplicate spec_id \"{spec_id}\"")
             continue
+
         seen_ids.add(spec_id)
 
         if source not in {"tasks.md", "plan.md"}:
@@ -209,21 +1047,23 @@ def lint_trace(rows):
 
         if tasks:
             for t in tasks.split(";"):
-                if not task_re.match(t):
+                if not _TASK_ID_RE.match(t):
                     errors.append(f"ERROR {i}: bad task_id \"{t}\" for \"{spec_id}\"")
         elif source == "tasks.md":
             errors.append(f"ERROR {i}: empty task_ids but source=tasks.md for \"{spec_id}\"")
 
         if files:
             for p in files.split(";"):
-                if p and not path_re.match(p):
+                if p and not _PATH_RE.match(p):
                     errors.append(f"ERROR {i}: bad path token \"{p}\" for \"{spec_id}\"")
+
     return errors
 
 
 def lint_specids(rows):
     errors = []
     seen_ids = set()
+
     for i, row in enumerate(rows, start=3):
         spec_id = row.get("spec_id", "")
         kind = row.get("kind", "")
@@ -232,16 +1072,19 @@ def lint_specids(rows):
         if not spec_id:
             errors.append(f"ERROR {i}: empty spec_id")
             continue
-        if not re.match(r"^(" + "|".join(SPEC_PREFIXES) + r")-(\d{3})$", spec_id):
+
+        if not _SPEC_ID_RE.match(spec_id):
             errors.append(f"ERROR {i}: bad spec_id \"{spec_id}\"")
             continue
+
         if spec_id in seen_ids:
             errors.append(f"ERROR {i}: duplicate spec_id \"{spec_id}\"")
             continue
+
         seen_ids.add(spec_id)
 
         if kind not in SPEC_PREFIXES:
-            errors.append(f"ERROR {i}: bad kind \"{kind}\" for \"{spec_id}\"")
+            errors.append(f"ERROR {i}: bad kind \"{kind}\"")
         else:
             prefix = spec_id.split("-")[0]
             if kind != prefix:
@@ -249,190 +1092,247 @@ def lint_specids(rows):
 
         if not section:
             errors.append(f"ERROR {i}: empty section for \"{spec_id}\"")
+
     return errors
 
 
 def lint_file(path, kind):
-    if not path.exists():
+    if not Path(path).exists():
         return [f"FATAL: {path} not found"]
+
     try:
-        lines = _read_tsv_lines(path)
+        rows = _read_table(path, kind)
     except ValueError as e:
         return [f"FATAL: {e}"]
 
-    if len(lines) < 2:
-        return [f"FATAL: {path} empty or missing header"]
-    marker = lines[0].rstrip("\n")
-    header = lines[1].rstrip("\n")
-    expected_marker = {
-        "mechanisms": MECH_MARKER,
-        "trace": TRACE_MARKER,
-        "specids": SPECIDS_MARKER,
-    }[kind]
-    expected_header = {
-        "mechanisms": MECH_COLNAMES,
-        "trace": TRACE_COLNAMES,
-        "specids": SPECIDS_COLNAMES,
-    }[kind]
-    if marker != expected_marker:
-        return [f"FATAL: {kind} wrong version marker"]
-    if header != expected_header:
-        return [f"FATAL: {kind} wrong column names"]
-
-    rows = _tsv_lines_to_rows(lines)
-
     if kind == "mechanisms":
         return lint_mechanisms(rows)
-    elif kind == "trace":
+    if kind == "trace":
         return lint_trace(rows)
-    elif kind == "specids":
+    if kind == "specids":
         return lint_specids(rows)
+
     return []
 
 
-# ── commands ────────────────────────────────────────────────────────────────
+# ── mechanism cross-checks ───────────────────────────────────────────────────
+
+def check_mechanisms_findings(feature=None):
+    findings = []
+    fdir = resolve_feature_dir(feature)
+    sdir = state_dir_for_feature_dir(fdir)
+    mech_path = sdir / "mechanisms.tsv"
+    specids_path = sdir / "spec-ids.tsv"
+    plan_file = fdir / "plan.md"
+
+    if not mech_path.exists():
+        findings.append(("M15", "HIGH", "mechanisms.tsv", "mechanisms.tsv not found"))
+        return findings
+
+    lint_errs = lint_file(mech_path, "mechanisms")
+    for err in lint_errs:
+        findings.append(("M15", "HIGH", "mechanisms.tsv", err))
+
+    if lint_errs:
+        return findings
+
+    try:
+        mech_rows = _read_table(mech_path, "mechanisms")
+    except ValueError as e:
+        findings.append(("M15", "HIGH", "mechanisms.tsv", str(e)))
+        return findings
+
+    mech_by_id = {row["spec_id"]: row for row in mech_rows}
+
+    defined = {}
+    if specids_path.exists():
+        try:
+            for row in _read_table(specids_path, "specids"):
+                defined[row["spec_id"]] = row
+        except ValueError as e:
+            findings.append(("M27", "HIGH", "spec-ids.tsv", str(e)))
+
+    if defined:
+        defined_ids = set(defined.keys())
+
+        for sid in sorted(mech_by_id, key=_sort_spec_id):
+            if sid not in defined_ids:
+                findings.append(
+                    ("M27", "HIGH", "mechanisms.tsv", f"{sid} has a mechanism row but is not defined in spec-ids.tsv")
+                )
+
+        for sid, row in sorted(defined.items(), key=lambda x: _sort_spec_id(x[0])):
+            kind = row.get("kind", sid.split("-")[0])
+            if kind in REQUIRED_MECHANISM_PREFIXES and sid not in mech_by_id:
+                findings.append(
+                    ("M15", "HIGH", "mechanisms.tsv", f"{sid} requires a mechanism row")
+                )
+
+    manifest_paths, manifest_errors = _parse_pathmanifest(plan_file)
+    for err in manifest_errors:
+        findings.append(("M9", "HIGH", "plan.md", err))
+
+    manifest_set = set(manifest_paths.keys())
+
+    for sid, row in sorted(mech_by_id.items(), key=lambda x: _sort_spec_id(x[0])):
+        ck = row.get("coverage_kind", "")
+        pf = row.get("primary_files", "").lstrip("./")
+
+        if ck == "direct" or ck.startswith("delegated:"):
+            if pf not in manifest_set:
+                findings.append(
+                    (
+                        "M16",
+                        "HIGH",
+                        "mechanisms.tsv",
+                        f"{sid} primary file '{pf}' is not listed in plan.md pathmanifest",
+                    )
+                )
+
+        if ck == "documented":
+            if pf not in {"plan.md", str(Path("plan.md"))} and pf not in manifest_set:
+                findings.append(
+                    (
+                        "M26",
+                        "MEDIUM",
+                        "mechanisms.tsv",
+                        f"{sid} documented primary file '{pf}' is neither plan.md nor listed in pathmanifest",
+                    )
+                )
+
+    # delegated terminal validity
+    for sid, row in sorted(mech_by_id.items(), key=lambda x: _sort_spec_id(x[0])):
+        ck = row.get("coverage_kind", "")
+        if not ck.startswith("delegated:"):
+            continue
+
+        seen = set()
+        cur = sid
+        while True:
+            if cur in seen:
+                findings.append(
+                    ("M17", "HIGH", "mechanisms.tsv", f"delegation cycle starts at {sid}")
+                )
+                break
+            seen.add(cur)
+
+            cur_row = mech_by_id.get(cur)
+            if not cur_row:
+                findings.append(
+                    ("M17", "HIGH", "mechanisms.tsv", f"delegation chain for {sid} points to missing {cur}")
+                )
+                break
+
+            cur_ck = cur_row.get("coverage_kind", "")
+            if cur_ck == "direct" or cur_ck == "documented":
+                break
+
+            if cur_ck.startswith("delegated:"):
+                cur = cur_ck[len("delegated:"):]
+                continue
+
+            findings.append(
+                ("M17", "HIGH", "mechanisms.tsv", f"delegation chain for {sid} reaches invalid coverage kind {cur_ck}")
+            )
+            break
+
+    return findings
+
+
+# ── commands: init / lint / put / get ────────────────────────────────────────
 
 def cmd_init(feature):
-    if not feature:
-        die("usage: traceability.py init <feature>", 64)
-    fdir = feature_dir(feature)
+    fdir = resolve_feature_dir(feature)
     if not fdir.exists():
-        die(f"feature dir not found: {fdir} (expected specs/{feature})")
-    sdir = state_dir(feature)
+        die(f"feature dir not found: {fdir}")
+
+    sdir = state_dir_for_feature_dir(fdir)
     sdir.mkdir(parents=True, exist_ok=True)
+
     schema_file = sdir / ".schema"
     if schema_file.exists():
-        sv = schema_file.read_text().strip()
+        sv = schema_file.read_text(encoding="utf-8").strip()
         if sv != SCHEMA_VERSION:
             die(f".schema exists with version '{sv}', expected '{SCHEMA_VERSION}'")
-        print(f"init: already initialized ({feature}, schema {sv})")
+        print(f"init: already initialized ({fdir.name}, schema {sv})")
         return
-    schema_file.write_text(SCHEMA_VERSION + "\n")
+
+    schema_file.write_text(SCHEMA_VERSION + "\n", encoding="utf-8")
     print(f"init: created {sdir} (schema {SCHEMA_VERSION})")
 
 
 def cmd_lint(feature):
-    if not feature:
-        die("usage: traceability.py lint <feature>", 64)
     sdir = state_dir(feature)
     if not sdir.exists():
-        die(f"state not initialized for '{feature}'; run: traceability.py init {feature}")
+        die(f"state not initialized for '{feature or feature_name(feature)}'; run: traceability.py init <feature>")
+
     schema_file = sdir / ".schema"
     if not schema_file.exists():
-        die(f"missing {schema_file}; run: traceability.py init {feature}")
-    sv = schema_file.read_text().strip()
+        die(f"missing {schema_file}; run: traceability.py init <feature>")
+
+    sv = schema_file.read_text(encoding="utf-8").strip()
     if sv != SCHEMA_VERSION:
         die(f".schema is '{sv}', expected '{SCHEMA_VERSION}'")
 
     rc = 0
+
     mech = sdir / "mechanisms.tsv"
     if not mech.exists():
         die(f"mechanisms.tsv not found: {mech}")
-    errs = lint_file(mech, "mechanisms")
-    if errs:
+
+    for e in lint_file(mech, "mechanisms"):
         rc = 2
-        for e in errs:
-            print(e, file=sys.stderr)
+        print(e, file=sys.stderr)
 
     specids = sdir / "spec-ids.tsv"
     if specids.exists():
-        errs = lint_file(specids, "specids")
-        if errs:
+        for e in lint_file(specids, "specids"):
             rc = 2
-            for e in errs:
-                print(e, file=sys.stderr)
+            print(e, file=sys.stderr)
 
     trace = sdir / "traceability.tsv"
     if trace.exists():
-        errs = lint_file(trace, "trace")
-        if errs:
+        for e in lint_file(trace, "trace"):
             rc = 2
-            for e in errs:
-                print(e, file=sys.stderr)
+            print(e, file=sys.stderr)
 
     if rc != 0:
-        print(f"lint: FAIL for {feature}", file=sys.stderr)
+        print(f"lint: FAIL for {resolve_feature_dir(feature).name}", file=sys.stderr)
         sys.exit(2)
-    print(f"lint: OK ({feature})")
 
-
-def cmd_put_mechanisms(feature):
-    if not feature:
-        die("usage: traceability.py put-mechanisms <feature>", 64)
-    _put_via_lint(feature, "mechanisms", "mechanisms.tsv", MECH_MARKER, MECH_COLNAMES)
-
-
-def cmd_put_spec_ids(feature):
-    if not feature:
-        die("usage: traceability.py put-spec-ids <feature>", 64)
-    _put_via_lint(feature, "specids", "spec-ids.tsv", SPECIDS_MARKER, SPECIDS_COLNAMES)
-
-
-def cmd_extract_spec_ids(feature):
-    if not feature:
-        die("usage: traceability.py extract-spec-ids <feature>", 64)
-    fdir = feature_dir(feature)
-    spec = fdir / "spec.md"
-    if not spec.exists():
-        die(f"spec.md not found: {spec}")
-    sdir = state_dir(feature)
-    if not sdir.exists():
-        die(f"state not initialized for '{feature}'; run: traceability.py init {feature}")
-
-    # ── Renumbering detection: read existing IDs before overwriting ──
-    existing_tsv = sdir / "spec-ids.tsv"
-    old_ids = set()
-    if existing_tsv.exists():
-        try:
-            for row in read_tsv_body(existing_tsv):
-                old_ids.add(row.get("spec_id", ""))
-        except (ValueError, KeyError):
-            pass  # ignore corrupt old TSV
-
-    # ── Extract IDs from spec.md ──
-    rows = []
-    new_ids = set()
-    with open(spec, "r", encoding="utf-8") as f:
-        for line in f:
-            m = SPEC_PREFIX_RE.match(line)
-            if m:
-                prefix = m.group(1)
-                num = m.group(2)
-                spec_id = f"{prefix}-{num}"
-                section = SECTION_MAP.get(prefix, "unknown")
-                rows.append([spec_id, prefix, section])
-                new_ids.add(spec_id)
-
-    # ── Warn about disappeared IDs (renumbering / silent removal) ──
-    removed = old_ids - new_ids
-    if removed:
-        for sid in sorted(removed):
-            print(
-                f"WARNING: {sid} disappeared from spec.md — "
-                f"verify it was tombstoned in §2 Out-of-Scope, not silently renumbered",
-                file=sys.stderr,
-            )
-
-    _put_via_lint(feature, "specids", "spec-ids.tsv", SPECIDS_MARKER, SPECIDS_COLNAMES, rows)
+    print(f"lint: OK ({resolve_feature_dir(feature).name})")
 
 
 def _put_via_lint(feature, kind, basename, marker, colnames, rows=None):
-    fdir = feature_dir(feature)
+    fdir = resolve_feature_dir(feature)
     if not fdir.exists():
         die(f"feature dir not found: {fdir}")
-    sdir = state_dir(feature)
+
+    sdir = state_dir_for_feature_dir(fdir)
     if not sdir.exists():
-        die(f"state not initialized for '{feature}'; run: traceability.py init {feature}")
+        die(f"state not initialized for '{fdir.name}'; run: traceability.py init {fdir.name}")
+
     target = sdir / basename
+
     if rows is None:
         rows = []
-        for line in sys.stdin:
+        expected_cols = len(colnames.split(TAB))
+        for line_num, line in enumerate(sys.stdin, start=1):
             line = line.rstrip("\n")
             if not line:
                 continue
-            rows.append(line.split(TAB))
+            parts = line.split(TAB)
+            if len(parts) != expected_cols:
+                print(
+                    f"put-{basename}: input line {line_num} has {len(parts)} columns, expected {expected_cols}",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
+            rows.append(parts)
+
     tmp = target.with_suffix(f".tmp.{os.getpid()}")
     write_tsv_atomic(tmp, marker, colnames, rows)
+
     errs = lint_file(tmp, kind)
     if errs:
         tmp.unlink(missing_ok=True)
@@ -440,63 +1340,180 @@ def _put_via_lint(feature, kind, basename, marker, colnames, rows=None):
             print(e, file=sys.stderr)
         print(f"put-{basename}: rejected, {target} not modified", file=sys.stderr)
         sys.exit(2)
+
+    if kind == "trace":
+        mtsv = sdir / "mechanisms.tsv"
+        if mtsv.exists():
+            cov_errs = _lint_coverage(tmp, mtsv)
+            if cov_errs:
+                tmp.unlink(missing_ok=True)
+                for e in cov_errs:
+                    print(e, file=sys.stderr)
+                print(f"put-{basename}: rejected (coverage), {target} not modified", file=sys.stderr)
+                sys.exit(2)
+
     shutil.move(str(tmp), str(target))
     print(f"put-{basename}: wrote {target}")
 
 
+def cmd_put_mechanisms(feature):
+    _put_via_lint(feature, "mechanisms", "mechanisms.tsv", MECH_MARKER, MECH_COLNAMES)
+
+
+def cmd_put_spec_ids(feature):
+    _put_via_lint(feature, "specids", "spec-ids.tsv", SPECIDS_MARKER, SPECIDS_COLNAMES)
+
+
+def cmd_put_trace(feature):
+    _put_via_lint(feature, "trace", "traceability.tsv", TRACE_MARKER, TRACE_COLNAMES)
+
+
+def cmd_get(feature, which):
+    mapping = {
+        "mechanisms": ("mechanisms.tsv", MECH_MARKER, MECH_COLNAMES),
+        "spec-ids": ("spec-ids.tsv", SPECIDS_MARKER, SPECIDS_COLNAMES),
+        "trace": ("traceability.tsv", TRACE_MARKER, TRACE_COLNAMES),
+    }
+
+    if which not in mapping:
+        die(f"get: unknown which '{which}' (want mechanisms|spec-ids|trace)", 64)
+
+    basename, marker, colnames = mapping[which]
+    sdir = state_dir(feature)
+    target = sdir / basename
+
+    if not target.exists():
+        die(f"get: no {basename} for feature '{resolve_feature_dir(feature).name}' (run extract/put first)")
+
+    if which == "trace" and _trace_stale(feature):
+        die("get: traceability.tsv is stale (tasks.md changed/removed); run extract-trace")
+
+    try:
+        rows = _read_table(target, {"mechanisms": "mechanisms", "spec-ids": "specids", "trace": "trace"}[which])
+    except ValueError as e:
+        die(f"get: {basename}: {e}")
+
+    for row in rows:
+        sys.stdout.write(TAB.join(row[c] for c in colnames.split(TAB)) + "\n")
+
+
+# ── commands: extract spec ids / trace ───────────────────────────────────────
+
+def cmd_extract_spec_ids(feature):
+    fdir = resolve_feature_dir(feature)
+    spec = fdir / "spec.md"
+    if not spec.exists():
+        die(f"spec.md not found: {spec}")
+
+    sdir = state_dir_for_feature_dir(fdir)
+    if not sdir.exists():
+        die(f"state not initialized for '{fdir.name}'; run: traceability.py init {fdir.name}")
+
+    existing_tsv = sdir / "spec-ids.tsv"
+    old_ids = set()
+    if existing_tsv.exists():
+        try:
+            old_ids = {row["spec_id"] for row in _read_table(existing_tsv, "specids")}
+        except ValueError:
+            old_ids = set()
+
+    rows = []
+    new_ids = set()
+
+    with open(spec, "r", encoding="utf-8") as f:
+        for line in f:
+            m = SPEC_PREFIX_RE.match(line)
+            if not m:
+                continue
+            prefix = m.group(1)
+            num = m.group(2)
+            sid = f"{prefix}-{num}"
+            rows.append([sid, prefix, SECTION_MAP.get(prefix, "unknown")])
+            new_ids.add(sid)
+
+    removed = old_ids - new_ids
+    for sid in sorted(removed, key=_sort_spec_id):
+        print(
+            f"WARNING: {sid} disappeared from spec.md — verify it was tombstoned "
+            f"in §2 Out-of-Scope, not silently renumbered",
+            file=sys.stderr,
+        )
+
+    _put_via_lint(
+        feature,
+        "specids",
+        "spec-ids.tsv",
+        SPECIDS_MARKER,
+        SPECIDS_COLNAMES,
+        rows=rows,
+    )
+
+
+def _trace_stale(feature):
+    tasks = tasks_path(feature)
+    trace = state_dir(feature) / "traceability.tsv"
+
+    if not trace.exists():
+        return False
+
+    if not tasks.exists():
+        print("stale: tasks.md is gone but traceability.tsv remains", file=sys.stderr)
+        return True
+
+    if tasks.stat().st_mtime > trace.stat().st_mtime:
+        print("stale: tasks.md is newer than traceability.tsv", file=sys.stderr)
+        return True
+
+    return False
+
+
 def cmd_extract_trace(feature):
-    if not feature:
-        die("usage: traceability.py extract-trace <feature>", 64)
-    fdir = feature_dir(feature)
+    fdir = resolve_feature_dir(feature)
     tasks = fdir / "tasks.md"
     if not tasks.exists():
         die(f"tasks.md not found: {tasks}")
-    sdir = state_dir(feature)
+
+    sdir = state_dir_for_feature_dir(fdir)
     if not sdir.exists():
-        die(f"state not initialized for '{feature}'; run: traceability.py init {feature}")
+        die(f"state not initialized for '{fdir.name}'; run: traceability.py init {fdir.name}")
+
     mtsv = sdir / "mechanisms.tsv"
     if not mtsv.exists():
         die(f"extract-trace: mechanisms.tsv not found: {mtsv} (run put-mechanisms first)")
 
-    # Load mechanisms
-    mech_rows = read_tsv_body(mtsv)
+    mech_rows = _read_table(mtsv, "mechanisms")
     ck_of = {}
     pf_of = {}
-    bind = {}  # (path, spec_id) -> True for direct mechanisms
+    bind = {}
+
     for row in mech_rows:
         sid = row["spec_id"]
         ck = row["coverage_kind"]
-        files = row["primary_files"]
+        pf = row["primary_files"]
         ck_of[sid] = ck
-        pf_of[sid] = files
+        pf_of[sid] = pf
         if ck == "direct":
-            for p in files.split(";"):
-                if p:
-                    bind[(p, sid)] = True
+            bind[(pf, sid)] = True
 
-    # Parse tasks.md
-    task_re = re.compile(r"^- \[[ xX]\] T(\d{3})")
     bug = False
-    trace_rows = {}  # spec_id -> {"tasks": set(), "files": set(), "source": "tasks.md"}
+    trace_rows = {}
     seen_ref = set()
 
     with open(tasks, "r", encoding="utf-8") as f:
         for line in f:
             line = line.rstrip("\n")
-            m = task_re.match(line)
+            m = TASK_LINE_RE.match(line)
             if not m:
                 continue
+
             tid = f"T{m.group(1)}"
             parts = line.split(" | ")
+
             if len(parts) < 3:
                 continue
 
-            path = parts[1].strip()
-
-            if len(parts) == 3:
-                refs_str = ""
-            else:
-                refs_str = parts[2].strip()
+            path = parts[1].strip().lstrip("./")
+            refs_str = parts[2].strip() if len(parts) >= 4 else ""
 
             if not refs_str:
                 continue
@@ -518,23 +1535,24 @@ def cmd_extract_trace(feature):
             for rid in refs:
                 if not rid:
                     continue
-                if not ID_RE.match(rid):
+
+                if not _SPEC_ID_RE.match(rid):
                     print(f"extract-trace: bad ref id {rid} in {tid}", file=sys.stderr)
                     bug = True
                     continue
+
                 if (rid, tid) in seen_ref:
                     print(f"extract-trace: duplicate ref {rid} within {tid}", file=sys.stderr)
                     bug = True
                     continue
+
                 seen_ref.add((rid, tid))
 
                 if rid not in ck_of:
-                    print(
-                        f"extract-trace: ref {rid} in {tid} is not a known mechanism",
-                        file=sys.stderr,
-                    )
+                    print(f"extract-trace: ref {rid} in {tid} is not a known mechanism", file=sys.stderr)
                     bug = True
                     continue
+
                 if ck_of[rid] == "documented":
                     print(
                         f"extract-trace: ref {rid} in {tid} is documented; documented ids must NOT be tasked",
@@ -542,55 +1560,56 @@ def cmd_extract_trace(feature):
                     )
                     bug = True
                     continue
+
                 if ck_of[rid].startswith("delegated:"):
                     print(
-                        f"extract-trace: ref {rid} in {tid} is delegated; task its delegate, not the AC id",
-                        file=sys.stderr,
-                    )
-                    bug = True
-                    continue
-                if (path, rid) not in bind:
-                    print(
-                        f"extract-trace: ref {rid} on {tid} not in its primary_files (path={path}); filler/mis-attributed ref",
+                        f"extract-trace: ref {rid} in {tid} is delegated; task its delegate, not the delegated id",
                         file=sys.stderr,
                     )
                     bug = True
                     continue
 
-                if rid not in trace_rows:
-                    trace_rows[rid] = {"tasks": set(), "files": set(), "source": "tasks.md"}
+                if (path, rid) not in bind:
+                    print(
+                        f"extract-trace: ref {rid} on {tid} not in its primary_files "
+                        f"(path={path}); filler/mis-attributed ref",
+                        file=sys.stderr,
+                    )
+                    bug = True
+                    continue
+
+                trace_rows.setdefault(
+                    rid,
+                    {"tasks": set(), "files": set(), "source": "tasks.md"},
+                )
                 trace_rows[rid]["tasks"].add(tid)
                 trace_rows[rid]["files"].add(path)
 
     if bug:
         sys.exit(3)
 
-    # Add documented mechanisms as plan.md rows
     for sid, ck in ck_of.items():
         if ck == "documented" and sid not in trace_rows:
+            pf = pf_of.get(sid, "")
             trace_rows[sid] = {
                 "tasks": set(),
-                "files": set(pf_of.get(sid, "").split(";") if pf_of.get(sid, "") else []),
+                "files": {pf} if pf else set(),
                 "source": "plan.md",
             }
 
-    # Sort by spec_id
     out_rows = []
-    for sid in sorted(trace_rows.keys(), key=lambda x: (x.split("-")[0], int(x.split("-")[1]))):
+    for sid in sorted(trace_rows.keys(), key=_sort_spec_id):
         r = trace_rows[sid]
-        out_rows.append(
-            [
-                sid,
-                ";".join(sorted(r["tasks"])),
-                ";".join(sorted(f for f in r["files"] if f)),
-                r["source"],
-            ]
-        )
+        out_rows.append([
+            sid,
+            ";".join(sorted(r["tasks"])),
+            ";".join(sorted(f for f in r["files"] if f)),
+            r["source"],
+        ])
 
-    # Coverage lint before writing
-    mtsv = sdir / "mechanisms.tsv"
     tmp = (sdir / "traceability.tsv").with_suffix(f".tmp.{os.getpid()}")
     write_tsv_atomic(tmp, TRACE_MARKER, TRACE_COLNAMES, out_rows)
+
     errs = lint_file(tmp, "trace")
     if errs:
         tmp.unlink(missing_ok=True)
@@ -598,70 +1617,36 @@ def cmd_extract_trace(feature):
             print(e, file=sys.stderr)
         print("extract-trace: rejected (format), traceability.tsv not modified", file=sys.stderr)
         sys.exit(2)
-    if mtsv.exists():
-        cov_errs = _lint_coverage(tmp, mtsv)
-        if cov_errs:
-            tmp.unlink(missing_ok=True)
-            for e in cov_errs:
-                print(e, file=sys.stderr)
-            print(
-                "extract-trace: rejected (coverage), traceability.tsv not modified",
-                file=sys.stderr,
-            )
-            sys.exit(2)
+
+    cov_errs = _lint_coverage(tmp, mtsv)
+    if cov_errs:
+        tmp.unlink(missing_ok=True)
+        for e in cov_errs:
+            print(e, file=sys.stderr)
+        print("extract-trace: rejected (coverage), traceability.tsv not modified", file=sys.stderr)
+        sys.exit(2)
+
     shutil.move(str(tmp), str(sdir / "traceability.tsv"))
     print(f"extract-trace: wrote {sdir / 'traceability.tsv'}")
 
 
-def cmd_put_trace(feature):
-    if not feature:
-        die("usage: traceability.py put-trace <feature>", 64)
-    sdir = state_dir(feature)
-    if not sdir.exists():
-        die(f"state not initialized for '{feature}'; run: traceability.py init {feature}")
-    target = sdir / "traceability.tsv"
-    mtsv = sdir / "mechanisms.tsv"
-    rows = []
-    for line in sys.stdin:
-        line = line.rstrip("\n")
-        if not line:
-            continue
-        rows.append(line.split(TAB))
-    tmp = target.with_suffix(f".tmp.{os.getpid()}")
-    write_tsv_atomic(tmp, TRACE_MARKER, TRACE_COLNAMES, rows)
-    errs = lint_file(tmp, "trace")
-    if errs:
-        tmp.unlink(missing_ok=True)
-        for e in errs:
-            print(e, file=sys.stderr)
-        print(f"put-trace: rejected (format), {target} not modified", file=sys.stderr)
-        sys.exit(2)
-    if mtsv.exists():
-        cov_errs = _lint_coverage(tmp, mtsv)
-        if cov_errs:
-            tmp.unlink(missing_ok=True)
-            for e in cov_errs:
-                print(e, file=sys.stderr)
-            print(f"put-trace: rejected (coverage), {target} not modified", file=sys.stderr)
-            sys.exit(2)
-    shutil.move(str(tmp), str(target))
-    print(f"put-trace: wrote {target}")
-
-
 def _lint_coverage(tracef, mtsv):
     errors = []
-    mech_rows = read_tsv_body(mtsv)
-    trace_rows = read_tsv_body(tracef)
+    mech_rows = _read_table(mtsv, "mechanisms")
+    trace_rows = _read_table(tracef, "trace")
+
     mech = {}
     deleg = {}
     taskcov = {}
     plancov = {}
+
     for row in mech_rows:
         sid = row["spec_id"]
         ck = row["coverage_kind"]
         mech[sid] = ck
         if ck.startswith("delegated:"):
-            deleg[sid] = ck[len("delegated:") :]
+            deleg[sid] = ck[len("delegated:"):]
+
     for row in trace_rows:
         sid = row["spec_id"]
         src = row["source"]
@@ -672,9 +1657,8 @@ def _lint_coverage(tracef, mtsv):
 
     for sid, ck in mech.items():
         if ck == "direct":
-            tgt = deleg.get(sid, sid)
-            if tgt not in taskcov:
-                errors.append(f"coverage: direct {sid} uncovered (via {tgt})")
+            if sid not in taskcov:
+                errors.append(f"coverage: direct {sid} uncovered")
         elif ck == "documented":
             if sid in taskcov:
                 errors.append(f"coverage: documented {sid} must NOT have a task")
@@ -684,98 +1668,65 @@ def _lint_coverage(tracef, mtsv):
             tgt = deleg[sid]
             if tgt not in taskcov and mech.get(tgt) != "documented":
                 errors.append(f"coverage: delegated {sid} -> {tgt} uncovered")
+
     return errors
 
 
-def cmd_get(feature, which):
-    if not feature or not which:
-        die("usage: traceability.py get <feature> <mechanisms|spec-ids|trace>", 64)
-    mapping = {
-        "mechanisms": ("mechanisms.tsv", MECH_MARKER),
-        "spec-ids": ("spec-ids.tsv", SPECIDS_MARKER),
-        "trace": ("traceability.tsv", TRACE_MARKER),
-    }
-    if which not in mapping:
-        die(f"get: unknown which '{which}' (want mechanisms|spec-ids|trace)", 64)
-    basename, marker = mapping[which]
-    sdir = state_dir(feature)
-    target = sdir / basename
-    if not target.exists():
-        die(f"get: no {basename} for feature '{feature}' (run extract/put first)")
-    if which == "trace":
-        if _trace_stale(feature):
-            die(
-                f"get: traceability.tsv is stale (tasks.md changed/removed); run: traceability.py extract-trace {feature}"
-            )
-    with open(target, "r", encoding="utf-8") as f:
-        lines = f.readlines()
-    if len(lines) < 2 or lines[0].rstrip("\n") != marker:
-        die(f"get: {basename}: wrong/missing contract marker on line 1")
-    for line in lines[2:]:
-        sys.stdout.write(line)
-
-
-def _trace_stale(feature):
-    fdir = feature_dir(feature)
-    sdir = state_dir(feature)
-    tasks = fdir / "tasks.md"
-    trace = sdir / "traceability.tsv"
-    if not trace.exists():
-        return False
-    if not tasks.exists():
-        print("stale: tasks.md is gone but traceability.tsv remains", file=sys.stderr)
-        return True
-    if tasks.stat().st_mtime > trace.stat().st_mtime:
-        print("stale: tasks.md is newer than traceability.tsv", file=sys.stderr)
-        return True
-    return False
-
+# ── commands: render / check-plan / check-mechanisms ─────────────────────────
 
 def cmd_render(feature):
-    if not feature:
-        die("usage: traceability.py render <feature>", 64)
-    sdir = state_dir(feature)
+    fdir = resolve_feature_dir(feature)
+    sdir = state_dir_for_feature_dir(fdir)
+
     if not sdir.exists():
-        die(f"state not initialized for '{feature}'; run: traceability.py init {feature}")
+        die(f"state not initialized for '{fdir.name}'; run: traceability.py init {fdir.name}")
+
     tracef = sdir / "traceability.tsv"
     mtsv = sdir / "mechanisms.tsv"
+
     if not tracef.exists():
-        die(f"render: no traceability.tsv for '{feature}'; run: traceability.py extract-trace {feature}")
+        die(f"render: no traceability.tsv for '{fdir.name}'; run extract-trace")
+
     if _trace_stale(feature):
         print("render: traceability.tsv is stale, not rendering", file=sys.stderr)
         sys.exit(2)
-    errs = lint_file(tracef, "trace")
-    if errs:
-        print("render: traceability.tsv failed lint, not rendering", file=sys.stderr)
+
+    for e in lint_file(tracef, "trace"):
+        print(e, file=sys.stderr)
         sys.exit(2)
-    if mtsv.exists():
-        errs = lint_file(mtsv, "mechanisms")
-        if errs:
-            print("render: mechanisms.tsv failed lint, not rendering", file=sys.stderr)
-            sys.exit(2)
 
     kind_of = {}
     if mtsv.exists():
-        for row in read_tsv_body(mtsv):
+        for e in lint_file(mtsv, "mechanisms"):
+            print(e, file=sys.stderr)
+            sys.exit(2)
+        for row in _read_table(mtsv, "mechanisms"):
             kind_of[row["spec_id"]] = row["coverage_kind"]
 
-    trace_rows = read_tsv_body(tracef)
+    trace_rows = _read_table(tracef, "trace")
+
     lines = [
-        "<!-- DO NOT EDIT — generated by traceability.py render from .specify-state/*.tsv -->"
+        "<!-- DO NOT EDIT — generated by traceability.py render from .orderspec-state/*.tsv -->",
+        f"# Traceability — {fdir.name}",
+        "",
+        "| spec_id | kind | tasks | files | source |",
+        "|---------|------|-------|-------|--------|",
     ]
-    lines.append(f"# Traceability — {feature}\n")
-    lines.append("| spec_id | kind | tasks | files | source |")
-    lines.append("|---------|------|-------|-------|--------|")
+
     counts = {"direct": 0, "documented": 0, "delegated": 0, "total": 0}
+
     for row in trace_rows:
         sid = row["spec_id"]
         k = kind_of.get(sid, "?")
         tasks = row["task_ids"] or "—"
         files = row["files"] or "—"
         source = row["source"]
-        tasks = tasks.replace("|", "\\|")
-        files = files.replace("|", "\\|")
-        lines.append(f"| {sid} | {k} | {tasks} | {files} | {source} |")
+
+        lines.append(
+            f"| {sid} | {k} | {tasks.replace('|', '\\|')} | "
+            f"{files.replace('|', '\\|')} | {source} |"
+        )
+
         counts["total"] += 1
         if k == "direct":
             counts["direct"] += 1
@@ -784,208 +1735,137 @@ def cmd_render(feature):
         elif k.startswith("delegated:"):
             counts["delegated"] += 1
 
-    summary = f"\n{counts['total']} mechanisms · {counts['direct']} direct · {counts['documented']} documented · {counts['delegated']} delegated\n"
-    lines.append(summary)
+    lines.append("")
+    lines.append(
+        f"{counts['total']} mechanisms · {counts['direct']} direct · "
+        f"{counts['documented']} documented · {counts['delegated']} delegated"
+    )
+    lines.append("")
+
     target = sdir / "traceability.md"
-    target.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    target.write_text("\n".join(lines), encoding="utf-8")
     print(f"render: wrote {target}")
 
 
-# ── check-plan ──────────────────────────────────────────────────────────────
-
 def cmd_check_plan(feature):
-    if not feature:
-        die("usage: traceability.py check-plan <feature>", 64)
-    fdir = feature_dir(feature)
+    fdir = resolve_feature_dir(feature)
     plan = fdir / "plan.md"
+
     if not plan.exists():
         die(f"check-plan: plan.md not found: {plan}")
 
     rc = 0
-    manifest = _extract_pathmanifest(plan)
-    if not manifest:
-        print("check-plan: ERROR — no pathmanifest block in plan.md", file=sys.stderr)
-        sys.exit(1)
+    manifest_paths, manifest_errors = _parse_pathmanifest(plan)
 
-    for line in manifest:
-        line = line.strip()
-        if not line or line.startswith("#") or line.startswith("<!--"):
-            continue
-        parts = line.split()
-        if not parts:
-            continue
-        path = parts[0]
-        tag = ""
-        if "[NEW]" in line:
-            tag = "[NEW]"
-        elif "[MOD]" in line:
-            tag = "[MOD]"
+    for err in manifest_errors:
+        print(f"check-plan: ERROR — {err}", file=sys.stderr)
+        rc = 1
 
-        if path.endswith("/"):
-            print(f"check-plan: ERROR — directory in manifest: {path}", file=sys.stderr)
-            rc = 1
-            continue
-
-        if not tag:
-            print(f"check-plan: ERROR — missing [NEW]/[MOD] tag: {path}", file=sys.stderr)
-            rc = 1
-            continue
-
+    for path, tag in manifest_paths.items():
         full_path = resolved_root() / path
+
         if tag == "[MOD]" and not full_path.exists():
             print(f"check-plan: ERROR — [MOD] path does not exist: {path}", file=sys.stderr)
             rc = 1
-        elif tag == "[NEW]" and full_path.exists():
+
+        if tag == "[NEW]" and full_path.exists():
             print(f"check-plan: ERROR — [NEW] path already exists: {path}", file=sys.stderr)
             rc = 1
 
     if rc == 0:
-        print(f"check-plan: OK ({feature})")
+        print(f"check-plan: OK ({fdir.name})")
     else:
-        print(f"check-plan: FAIL ({feature}) — see errors above", file=sys.stderr)
+        print(f"check-plan: FAIL ({fdir.name}) — see errors above", file=sys.stderr)
+
     sys.exit(rc)
 
 
-def _extract_pathmanifest(plan_path):
-    result = []
-    in_block = False
-    with open(plan_path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.rstrip("\n")
-            if re.match(r"^\s*```\s*pathmanifest", line):
-                in_block = True
-                continue
-            if in_block and re.match(r"^\s*```\s*$", line):
-                break
-            if in_block:
-                result.append(line)
-    return result
+def cmd_check_mechanisms(feature):
+    findings = check_mechanisms_findings(feature)
+    if not findings:
+        print(f"check-mechanisms: OK ({resolve_feature_dir(feature).name})")
+        return
 
+    for check, severity, location, message in findings:
+        print(f"[{severity}] {check} ({location}): {message}", file=sys.stderr)
 
-# ── validate (cross-artifact) ───────────────────────────────────────────────
+    print(f"check-mechanisms: FAIL ({resolve_feature_dir(feature).name})", file=sys.stderr)
+    sys.exit(1)
 
-def _extract_section(text, header_prefix):
-    """Extracts markdown section content by header prefix (e.g., '## 9.').
-    Returns text from the header line up to (but not including) the next
-    header of the same or higher level."""
-    lines = text.splitlines()
-    start_idx = -1
-    for i, line in enumerate(lines):
-        if line.strip().startswith(header_prefix):
-            start_idx = i
-            break
-    if start_idx == -1:
-        return ""
-    
-    level = len(lines[start_idx]) - len(lines[start_idx].lstrip('#'))
-    end_idx = len(lines)
-    
-    for i in range(start_idx + 1, len(lines)):
-        stripped = lines[i].lstrip()
-        if stripped.startswith('#') and not stripped.startswith('#' * (level + 1)):
-            # Check if it's a header of same or higher level
-            this_level = len(lines[i]) - len(lines[i].lstrip('#'))
-            if this_level <= level:
-                end_idx = i
-                break
-    
-    return "\n".join(lines[start_idx:end_idx])
+def cmd_summarize_mechanisms(feature, json_out=False):
+    sdir = state_dir(feature)
+    mech_path = sdir / "mechanisms.tsv"
 
+    if not mech_path.exists():
+        die(f"summarize-mechanisms: mechanisms.tsv not found: {mech_path}")
 
-def _extract_subsection(text, header_prefix):
-    """Extracts a subsection (###) from within a larger section.
-    Returns text from the header line up to the next ### or ## header."""
-    lines = text.splitlines()
-    start_idx = -1
-    for i, line in enumerate(lines):
-        if line.strip().startswith(header_prefix):
-            start_idx = i
-            break
-    if start_idx == -1:
-        return ""
-    
-    end_idx = len(lines)
-    for i in range(start_idx + 1, len(lines)):
-        stripped = lines[i].lstrip()
-        # Stop at next ### or ## header
-        if stripped.startswith('## ') or stripped.startswith('### '):
-            end_idx = i
-            break
-    
-    return "\n".join(lines[start_idx:end_idx])
+    errs = lint_file(mech_path, "mechanisms")
+    if errs:
+        for e in errs:
+            print(e, file=sys.stderr)
+        die("summarize-mechanisms: mechanisms.tsv failed lint", 2)
 
+    try:
+        rows = _read_table(mech_path, "mechanisms")
+    except ValueError as e:
+        die(f"summarize-mechanisms: {e}")
 
-def _extract_endpoint_blocks(section_9_text):
-    """Extracts endpoint blocks from §9 API Contracts.
-    Returns list of dicts: {method, path, block_text}
-    Each block starts with '- **METHOD** `path`' and ends at the next endpoint or section."""
-    lines = section_9_text.splitlines()
-    endpoints = []
-    current_start = -1
-    current_method = ""
-    current_path = ""
-    
-    for i, line in enumerate(lines):
-        m = re.match(r"-\s\*\*(GET|POST|PATCH|PUT|DELETE)\*\*\s`([^`]+)`", line)
-        if m:
-            if current_start != -1:
-                endpoints.append({
-                    "method": current_method,
-                    "path": current_path,
-                    "block_text": "\n".join(lines[current_start:i])
-                })
-            current_start = i
-            current_method = m.group(1)
-            current_path = m.group(2)
-    
-    if current_start != -1:
-        endpoints.append({
-            "method": current_method,
-            "path": current_path,
-            "block_text": "\n".join(lines[current_start:])
+    summary = {
+        "total": len(rows),
+        "direct": 0,
+        "documented": 0,
+        "delegated": 0,
+        "by_prefix": {},
+    }
+
+    for row in rows:
+        sid = row["spec_id"]
+        prefix = sid.split("-")[0]
+        ck = row["coverage_kind"]
+
+        summary["by_prefix"].setdefault(prefix, {
+            "total": 0,
+            "direct": 0,
+            "documented": 0,
+            "delegated": 0,
         })
-    
-    return endpoints
 
+        summary["by_prefix"][prefix]["total"] += 1
 
-def _extract_status_codes_contextual(text):
-    """Extracts 3-digit numbers that appear to be HTTP status codes
-    by checking surrounding context for HTTP-related keywords.
-    Returns set of status code strings."""
-    lines = text.splitlines()
-    statuses = set()
-    http_keywords = ["status", "response", "returns", "return", "http", 
-                      "bad request", "not found", "gone", "error", "forbidden",
-                      "unauthorized", "server error", "success", "created"]
-    
-    for i, line in enumerate(lines):
-        # Look for 3-digit numbers in the line
-        numbers = re.findall(r"\b([1-5]\d{2})\b", line)
-        if not numbers:
-            continue
-        
-        # Check if line or nearby lines contain HTTP context
-        context_lines = line.lower()
-        if i > 0:
-            context_lines = lines[i-1].lower() + " " + context_lines
-        if i < len(lines) - 1:
-            context_lines = context_lines + " " + lines[i+1].lower()
-        
-        for num in numbers:
-            # Accept if it's in valid HTTP range and has context
-            if num in {"200", "201", "202", "204", "400", "401", "403", 
-                        "404", "409", "410", "422", "500", "503"}:
-                if any(kw in context_lines for kw in http_keywords):
-                    statuses.add(num)
-    
-    return statuses
+        if ck == "direct":
+            summary["direct"] += 1
+            summary["by_prefix"][prefix]["direct"] += 1
+        elif ck == "documented":
+            summary["documented"] += 1
+            summary["by_prefix"][prefix]["documented"] += 1
+        elif ck.startswith("delegated:"):
+            summary["delegated"] += 1
+            summary["by_prefix"][prefix]["delegated"] += 1
+
+    if json_out:
+        print(json.dumps(summary, sort_keys=True))
+    else:
+        print(
+            f"mechanisms: total={summary['total']} "
+            f"direct={summary['direct']} "
+            f"documented={summary['documented']} "
+            f"delegated={summary['delegated']}"
+        )
+
+        for prefix in sorted(summary["by_prefix"]):
+            p = summary["by_prefix"][prefix]
+            print(
+                f"{prefix}: total={p['total']} "
+                f"direct={p['direct']} "
+                f"documented={p['documented']} "
+                f"delegated={p['delegated']}"
+            )
+
+# ── validate ─────────────────────────────────────────────────────────────────
 
 def cmd_validate(args):
     feature = args.feature
-    if not feature:
-        die("usage: traceability.py validate [--json] [--stage spec|plan|tasks] <feature>", 64)
-
-    fdir = feature_dir(feature)
+    fdir = resolve_feature_dir(feature)
     spec = fdir / "spec.md"
     plan = fdir / "plan.md"
     tasks = fdir / "tasks.md"
@@ -1008,343 +1888,414 @@ def cmd_validate(args):
     if stage not in {"spec", "plan", "tasks"}:
         die(f"validate: invalid stage '{stage}' (use spec|plan|tasks)", 64)
 
-    need_plan = stage in {"plan", "tasks"}
-    need_tasks = stage == "tasks"
-
-    if need_plan and not have_plan:
+    if stage in {"plan", "tasks"} and not have_plan:
         die(f"validate: stage={stage} requires plan.md (missing: {plan})", 2)
-    if need_tasks and not have_tasks:
-        die(f"validate: stage={stage} requires tasks.md (missing: {tasks})", 2)
+
+    if stage == "tasks" and not have_tasks:
+        die(f"validate: stage=tasks requires tasks.md (missing: {tasks})", 2)
 
     findings = []
 
     def add(check, severity, location, message):
-        findings.append({"check": check, "severity": severity, "location": location, "message": message})
+        findings.append({
+            "check": check,
+            "severity": severity,
+            "location": location,
+            "message": message,
+        })
 
-    # Read spec IDs
     spec_text = spec.read_text(encoding="utf-8")
-    spec_ids = set(ID_RE.findall(spec_text))
-    spec_ids = set(f"{m[0]}-{m[1]}" for m in spec_ids)
+    defined_ids = _defined_ids(feature)
+    anchor_ids = _extract_defined_ids_from_spec_text(spec_text)
 
-    spec_req = [sid for sid in spec_ids if sid.startswith("REQ-")]
-    spec_ac = [sid for sid in spec_ids if sid.startswith("AC-")]
-    spec_edge = [sid for sid in spec_ids if sid.startswith("EDGE-")]
-    spec_inv = [sid for sid in spec_ids if sid.startswith("INV-")]
-    spec_uj = [sid for sid in spec_ids if sid.startswith("UJ-")]
+    if not defined_ids:
+        defined_ids = anchor_ids
 
-    # Read mechanisms for coverage-kind aware checks (M2/M3)
-    ck_of = {}
-    sdir = state_dir(feature)
-    mtsv = sdir / "mechanisms.tsv"
-    if mtsv.exists():
-        for row in read_tsv_body(mtsv):
-            ck_of[row["spec_id"]] = row.get("coverage_kind", "")
-
-    # M1: REQ -> UJ Covers (narrowed regex: only lines starting with **Covers** or Covers)
-    covers_ids = set()
-    for line in spec_text.splitlines():
-        if COVERS_RE.match(line):
-            for m in ID_RE.findall(line):
-                covers_ids.add(f"{m[0]}-{m[1]}")
-    for sid in spec_req:
-        if sid not in covers_ids:
-            add("M1", "HIGH", "spec.md", f"{sid} is not listed in any UJ 'Covers'")
-
-    # M6: unresolved markers
+    # M6 unresolved markers
     for i, line in enumerate(spec_text.splitlines(), start=1):
         if re.search(r"\bQ-\d+\b|\[NEEDS CLARIFICATION", line):
             add("M6", "HIGH", f"spec.md:{i}", f"Unresolved clarification: {line.strip()}")
 
-    # ── Mechanical-Semantic Checks (M15-M17) ──────────────────────────────
-    # These checks are conservative: high-confidence findings only.
-    # The LLM semantic passes handle anything the script cannot determine.
-    
+    # M28: YAML frontmatter metadata validation
+    fm_errors = _validate_yaml_frontmatter(spec_text)
+    for field, message in fm_errors:
+        add("M28", "HIGH", "spec.md:frontmatter", message)
+
+    # M1: REQ covered by UJ Covers lines
+    req_ids = {sid for sid in defined_ids if sid.startswith("REQ-")}
+    covers_ids = set()
+    for line in spec_text.splitlines():
+        if COVERS_RE.match(line):
+            covers_ids |= _extract_all_id_refs(line)
+
+    for sid in sorted(req_ids, key=_sort_spec_id):
+        if sid not in covers_ids:
+            add("M1", "HIGH", "spec.md", f"{sid} is not listed in any UJ 'Covers'")
+
+    # M1a: AC inline covers
+    ac_ids = {sid for sid in defined_ids if sid.startswith("AC-")}
+    ac_inline_seen = set()
+    for line in spec_text.splitlines():
+        m = re.match(r"^\s*- \*\*(AC-\d{3})\*\*", line)
+        if not m:
+            continue
+        ac_id = m.group(1)
+        ac_inline_seen.add(ac_id)
+        cm = AC_COVERS_RE.search(line)
+        if not cm:
+            add("M1a", "HIGH", "spec.md", f"{ac_id} has no inline [Covers: ...]")
+            continue
+        refs = _extract_all_id_refs(cm.group(1))
+        if not refs:
+            add("M1a", "HIGH", "spec.md", f"{ac_id} inline [Covers: ...] contains no valid spec IDs")
+
+    for sid in sorted(ac_ids - ac_inline_seen, key=_sort_spec_id):
+        add("M1a", "HIGH", "spec.md", f"{sid} is defined but no AC anchor line was parsed")
+
+    # Sections used by spec-stage semantic checks
+    section_8 = _extract_section(spec_text, "## 8.")
     section_9 = _extract_section(spec_text, "## 9.")
-    section_11 = _extract_section(spec_text, "## 11.")
+    section_10 = _extract_section(spec_text, "## 10.")
     section_12 = _extract_section(spec_text, "## 12.")
-    
-    # ── M15a: Global missing status codes ──
-    # If a status code appears in §11/§12 in HTTP context but is entirely
-    # absent from §9, that's a high-confidence finding.
-    if section_9 and (section_11 or section_12):
-        statuses_in_9 = _extract_status_codes_contextual(section_9)
-        statuses_in_11_12 = _extract_status_codes_contextual(section_11 + "\n" + section_12)
-        
-        for st in statuses_in_11_12:
-            if st not in statuses_in_9:
-                add("M15a", "MEDIUM", "spec.md", 
-                    f"Status code {st} used in §11/§12 but not declared anywhere in §9 API Contracts")
-    
-    # ── M15b: Endpoint-specific status mismatch ──
-    if section_9 and section_12:
-        endpoint_blocks = _extract_endpoint_blocks(section_9)
-        
-        # Build map: (method, path_substring) -> set of statuses in that block
-        endpoint_statuses = {}
-        for ep in endpoint_blocks:
-            ep_statuses = _extract_status_codes_contextual(ep["block_text"])
-            # Normalize path for matching (remove /api/v1 prefix, params)
-            norm_path = ep["path"].replace("/api/v1", "").lower()
-            endpoint_statuses[(ep["method"], norm_path)] = ep_statuses
-        
-        # Scan §12 for lines that mention both an endpoint and a status
-        ac_lines = section_12.splitlines()
-        for line in ac_lines:
-            # Look for endpoint references in AC lines
-            for ep_key, ep_sts in endpoint_statuses.items():
-                method, path = ep_key
-                # Check if this AC line references this endpoint AND method
-                # Simple heuristic: path appears in the line AND method appears in the line
-                path_clean = path.replace(":id", "").replace("/", "").strip(":")
-                method_lower = method.lower()
-                
-                if path_clean and len(path_clean) > 3 and path_clean in line.lower() and method_lower in line.lower():
-                    line_statuses = _extract_status_codes_contextual(line)
-                    for st in line_statuses:
-                        if st not in ep_sts:
-                            add("M15b", "MEDIUM", "spec.md:§12",
-                                f"AC references status {st} for endpoint {method} {path} but it is not in §9 contract for that endpoint")
-    
-    # ── M16: Authorization coverage ──
-    # If §9 has an Authorization subsection, verify it covers all endpoints.
-    # We extract ONLY the Authorization subsection (not everything after it).
-    if section_9:
-        auth_subsection = _extract_subsection(section_9, "### Authorization")
-        if auth_subsection:
-            # Check if auth text mentions all endpoints or read endpoints explicitly
-            auth_lower = auth_subsection.lower()
-            has_mutable_only = any(kw in auth_lower for kw in ["mutating", "mutation", "post", "patch", "delete"])
-            has_get_coverage = any(kw in auth_lower for kw in ["get", "read", "public", "all endpoints", "all routes", "every endpoint"])
-            has_explicit_get_policy = "get" in auth_lower or "read" in auth_lower or "public" in auth_lower
-            
-            # Extract endpoints from §9
-            all_endpoints = re.findall(r"-\s\*\*(GET|POST|PATCH|PUT|DELETE)\*\*\s`([^`]+)`", section_9)
-            has_get = any(e[0] == "GET" for e in all_endpoints)
-            
-            if has_get and has_mutable_only and not has_explicit_get_policy and not has_get_coverage:
-                add("M16", "MEDIUM", "spec.md:§9",
-                    "Authorization subsection covers mutating endpoints but does not mention GET/read endpoints")
-    
-    # ── M17: AC field alignment (conservative) ──
-    # Only check fields that appear in backticks in AC lines that also
-    # mention "contains", "including", "with", "returned with".
-    # Severity is LOW to avoid false positives blocking the pipeline.
-    if section_9 and section_12:
-        # Extract all field-like tokens from §9 schemas
-        fields_in_9 = set()
-        # Match patterns like: "field": type  or  "field": "value"
-        for m in re.finditer(r'"?(\w+)"?\s*:\s', section_9):
-            fields_in_9.add(m.group(1))
-        
-        # Scan AC for field references in backticks
-        ac_field_patterns = [
-            r"contains?\s+`(\w+)`",
-            r"including\s+`(\w+)`",
-            r"with\s+`(\w+)`",
-            r"returned.*`(\w+)`",
-            r"includes?\s+`(\w+)`",
-            r"`(\w+)`\s+field",
-        ]
-        
-        ac_fields = set()
-        for line in section_12.splitlines():
-            for pattern in ac_field_patterns:
-                for m in re.finditer(pattern, line, re.IGNORECASE):
-                    ac_fields.add(m.group(1))
-        
-        # Common envelope fields that are not part of entity schemas
-        envelope_fields = {"results", "page", "limit", "totalPages", "totalResults", "total"}
-        
-        for f in ac_fields:
-            if f not in fields_in_9 and f not in envelope_fields and f.lower() not in {x.lower() for x in fields_in_9}:
-                add("M17", "LOW", "spec.md:§12",
-                    f"AC checks field '{f}' but it is not found in §9 API Contracts schemas")
-    
-    # PLAN-STAGE
-    if need_plan:
+
+    # M18: IF required fields
+    if_records = _extract_if_records(section_9) if section_9 else {}
+
+    for if_id, rec in if_records.items():
+        fields = rec["fields"]
+
+        for field_name, sev in IF_REQUIRED_FIELDS:
+            if field_name not in fields or not fields[field_name].strip():
+                add("M18", sev, "spec.md:§9", f"{if_id} missing required field '{field_name}'")
+
+    # AC inline Covers map for IF linkage checks
+    ac_inline_covers = _extract_ac_inline_covers(section_12) if section_12 else {}
+
+    # M19: IF-AC HTTP status code cross-check
+    if_to_acs = {}
+
+    for ac_id, covers_list in ac_inline_covers.items():
+        for ref in covers_list:
+            if_to_acs.setdefault(ref, set()).add(ac_id)
+
+    for if_id, rec in if_records.items():
+        fields = rec["fields"]
+        kind = fields.get("Kind", "")
+
+        if not kind:
+            continue
+
+        kind_lower = kind.lower()
+        if "http" not in kind_lower and "endpoint" not in kind_lower:
+            continue
+
+        if_statuses = set()
+        if_statuses |= _extract_status_codes(fields.get("Success", ""))
+        if_statuses |= _extract_status_codes(fields.get("Failure", ""))
+
+        covering_acs = if_to_acs.get(if_id, set())
+
+        for ac_id in covering_acs:
+            for line in section_12.splitlines():
+                if line.strip().startswith(f"- **{ac_id}**"):
+                    ac_statuses = _extract_status_codes(line)
+                    for st in ac_statuses:
+                        if st not in if_statuses:
+                            add(
+                                "M19",
+                                "MEDIUM",
+                                "spec.md:§12",
+                                f"{ac_id} references status {st} for {if_id} but it is not in IF Success/Failure",
+                            )
+                    break
+
+    # M20: every IF must be covered by at least one AC via inline Covers
+    for if_id in if_records:
+        if if_id not in if_to_acs or not if_to_acs[if_id]:
+            add("M20", "HIGH", "spec.md:§9", f"{if_id} is not covered by any AC via [Covers: ...]")
+
+    # M21: IF Covers/Related references must exist
+    for if_id, rec in if_records.items():
+        fields = rec["fields"]
+        link_field = fields.get("Covers") or fields.get("Related") or ""
+
+        if not link_field:
+            continue
+
+        for m in ID_RE.finditer(link_field):
+            ref_id = f"{m.group(1)}-{m.group(2)}"
+            if ref_id not in defined_ids:
+                add("M21", "HIGH", "spec.md:§9", f"{if_id} Covers references unknown {ref_id}")
+
+    # M22: AC field alignment with §8 Information Model
+    info_model = _extract_information_model(section_8) if section_8 else {}
+    all_known_fields = set()
+
+    for fld_set in info_model.values():
+        all_known_fields |= fld_set
+
+    envelope_fields = {
+        "results",
+        "page",
+        "limit",
+        "totalPages",
+        "totalResults",
+        "total",
+        "data",
+        "items",
+        "count",
+        "nextCursor",
+        "prevCursor",
+        "cursor",
+    }
+
+    ac_field_patterns = [
+        r"contains?\s+`(\w+)`",
+        r"including\s+`(\w+)`",
+        r"with\s+`(\w+)`",
+        r"returned.*`(\w+)`",
+        r"includes?\s+`(\w+)`",
+        r"`(\w+)`\s+field",
+    ]
+
+    for line in section_12.splitlines():
+        m_ac = re.match(r"^\s*- \*\*(AC-\d{3})\*\*", line)
+        if not m_ac:
+            continue
+
+        ac_id = m_ac.group(1)
+
+        for pattern in ac_field_patterns:
+            for m in re.finditer(pattern, line, re.IGNORECASE):
+                field_name = m.group(1)
+
+                if (
+                    field_name not in all_known_fields
+                    and field_name not in envelope_fields
+                    and field_name.lower() not in {x.lower() for x in all_known_fields}
+                ):
+                    add(
+                        "M22",
+                        "LOW",
+                        "spec.md:§12",
+                        f"{ac_id} checks field '{field_name}' not found in §8 Information Model",
+                    )
+
+    # M23: Contradiction Grid reference validity
+    grid_rows = _extract_grid_rows(section_10) if section_10 else []
+
+    for left_id, right_id in grid_rows:
+        if left_id and left_id not in anchor_ids:
+            add("M23", "MEDIUM", "spec.md:§10", f"Grid left ID {left_id} not defined in spec")
+
+        if right_id and right_id not in anchor_ids:
+            add("M23", "MEDIUM", "spec.md:§10", f"Grid right ID {right_id} not defined in spec")
+
+    # M24: Grid completeness for absolute-quantifier INV
+    inv_texts = _extract_inv_texts(spec_text)
+    grid_left_ids = {left_id for left_id, _ in grid_rows}
+
+    for inv_id, text in inv_texts.items():
+        text_lower = text.lower()
+        if any(q in text_lower for q in ABSOLUTE_QUANTIFIERS):
+            if inv_id not in grid_left_ids:
+                add(
+                    "M24",
+                    "MEDIUM",
+                    "spec.md:§10",
+                    f"{inv_id} uses absolute quantifier but has no row in Contradiction Grid",
+                )
+
+    # M25: duplicate grid rows
+    if len(grid_rows) != len(set(grid_rows)):
+        add("M25", "MEDIUM", "spec.md:§10", "Duplicate rows found in Contradiction Grid")
+
+    # M13 placeholder residue
+    files_for_placeholder_scan = [spec]
+    if have_plan:
+        files_for_placeholder_scan.append(plan)
+    if have_tasks:
+        files_for_placeholder_scan.append(tasks)
+
+    for f in files_for_placeholder_scan:
+        for i, line in enumerate(f.read_text(encoding="utf-8").splitlines(), start=1):
+            if re.search(r"TODO|TKTK|\?\?\?|<placeholder>|\[path/to/|NEEDS CLARIFICATION|Optional forced upstream-gate warning|verdict: \.\.\.", line):
+                sev = "MEDIUM" if "<placeholder>" in line or "[path/to/" in line else "LOW"
+                add("M13", sev, f"{f.name}:{i}", f"Placeholder residue: {line.strip()[:100]}")
+
+    if stage in {"plan", "tasks"}:
         plan_text = plan.read_text(encoding="utf-8")
-        plan_refs = set(ID_RE.findall(plan_text))
-        plan_refs = set(f"{m[0]}-{m[1]}" for m in plan_refs)
+        plan_refs = _extract_all_id_refs(plan_text)
 
-        # M5 plan side
-        for sid in plan_refs:
-            if sid not in spec_ids:
-                add("M5", "HIGH", "plan.md", f"{sid} cited in plan.md but not defined in spec.md")
+        for sid in sorted(plan_refs - defined_ids, key=_sort_spec_id):
+            add("M5", "HIGH", "plan.md", f"{sid} cited in plan.md but not defined in spec-ids.tsv/spec.md anchors")
 
-        # M9 + M10: path manifest
-        manifest = _extract_pathmanifest(plan)
-        if not manifest:
-            add("M9", "HIGH", "plan.md", "No pathmanifest block found")
-        else:
-            for line in manifest:
-                line = line.strip()
-                if not line or line.startswith("#") or line.startswith("<!--"):
-                    continue
-                parts = line.split()
-                if not parts:
-                    continue
-                path = parts[0]
-                tag = ""
-                if "[NEW]" in line:
-                    tag = "[NEW]"
-                elif "[MOD]" in line:
-                    tag = "[MOD]"
+        manifest_paths, manifest_errors = _parse_pathmanifest(plan)
+        for err in manifest_errors:
+            add("M9", "HIGH", "plan.md", err)
 
-                if path.endswith("/"):
-                    add("M9", "MEDIUM", "plan.md", f"Manifest lists directory: {path}")
-                    continue
-                if not tag:
-                    add("M9", "MEDIUM", "plan.md", f"Missing [NEW]/[MOD] tag: {path}")
-                elif tag == "[MOD]" and not (resolved_root() / path).exists():
-                    add("M10", "HIGH", "plan.md", f"[MOD] path '{path}' does not exist in repo")
-                elif tag == "[NEW]" and (resolved_root() / path).exists():
-                    add("M10", "HIGH", "plan.md", f"[NEW] path '{path}' already exists in repo")
+        for path, tag in manifest_paths.items():
+            full_path = resolved_root() / path
+            if tag == "[MOD]" and not full_path.exists():
+                add("M10", "HIGH", "plan.md", f"[MOD] path '{path}' does not exist in repo")
+            elif tag == "[NEW]" and full_path.exists():
+                add("M10", "HIGH", "plan.md", f"[NEW] path '{path}' already exists in repo")
 
-    # TASKS-STAGE
-    if need_tasks:
+        for check, severity, location, message in check_mechanisms_findings(feature):
+            add(check, severity, location, message)
+
+    if stage == "tasks":
         tasks_text = tasks.read_text(encoding="utf-8")
         task_lines = []
+
         for i, line in enumerate(tasks_text.splitlines(), start=1):
             if TASK_LINE_RE.match(line):
                 task_lines.append((i, line))
 
-        # Collect refs ONLY from field 3 of task lines
         task_refs = set()
+        task_paths = set()
+
         for line_num, line in task_lines:
             parts = line.split(" | ")
+
+            if len(parts) >= 2:
+                p = parts[1].strip().lstrip("./")
+                if p:
+                    task_paths.add(p)
+
             if len(parts) >= 4:
                 refs_str = parts[2].strip()
                 if refs_str and " " not in refs_str:
                     for rid in refs_str.split(","):
-                        if rid and ID_RE.match(rid):
+                        rid = rid.strip()
+                        if _SPEC_ID_RE.match(rid):
                             task_refs.add(rid)
 
-        # M2: AC -> tasks (only for direct coverage; documented must NOT appear)
-        for sid in spec_ac:
+        # Load coverage kind from mechanisms.tsv when available.
+        # Missing mechanisms are reported separately by M15 in plan-stage checks.
+        ck_of = {}
+        mtsv = state_dir(feature) / "mechanisms.tsv"
+
+        if mtsv.exists() and not lint_file(mtsv, "mechanisms"):
+            try:
+                for row in _read_table(mtsv, "mechanisms"):
+                    ck_of[row["spec_id"]] = row.get("coverage_kind", "")
+            except ValueError:
+                ck_of = {}
+
+        edge_ids = {sid for sid in defined_ids if sid.startswith("EDGE-")}
+        inv_ids = {sid for sid in defined_ids if sid.startswith("INV-")}
+        uj_ids = {sid for sid in defined_ids if sid.startswith("UJ-")}
+
+        # M2: AC -> tasks for direct/default coverage
+        for sid in sorted(ac_ids, key=_sort_spec_id):
             ck = ck_of.get(sid, "")
             if (not ck or ck == "direct") and sid not in task_refs:
                 add("M2", "HIGH", "tasks.md", f"{sid} is not referenced by any task")
 
-        # M3: EDGE/INV -> tasks (only for direct coverage)
-        for sid in spec_edge + spec_inv:
+        # M3: EDGE/INV -> tasks for direct/default coverage
+        for sid in sorted(edge_ids | inv_ids, key=_sort_spec_id):
             ck = ck_of.get(sid, "")
             if (not ck or ck == "direct") and sid not in task_refs:
                 add("M3", "HIGH", "tasks.md", f"{sid} is not referenced by any task")
 
-        # M4: [USn] tasks reference >=1 spec ID
+        # M4: [USn] tasks reference at least one spec ID
         for line_num, line in task_lines:
-            if re.search(r"\[US\d+\]", line):
-                parts = line.split(" | ")
-                has_ref = False
-                if len(parts) >= 4:
-                    refs_str = parts[2].strip()
-                    if refs_str and " " not in refs_str:
-                        has_ref = any(ID_RE.match(r) for r in refs_str.split(",") if r)
+            if not re.search(r"\[US\d+\]", line):
+                continue
+
+            parts = line.split(" | ")
+            refs_str = parts[2].strip() if len(parts) >= 4 else ""
+            has_ref = False
+
+            if refs_str and " " not in refs_str:
+                has_ref = any(_SPEC_ID_RE.match(r.strip()) for r in refs_str.split(",") if r.strip())
+
+            if not has_ref:
                 tid = re.search(r"T\d{3}", line)
-                if not has_ref:
-                    add(
-                        "M4",
-                        "MEDIUM",
-                        f"tasks.md:{line_num}",
-                        f"Story task {tid.group(0) if tid else '???'} references no spec ID",
-                    )
+                add(
+                    "M4",
+                    "MEDIUM",
+                    f"tasks.md:{line_num}",
+                    f"Story task {tid.group(0) if tid else '???'} references no spec ID",
+                )
 
-        # M5 tasks side
-        for sid in task_refs:
-            if sid not in spec_ids:
-                add("M5", "HIGH", "tasks.md", f"{sid} cited in tasks.md but not defined in spec.md")
+        for sid in sorted(task_refs - defined_ids, key=_sort_spec_id):
+            add("M5", "HIGH", "tasks.md", f"{sid} cited in tasks.md but not defined in spec-ids.tsv/spec.md anchors")
 
-        # M7: task numbering & format
-        tnums = []
-        for line_num, line in task_lines:
-            m = re.search(r"T(\d{3})", line)
-            if m:
-                tnums.append(m.group(1))
-        from collections import Counter
+        manifest_paths, _ = _parse_pathmanifest(plan)
 
-        dupes = [t for t, c in Counter(tnums).items() if c > 1]
-        for d in dupes:
-            add("M7", "MEDIUM", "tasks.md", f"Duplicate task ID T{d}")
-
-        uniq_sorted = sorted(set(int(t) for t in tnums))
-        if uniq_sorted:
-            for n in range(uniq_sorted[0], uniq_sorted[-1] + 1):
-                if n not in uniq_sorted:
-                    add("M7", "MEDIUM", "tasks.md", f"Gap in task numbering: T{n:03d}")
-
-        # M8: task paths in plan manifest
-        if have_plan:
-            manifest_paths = set()
-            for line in _extract_pathmanifest(plan):
-                line = line.strip()
-                if line and not line.startswith("#") and not line.startswith("<!--"):
-                    parts = line.split()
-                    if parts:
-                        manifest_paths.add(parts[0].lstrip("./"))
-
-            task_paths = set()
-            for line_num, line in task_lines:
-                parts = line.split(" | ")
-                if len(parts) >= 2:
-                    p = parts[1].strip().lstrip("./")
-                    if p:
-                        task_paths.add(p)
-
-            for p in task_paths:
-                if p not in manifest_paths:
-                    add("M8", "HIGH", "tasks.md", f"Path '{p}' used in tasks.md but not in plan.md manifest")
+        for p in sorted(task_paths):
+            if p not in manifest_paths:
+                add("M8", "HIGH", "tasks.md", f"Path '{p}' used in tasks.md but not in plan.md manifest")
 
         # M12: [P] tasks sharing paths
         p_paths = {}
+
         for line_num, line in task_lines:
-            if re.search(r"T\d{3} \[P\]", line):
-                tid = re.search(r"T\d{3}", line).group(0)
-                parts = line.split(" | ")
-                if len(parts) >= 2:
-                    p = parts[1].strip()
-                    if p in p_paths:
-                        add("M12", "MEDIUM", "tasks.md", f"[P] tasks {p_paths[p]} and {tid} both touch '{p}'")
-                    else:
-                        p_paths[p] = tid
+            if not re.search(r"T\d{3} \[P\]", line):
+                continue
+
+            tid_m = re.search(r"T\d{3}", line)
+            if not tid_m:
+                continue
+
+            tid = tid_m.group(0)
+            parts = line.split(" | ")
+
+            if len(parts) < 2:
+                continue
+
+            p = parts[1].strip()
+
+            if p in p_paths:
+                add("M12", "MEDIUM", "tasks.md", f"[P] tasks {p_paths[p]} and {tid} both touch '{p}'")
+            else:
+                p_paths[p] = tid
 
         # M14: [USn] -> UJ-00n
         us_labels = set()
+
         for line_num, line in task_lines:
             for m in re.finditer(r"\[US(\d+)\]", line):
                 us_labels.add(m.group(1))
-        for us in us_labels:
+
+        for us in sorted(us_labels, key=lambda x: int(x)):
             uj = f"UJ-{int(us):03d}"
-            if uj not in spec_uj:
+            if uj not in uj_ids:
                 add("M14", "HIGH", "tasks.md", f"Label [US{us}] has no matching {uj} in spec.md")
 
-    # M11: timestamp drift
-    def mtime(p):
-        return p.stat().st_mtime if p.exists() else 0
+        # M7: task numbering
+        nums = []
 
-    mt_spec = mtime(spec)
-    if have_plan:
-        mt_plan = mtime(plan)
-        if mt_spec > mt_plan:
-            add("M11", "MEDIUM", "spec.md/plan.md", "spec.md modified after plan.md")
-        if have_tasks:
-            mt_tasks = mtime(tasks)
-            if mt_plan > mt_tasks:
-                add("M11", "MEDIUM", "plan.md/tasks.md", "plan.md modified after tasks.md")
+        for _, line in task_lines:
+            m = re.search(r"T(\d{3})", line)
+            if m:
+                nums.append(int(m.group(1)))
 
-    # M13: placeholder residue
-    for f in [spec, plan, tasks]:
-        if not f.exists():
-            continue
-        base = f.name
-        for i, line in enumerate(f.read_text(encoding="utf-8").splitlines(), start=1):
-            if re.search(r"TODO|TKTK|\?\?\?|<placeholder>|\[path/to/", line):
-                msg = line.strip()[:80]
-                sev = "LOW"
-                if "[path/to/" in line or "<placeholder>" in line:
-                    sev = "MEDIUM"
-                add("M13", sev, f"{base}:{i}", f"Placeholder residue: {msg}")
+        seen_nums = set()
+        dupes = set()
 
-    # Summary
+        for n in nums:
+            if n in seen_nums:
+                dupes.add(n)
+            seen_nums.add(n)
+
+        for n in sorted(dupes):
+            add("M7", "MEDIUM", "tasks.md", f"Duplicate task ID T{n:03d}")
+
+        if nums:
+            for n in range(min(nums), max(nums) + 1):
+                if n not in seen_nums:
+                    add("M7", "MEDIUM", "tasks.md", f"Gap in task numbering: T{n:03d}")
+
+    # M11 timestamp drift
+    if have_plan and spec.stat().st_mtime > plan.stat().st_mtime:
+        add("M11", "MEDIUM", "spec.md/plan.md", "spec.md modified after plan.md")
+
+    if have_plan and have_tasks and plan.stat().st_mtime > tasks.stat().st_mtime:
+        add("M11", "MEDIUM", "plan.md/tasks.md", "plan.md modified after tasks.md")
+
     total = len(findings)
     nc = sum(1 for f in findings if f["severity"] == "CRITICAL")
     nh = sum(1 for f in findings if f["severity"] == "HIGH")
@@ -1357,8 +2308,6 @@ def cmd_validate(args):
     verdict_floor = "PASS" if nc == 0 and nh == 0 else ("BLOCK" if nc > 0 else "ROUTING_REQUIRED")
 
     if args.json:
-        import json
-
         output = {
             "stage": stage,
             "scope": {"spec": True, "plan": have_plan, "tasks": have_tasks},
@@ -1388,12 +2337,154 @@ def cmd_validate(args):
 
     sys.exit(exit_code)
 
+# ── diff-summary ─────────────────────────────────────────────────────────────
 
-# ── dispatch ────────────────────────────────────────────────────────────────
+def _git_show_spec(repo_root, git_ref, spec_rel_path):
+    """Read spec.md content at a given git ref. Returns text or dies."""
+    import subprocess as sp
+    try:
+        result = sp.run(
+            ["git", "show", f"{git_ref}:{spec_rel_path}"],
+            capture_output=True, text=True, cwd=str(repo_root)
+        )
+        if result.returncode != 0:
+            die(f"diff-summary: cannot read spec.md at {git_ref}: {result.stderr.strip()}")
+        return result.stdout
+    except FileNotFoundError:
+        die("diff-summary: git not found in PATH")
+
+def _print_diff_summary_markdown(summary):
+    print("## Contract Change Summary")
+    print()
+    print(f"**Feature**: `{summary['feature']}`")
+    print(f"**Comparison**: `{summary['old_ref']}` → `{summary['new_ref']}`")
+    print()
+
+    if summary["added"]:
+        print("### Added")
+        for item in summary["added"]:
+            print(f"- `{item['id']}`: {item['text']}")
+        print()
+
+    if summary["removed"]:
+        print("### Removed")
+        for item in summary["removed"]:
+            print(f"- `{item['id']}`: {item['text']}")
+        print()
+
+    if summary["changed"]:
+        print("### Changed")
+        for item in summary["changed"]:
+            details_str = "; ".join(item["details"])
+            print(f"- `{item['id']}` ({details_str})")
+        print()
+
+    ds = summary["downstream_regeneration"]
+    print("### Downstream impact")
+    print(f"- `plan.md`: {'stale' if ds['plan_md'] else 'current'}")
+    print(f"- `tasks.md`: {'stale' if ds['tasks_md'] else 'current'}")
+    print(f"- tests: {'likely stale' if ds['tests'] else 'current'}")
+    print()
+    print(f"**Requires approval**: {'Yes' if summary['requires_approval'] else 'No'}")
+
+def cmd_diff_summary(args):
+    """Generate a Contract Change Summary by comparing spec.md at two git revisions."""
+    feature = args.feature
+    fdir = resolve_feature_dir(feature)
+    spec = fdir / "spec.md"
+
+    if not spec.exists():
+        die(f"diff-summary: spec.md not found: {spec}")
+
+    try:
+        spec_rel = str(spec.relative_to(resolved_root()))
+    except ValueError:
+        spec_rel = str(spec)
+
+    old_ref = args.old
+    new_ref = args.new or "HEAD"
+
+    # Read spec.md at old revision
+    old_text = _git_show_spec(resolved_root(), old_ref, spec_rel)
+
+    # Read spec.md at new revision
+    if new_ref in ("HEAD", "WORKING", "INDEX"):
+        new_text = spec.read_text(encoding="utf-8")
+    else:
+        new_text = _git_show_spec(resolved_root(), new_ref, spec_rel)
+
+    # Extract IDs and their anchor text
+    old_ids = _extract_id_texts(old_text)
+    new_ids = _extract_id_texts(new_text)
+
+    old_set = set(old_ids.keys())
+    new_set = set(new_ids.keys())
+
+    added = sorted(new_set - old_set, key=_sort_spec_id)
+    removed = sorted(old_set - new_set, key=_sort_spec_id)
+    common = sorted(old_set & new_set, key=_sort_spec_id)
+
+    # For common IDs, detect text changes and keyword changes
+    changed = []
+    for sid in common:
+        old_line = old_ids[sid]
+        new_line = new_ids[sid]
+
+        if old_line != new_line:
+            details = []
+
+            old_must = bool(re.search(r"\bMUST\b", old_line, re.IGNORECASE))
+            new_must = bool(re.search(r"\bMUST\b", new_line, re.IGNORECASE))
+            old_should = bool(re.search(r"\bSHOULD\b", old_line, re.IGNORECASE))
+            new_should = bool(re.search(r"\bSHOULD\b", new_line, re.IGNORECASE))
+
+            if old_must and new_should and not new_must:
+                details.append("weakened: MUST → SHOULD")
+            elif old_should and new_must and not new_should:
+                details.append("strengthened: SHOULD → MUST")
+
+            if not details:
+                details.append("text changed")
+
+            changed.append({
+                "id": sid,
+                "details": details,
+                "old": old_line[:200],
+                "new": new_line[:200],
+            })
+
+    needs_regen = bool(added or removed or changed)
+    approval_needed = bool(
+        removed
+        or any("weakened" in " ".join(c["details"]) for c in changed)
+    )
+
+    summary = {
+        "feature": fdir.name,
+        "old_ref": old_ref,
+        "new_ref": new_ref,
+        "added": [{"id": sid, "text": new_ids[sid][:200]} for sid in added],
+        "removed": [{"id": sid, "text": old_ids[sid][:200]} for sid in removed],
+        "changed": changed,
+        "downstream_regeneration": {
+            "plan_md": needs_regen,
+            "tasks_md": needs_regen,
+            "tests": needs_regen,
+        },
+        "requires_approval": approval_needed,
+    }
+
+    if args.json:
+        print(json.dumps(summary, indent=2))
+    else:
+        _print_diff_summary_markdown(summary)
+
+# ── dispatch ─────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(prog="traceability.py")
     parser.add_argument("-C", "--root", default=None, help="Path to the project root directory")
+    parser.add_argument("--feature-dir", default=None, help="Explicit feature directory path")
     subparsers = parser.add_subparsers(dest="cmd")
 
     subparsers.add_parser("init", help="init <feature>")
@@ -1406,22 +2497,38 @@ def main():
     subparsers.add_parser("put-spec-ids", help="put-spec-ids <feature>")
     subparsers.add_parser("put-trace", help="put-trace <feature>")
     subparsers.add_parser("check-plan", help="check-plan <feature>")
+    subparsers.add_parser("check-mechanisms", help="check-mechanisms <feature>")
+    
+    sum_parser = subparsers.add_parser("summarize-mechanisms", help="summarize-mechanisms [--json] <feature>")
+    sum_parser.add_argument("--json", action="store_true")
+    sum_parser.add_argument("feature", nargs="?")
+
+    diff_parser = subparsers.add_parser("diff-summary", help="diff-summary --old <ref> [--new <ref>] [--json] <feature>")
+    diff_parser.add_argument("--old", required=True, help="Git ref for old version")
+    diff_parser.add_argument("--new", default="HEAD", help="Git ref for new version (default: HEAD = working tree)")
+    diff_parser.add_argument("--json", action="store_true")
+    diff_parser.add_argument("feature", nargs="?")
 
     val_parser = subparsers.add_parser("validate", help="validate [--json] [--stage] <feature>")
     val_parser.add_argument("--json", action="store_true")
     val_parser.add_argument("--stage", choices=["spec", "plan", "tasks"])
-    val_parser.add_argument("feature")
+    val_parser.add_argument("feature", nargs="?")
 
     args, remaining = parser.parse_known_args()
-    cmd = args.cmd
 
-    global _ROOT
+    global _ROOT, _FEATURE_DIR_OVERRIDE
+
     if args.root:
         _ROOT = Path(args.root).resolve()
     elif os.environ.get("ORDERSPEC_ROOT"):
         _ROOT = Path(os.environ["ORDERSPEC_ROOT"]).resolve()
     else:
         _ROOT = script_dir().parent.parent
+
+    if args.feature_dir:
+        _FEATURE_DIR_OVERRIDE = args.feature_dir
+
+    cmd = args.cmd
 
     if cmd == "init":
         cmd_init(remaining[0] if remaining else "")
@@ -1445,6 +2552,12 @@ def main():
         cmd_put_trace(remaining[0] if remaining else "")
     elif cmd == "check-plan":
         cmd_check_plan(remaining[0] if remaining else "")
+    elif cmd == "check-mechanisms":
+        cmd_check_mechanisms(remaining[0] if remaining else "")
+    elif cmd == "summarize-mechanisms":
+        cmd_summarize_mechanisms(args.feature, json_out=args.json)
+    elif cmd == "diff-summary":
+        cmd_diff_summary(args)
     elif cmd == "validate":
         cmd_validate(args)
     else:

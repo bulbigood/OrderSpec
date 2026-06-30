@@ -32,7 +32,7 @@ SPECS_ROOT.mkdir(parents=True, exist_ok=True)
 
 F = f".test-extract-spec-ids-{os.getpid()}"
 SPECS = SPECS_ROOT / F
-SDIR = SPECS / ".orderspec"
+SDIR = SPECS / ".orderspec-state"
 SID = SDIR / "spec-ids.tsv"
 
 pass_count = 0
@@ -129,20 +129,20 @@ if has("REQ-001", "REQ", "functional") and not has("REQ-999", "REQ", "functional
 else:
     no("phantom guard", SID.read_text())
 
-# 3. form variations do NOT match (strict anchor)
+# 3. form variations do NOT match (strict anchor, indented is OK)
 write_spec("""- **REQ-001**: legit anchor
 * **REQ-002**: star bullet, not dash
 - REQ-003: no bold
 - **REQ-4**: one digit
 - **REQ-0005**: four digits
-  - **REQ-006**: indented
+  - **REQ-006**: indented (valid)
 """)
 run_trace("extract-spec-ids", F)
 got = datacount()
-if got == 1 and has("REQ-001", "REQ", "functional"):
-    ok("strict anchor rejects form variations (1 of 6 matched)")
+if got == 2 and has("REQ-001", "REQ", "functional") and has("REQ-006", "REQ", "functional"):
+    ok("strict anchor rejects form variations (2 of 6 matched, indented ok)")
 else:
-    no("strict anchor", f"rows={got} want 1 :: {SID.read_text()}")
+    no("strict anchor", f"rows={got} want 2 :: {SID.read_text()}")
 
 # 4. duplicate id in spec.md → rejected, target untouched
 write_spec("""- **REQ-001**: first

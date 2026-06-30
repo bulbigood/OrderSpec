@@ -12,6 +12,28 @@ import sys
 from pathlib import Path
 
 
+# ── canonical OrderSpec paths ────────────────────────────────────────────────
+
+ORDERSPEC_DIR = Path(".orderspec")
+
+FRAMEWORK_DIR = ORDERSPEC_DIR / "framework"
+FRAMEWORK_TEMPLATES_DIR = FRAMEWORK_DIR / "templates"
+FRAMEWORK_PROTOCOLS_DIR = FRAMEWORK_DIR / "protocols"
+FRAMEWORK_SCHEMAS_DIR = FRAMEWORK_DIR / "schemas"
+FRAMEWORK_RULES = FRAMEWORK_DIR / "orderspec-rules.md"
+
+CONFIG_DIR = ORDERSPEC_DIR / "config"
+TEMPLATE_OVERRIDES_DIR = CONFIG_DIR / "templates" / "overrides"
+HOOKS_CONFIG = CONFIG_DIR / "hooks.yml"
+STATE_DIR = ORDERSPEC_DIR / "state"
+ACTIVE_FEATURE_STATE = STATE_DIR / "active-feature.json"
+
+SCRIPTS_DIR = ORDERSPEC_DIR / "scripts"
+
+# Presets are kept as an optional compatibility layer. Extensions are not.
+PRESETS_DIR = ORDERSPEC_DIR / "presets"
+
+
 # ── repository root ──────────────────────────────────────────────────────────
 
 def script_dir():
@@ -24,7 +46,7 @@ def find_orderspec_root(start_dir=None):
 
     Returns the Path or None if not found.
 
-    NOTE: Feature-level state directories are named `.specify-state` (not
+    NOTE: Feature-level state directories are named `.orderspec-state` (not
     `.orderspec`) precisely so that this function does not mistake a feature
     directory for the repo root. Do not rename feature state dirs back to
     `.orderspec` — it will break root resolution.
@@ -37,7 +59,7 @@ def find_orderspec_root(start_dir=None):
     current = start_dir
     prev = None
     while True:
-        if (current / ".orderspec").is_dir():
+        if (current / ORDERSPEC_DIR).is_dir():
             return current
         if current == current.parent or current == prev:
             return None
@@ -73,71 +95,121 @@ def get_current_branch():
     return os.environ.get("SPECIFY_FEATURE", "")
 
 
-def read_feature_json_feature_directory(repo_root):
-    """Safely read `.orderspec/feature.json`'s `feature_directory` value.
+def active_feature_state_path(repo_root):
+    """Return the canonical active feature state path."""
+    return Path(repo_root) / ACTIVE_FEATURE_STATE
 
-    Returns the raw value (possibly relative) or empty string if the file
-    is missing, unparseable, or does not contain the key.
-    Always returns a string — never raises on parse failure."""
-    fj = Path(repo_root) / ".orderspec" / "feature.json"
-    if not fj.exists():
-        return ""
+
+def read_active_feature_state(repo_root):
+    """Safely read `.orderspec/state/active-feature.json`.
+
+    Returns a dict. If the file is missing, unparseable, or not a JSON object,
+    returns an empty dict. Never raises on parse failure.
+    """
+    state_file = active_feature_state_path(repo_root)
+    if not state_file.exists():
+        return {}
+
     try:
-        with open(fj, "r", encoding="utf-8") as f:
+        with open(state_file, "r", encoding="utf-8") as f:
             data = json.load(f)
-        return data.get("feature_directory") or ""
-    except (json.JSONDecodeError, OSError, KeyError):
-        return ""
+        if isinstance(data, dict):
+            return data
+        return {}
+    except (json.JSONDecodeError, OSError):
+        return {}
 
 
-def persist_feature_json(repo_root, feature_dir_value):
-    """Persist `feature_directory` to `.orderspec/feature.json` atomically.
+def read_active_feature_state_feature_directory(repo_root):
+    """Read `feature_directory` from `.orderspec/state/active-feature.json`.
 
-    Writes only when the file is missing or the value differs from what's
-    stored. Accepts the raw (possibly relative) path — callers should pass
-    the original user-supplied value, not the normalised absolute path.
-    Uses temp-file + rename for atomicity (safe under concurrent invocations).
+    Returns the raw value, possibly relative, or an empty string if unavailable.
+    Always returns a string.
+    """
+    data = read_active_feature_state(repo_root)
+    value = data.get("feature_directory") or ""
+    return value if isinstance(value, str) else ""
+
+
+def persist_active_feature_state(repo_root, feature_dir_value):
+    """Persist the active feature directory to `.orderspec/state/active-feature.json`.
+
+    Writes only when relevant values differ. Accepts the raw possibly-relative
+    path; callers should pass the original user-supplied value when available.
+
+    Existing state keys are preserved. This function updates at least:
+
+    - `feature_directory`
+    - `spec_file`
+
+    Uses temp-file + rename for atomicity.
     """
     repo_root = Path(repo_root)
-    fj = repo_root / ".orderspec" / "feature.json"
+    state_file = active_feature_state_path(repo_root)
 
-    # Strip repo_root prefix if the value is absolute and under repo_root
+    # Strip repo_root prefix if the value is absolute and under repo_root.
     try:
         feature_dir_rel = str(Path(feature_dir_value).relative_to(repo_root))
     except ValueError:
         feature_dir_rel = feature_dir_value
 
-    # Read current value — skip write when unchanged
-    current_val = read_feature_json_feature_directory(repo_root)
-    if current_val == feature_dir_rel:
+    spec_file_rel = str(Path(feature_dir_rel) / "spec.md")
+
+    current = read_active_feature_state(repo_root)
+    if not isinstance(current, dict):
+        current = {}
+
+    next_state = dict(current)
+    next_state["feature_directory"] = feature_dir_rel
+    next_state["spec_file"] = spec_file_rel
+
+    if current == next_state:
         return
 
-    # Ensure .orderspec/ directory exists
-    fj.parent.mkdir(parents=True, exist_ok=True)
+    state_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Atomic write via temp file + rename
-    tmp = fj.with_suffix(f".tmp.{os.getpid()}")
+    tmp = state_file.with_suffix(f".tmp.{os.getpid()}")
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump({"feature_directory": feature_dir_rel}, f)
+        json.dump(next_state, f, indent=2, ensure_ascii=False)
         f.write("\n")
-    shutil.move(str(tmp), str(fj))
+
+    shutil.move(str(tmp), str(state_file))
+
+
+def read_feature_json_feature_directory(repo_root):
+    """Compatibility wrapper for legacy callers.
+
+    Prefer `read_active_feature_state_feature_directory()`.
+    Canonical active feature state is stored in `ACTIVE_FEATURE_STATE`.
+    """
+    return read_active_feature_state_feature_directory(repo_root)
+
+
+def persist_feature_json(repo_root, feature_dir_value):
+    """Compatibility wrapper for legacy callers.
+
+    Prefer `persist_active_feature_state()`.
+    Canonical active feature state is stored in `ACTIVE_FEATURE_STATE`.
+    """
+    persist_active_feature_state(repo_root, feature_dir_value)
 
 
 # ── feature paths ────────────────────────────────────────────────────────────
 
-def get_feature_paths():
+def get_feature_paths(persist_active_feature=True):
     """Resolve all feature paths as a dict.
 
     Resolution priority for the feature directory:
       1. `SPECIFY_FEATURE_DIRECTORY` env var (explicit override)
-      2. `.orderspec/feature.json` `feature_directory` key
+      2. `.orderspec/state/active-feature.json` `feature_directory` key
       3. Error
 
     Returns a dict with keys:
       REPO_ROOT, CURRENT_BRANCH, FEATURE_DIR, FEATURE_SPEC,
       IMPL_PLAN, TASKS, RESEARCH, DATA_MODEL, QUICKSTART, CONTRACTS_DIR
 
-    Raises RuntimeError if the feature directory cannot be resolved."""
+    Raises RuntimeError if the feature directory cannot be resolved.
+    """
     repo_root = get_repo_root()
     current_branch = get_current_branch()
 
@@ -148,10 +220,13 @@ def get_feature_paths():
         if not feature_dir.is_absolute():
             feature_dir = repo_root / feature_dir
         feature_dir = feature_dir.resolve()
-        # Persist to feature.json so future sessions without the env var work
-        persist_feature_json(repo_root, specify_feature_dir)
+
+        # Persist to active-feature state so future sessions without the env var work.
+        # Callers that must be read-only, such as `setup.py paths`, disable this.
+        if persist_active_feature:
+            persist_active_feature_state(repo_root, specify_feature_dir)
     else:
-        fd = read_feature_json_feature_directory(repo_root)
+        fd = read_active_feature_state_feature_directory(repo_root)
         if fd:
             feature_dir = Path(fd)
             if not feature_dir.is_absolute():
@@ -160,7 +235,7 @@ def get_feature_paths():
         else:
             raise RuntimeError(
                 "Feature directory not found. Set SPECIFY_FEATURE_DIRECTORY or "
-                "ensure .orderspec/feature.json contains feature_directory."
+                "ensure .orderspec/state/active-feature.json contains feature_directory."
             )
 
     return {
@@ -181,25 +256,28 @@ def get_feature_paths():
 
 def resolve_template(template_name, repo_root):
     """Resolve a template name to a file path using the priority stack:
-      1. `.orderspec/templates/overrides/`
-      2. `.orderspec/presets/<preset-id>/templates/` (sorted by `.registry` priority)
-      3. `.orderspec/extensions/<ext-id>/templates/`
-      4. `.orderspec/templates/` (core)
+
+      1. `.orderspec/config/templates/overrides/`
+      2. `.orderspec/presets/<preset-id>/templates/`
+         sorted by `.registry` priority when available
+      3. `.orderspec/framework/templates/` core templates
+
+    Extension-provided templates are intentionally unsupported.
 
     Returns the path string or None if not found.
 
     Emits a stderr WARNING when falling back to alphabetical preset scan
-    (i.e., when .registry is missing or unparseable)."""
+    (i.e., when `.registry` is missing or unparseable).
+    """
     repo_root = Path(repo_root)
-    base = repo_root / ".orderspec" / "templates"
 
-    # Priority 1: Project overrides
-    override = base / "overrides" / f"{template_name}.md"
+    # Priority 1: Project overrides.
+    override = repo_root / TEMPLATE_OVERRIDES_DIR / f"{template_name}.md"
     if override.exists():
         return str(override)
 
-    # Priority 2: Installed presets (sorted by priority from .registry)
-    presets_dir = repo_root / ".orderspec" / "presets"
+    # Priority 2: Installed presets (sorted by priority from .registry).
+    presets_dir = repo_root / PRESETS_DIR
     if presets_dir.is_dir():
         registry_file = presets_dir / ".registry"
         used_registry = False
@@ -227,7 +305,7 @@ def resolve_template(template_name, repo_root):
             except (json.JSONDecodeError, OSError):
                 pass
 
-        # Fallback: alphabetical directory scan (no registry or parse failed)
+        # Fallback: alphabetical directory scan (no registry or parse failed).
         if not used_registry:
             print(
                 "WARNING: .registry missing or unparseable, "
@@ -241,21 +319,8 @@ def resolve_template(template_name, repo_root):
                 if candidate.exists():
                     return str(candidate)
 
-    # Priority 3: Extension-provided templates
-    ext_dir = repo_root / ".orderspec" / "extensions"
-    if ext_dir.is_dir():
-        for ext in sorted(ext_dir.iterdir()):
-            if not ext.is_dir():
-                continue
-            # Skip hidden directories (e.g. .backup, .cache)
-            if ext.name.startswith("."):
-                continue
-            candidate = ext / "templates" / f"{template_name}.md"
-            if candidate.exists():
-                return str(candidate)
-
-    # Priority 4: Core templates
-    core = base / f"{template_name}.md"
+    # Priority 3: Core framework templates.
+    core = repo_root / FRAMEWORK_TEMPLATES_DIR / f"{template_name}.md"
     if core.exists():
         return str(core)
 
