@@ -74,7 +74,7 @@ class KiloCodeAdapter(AgentAdapter):
             detection_reason = f"Found .kilocode/ directory (legacy format, consider migrating to .kilo/)"
 
         config_path = self._get_config_path(project_root)
-        config_paths = [config_path] if os.path.isfile(config_path) else []
+        config_paths = [self.NEW_CONFIG_FILE] if os.path.isfile(config_path) else []
 
         return AgentInfo(
             agent_id=self.agent_id,

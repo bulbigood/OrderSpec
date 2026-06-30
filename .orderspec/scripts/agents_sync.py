@@ -48,6 +48,7 @@ def save_state(state: dict):
     state["updated_at"] = datetime.now(timezone.utc).isoformat()
     with open(STATE_FILE, 'w', encoding='utf-8') as f:
         json.dump(state, f, indent=2, ensure_ascii=False)
+        f.write("\n")
 
 
 def detect_all() -> list:
