@@ -270,13 +270,18 @@ Add to the completion report:
 
 After the deterministic script creates all artifacts including `.orderspec/config/tooling.json`, the agent runs an interactive discovery phase. This phase is **optional** — if no MCP tools are available, the baseline `tooling.json` with defaults is valid and the project works.
 
-### Step 1 — Check MCP availability
+### Step 1 — Check tooling availability
 
-Determine what MCP tools are available in the current runtime by inspecting your tool list:
+Determine what tools are available:
 
-- Is `find-skills` (or equivalent skill discovery tool) available?
+**CLI tools** (check deterministically):
+```bash
+command -v npx >/dev/null 2>&1 && npx skills --help >/dev/null 2>&1 && echo "npx_skills=AVAILABLE" || echo "npx_skills=UNAVAILABLE"
+```
+
+**MCP tools** (check your tool list):
 - Is `context7` (or equivalent documentation MCP) available?
-- Are there other relevant MCP servers (e.g., `serena`, `brave-search`)?
+- Are there other relevant MCP servers?
 
 Do not guess. If you cannot determine availability, report `unknown`.
 
@@ -289,9 +294,9 @@ Ask ONE blocking question:
 
 **Context**: I detected N technologies in your stack. I can discover and install skills for library-specific work, and configure documentation sources.
 
-**Available MCP tools**:
-- `find-skills`: available / unavailable / unknown
-- `context7`: available / unavailable / unknown
+**Available tools**:
+- `npx skills` CLI: available / unavailable
+- `context7` MCP: available / unavailable / unknown
 
 **What I can do**:
 1. Discover skills for: Express, MongoDB, Joi, Passport, ... (list key technologies from stack.md)
@@ -331,16 +336,23 @@ Match existing skills (global and local) against technologies in `stack.md`:
 - Build a list of "already available" skills with their target `STACK-NNN`
 - If a relevant skill exists globally but not locally, plan to `mv` it to `.orderspec/skills/`
 
-#### 3b. Adjusted discovery
+#### 3b. Adjusted discovery (requires `npx skills` CLI)
+
+**Skip this step entirely if `npx skills` CLI is unavailable.** Only pre-existing skills from Step 3a will be used.
 
 Only search for skills for technologies NOT already covered by existing skills:
 
 ```bash
+# Verify CLI is available first
+command -v npx >/dev/null 2>&1 && npx skills --help >/dev/null 2>&1 || { echo "npx skills CLI not available — skipping discovery"; exit 0; }
+
 # For each uncovered technology:
 npx skills find <technology> 2>&1 | head -30
 ```
 
 Collect results: skill name, source, install count.
+
+If `npx skills` is unavailable, report: "Skill discovery skipped — npx skills CLI not available. Only pre-existing skills were used."
 
 #### 3c. Present findings to user
 
@@ -362,8 +374,11 @@ for skill in <list-of-global-skills-to-move>; do
 done
 ```
 
-**Step 2: Install new skills (batch):**
+**Step 2: Install new skills (only if `npx skills` CLI is available):**
 ```bash
+# Skip entirely if npx skills is not available
+command -v npx >/dev/null 2>&1 && npx skills --help >/dev/null 2>&1 || { echo "npx skills CLI not available — skipping installation"; exit 0; }
+
 mkdir -p .orderspec/skills
 for skill in "repo1@skill1" "repo2@skill2"; do
     echo "Installing: $skill"
@@ -444,10 +459,11 @@ Add to the completion report:
 
 ```markdown
 ### Tooling Discovery
-- MCP tools: find-skills=available/unavailable/unknown, context7=available/unavailable/unknown
-- Skills discovered: N
-- Skills installed: M (list names)
-- Skills pending: K (list names, install via amend later)
+- Tools: npx_skills=available/unavailable, context7=available/unavailable/unknown
+- Pre-existing skills found: N (list names)
+- Newly discovered: M (list names, or "none — npx skills unavailable")
+- Skills installed: K (list names)
+- Skills pending: L (list names, install via amend later)
 - tooling.json bindings: N entries
 - Context7 policy: required_if_available / disabled
 - Skipped: user chose option C / no MCP tools available

@@ -700,6 +700,20 @@ DENIED unless explicitly allowed above. Gates follow this constitution literally
 ### Mechanical auto-fixes by gates
 ALLOWED for glossary-term normalization and unambiguous stale-ID references only. Anything touching meaning or scope MUST be routed to the owning command, never applied.
 
+## External Rules Integration
+
+Policy: `{external_rules_policy}`
+
+This section controls how OrderSpec interacts with external rule files owned by AI agents (AGENTS.md, .cursorrules, CLAUDE.md, etc.).
+
+| Policy | Behavior |
+|--------|----------|
+| `constrain_on_bootstrap` (default) | Rule files are read only during `/order.bootstrap`. Content is offered for integration into `conventions.md`. After bootstrap, OrderSpec commands work only with their own contracts. |
+| `constrain_always` | Rule files are resolved by the command context resolver as `constrain` source for every command. May conflict with OrderSpec contracts. Use with caution. |
+| `ignore` | Rule files are not read by OrderSpec at all. Operator manually transfers needed content to `conventions.md`. |
+
+To change this policy, amend this section via `/order.bootstrap` and set the policy to one of the three values above.
+
 ## Governance
 
 - This constitution supersedes lower-level project practices and feature artifacts within the limits of `.orderspec/framework/orderspec-rules.md`.\n- On conflict with framework rules, `.orderspec/framework/orderspec-rules.md` wins.
