@@ -189,6 +189,8 @@ Extract `enabled_agents` array. If the file does not exist, treat as empty list 
 
 ### Step 3 — Ask user which agents to enable
 
+**Bypass rule**: If only ONE agent is detected, AND it is already listed in `enabled_agents` in `agents.json`, you MAY skip this question and proceed directly to Step 5 (Sync).
+
 Present detected agents and current configuration. Ask ONE blocking question:
 
 ```markdown
@@ -274,10 +276,11 @@ After the deterministic script creates all artifacts including `.orderspec/confi
 
 Determine what tools are available:
 
-**CLI tools** (check deterministically):
+**CLI tools** (MUST run this command and use its exact output):
 ```bash
 command -v npx >/dev/null 2>&1 && npx skills --help >/dev/null 2>&1 && echo "npx_skills=AVAILABLE" || echo "npx_skills=UNAVAILABLE"
 ```
+Do not guess. If you do not run this command, you cannot proceed to discovery.
 
 **MCP tools** (check your tool list):
 - Is `context7` (or equivalent documentation MCP) available?
@@ -295,7 +298,7 @@ Ask ONE blocking question:
 **Context**: I detected N technologies in your stack. I can discover and install skills for library-specific work, and configure documentation sources.
 
 **Available tools**:
-- `npx skills` CLI: available / unavailable
+- `npx skills` CLI: [paste exact output from Step 1 command]
 - `context7` MCP: available / unavailable / unknown
 
 **What I can do**:
@@ -459,7 +462,7 @@ Add to the completion report:
 
 ```markdown
 ### Tooling Discovery
-- Tools: npx_skills=available/unavailable, context7=available/unavailable/unknown
+- Tools: npx_skills=[AVAILABLE/UNAVAILABLE], context7=[available/unavailable/unknown]
 - Pre-existing skills found: N (list names)
 - Newly discovered: M (list names, or "none — npx skills unavailable")
 - Skills installed: K (list names)
