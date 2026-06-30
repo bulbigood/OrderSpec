@@ -339,6 +339,8 @@ Match existing skills (global and local) against technologies in `stack.md`:
 - Build a list of "already available" skills with their target `STACK-NNN`
 - If a relevant skill exists globally but not locally, plan to `mv` it to `.orderspec/skills/`
 
+Note: The deterministic `validate_tooling.py` script (run in Step 5) will catch any "installed" skills that are missing their `SKILL.md` file and report them as errors. You will fix them during validation.
+
 #### 3b. Adjusted discovery (requires `npx skills` CLI)
 
 **Skip this step entirely if `npx skills` CLI is unavailable.** Only pre-existing skills from Step 3a will be used.
@@ -354,6 +356,12 @@ npx skills find <technology> 2>&1 | head -30
 ```
 
 Collect results: skill name, source, install count.
+
+**Quality Filter (MANDATORY)**:
+You MUST filter out low-quality or unused skills.
+- **Threshold**: Only consider skills with **>= 1000 installs**.
+- **Exception**: If a technology has no skills >= 1000 installs, you MAY consider the highest one if it has > 100 installs, but report it as "low popularity".
+- **Semantic Fit**: Ensure the skill name and description actually match the technology and your project's needs. Do not install a skill just because the name matches a keyword (e.g., "joinquant" is not a "joi" validation library).
 
 If `npx skills` is unavailable, report: "Skill discovery skipped — npx skills CLI not available. Only pre-existing skills were used."
 

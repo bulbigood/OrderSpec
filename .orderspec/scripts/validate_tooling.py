@@ -113,9 +113,11 @@ def check_installed_skills(data: dict, skills_dir: Path) -> tuple[list[str], dic
         return errors, summary
     
     existing_skills = set()
-    for entry in skills_dir.iterdir():
-        if entry.is_dir():
-            existing_skills.add(entry.name.lower())
+    if skills_dir.exists():
+        for entry in skills_dir.iterdir():
+            # A skill is only valid if it contains a SKILL.md file
+            if entry.is_dir() and (entry / 'SKILL.md').is_file():
+                existing_skills.add(entry.name.lower())
     
     for i, b in enumerate(bindings):
         status = b.get("status")
