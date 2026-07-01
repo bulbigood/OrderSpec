@@ -105,7 +105,7 @@ Do not:
 Every finding from:
 
 ```bash
-python3 .orderspec/scripts/traceability.py --feature-dir "$FEATURE_DIR" validate --stage spec --json
+python3 .orderspec/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" validate --stage spec --json
 ```
 
 is a deterministic finding.
@@ -174,17 +174,18 @@ with `S0-003 (HIGH): active feature state invalid`, then stop.
 
 ### Explicit feature reference
 
-If `$ARGUMENTS` contains an explicit feature reference, resolve it read-only through the active feature owner script:
+If `$ARGUMENTS` contains an explicit feature reference, resolve it read-only:
 
 ```bash
-python3 .orderspec/scripts/active_feature.py resolve "<feature-ref>" --json
+python3 .orderspec/scripts/active_feature.py get --json
+python3 .orderspec/scripts/active_feature.py list --json
 ```
 
-Use the returned state only if `ok` is `true` and `state_written` is `false`.
+Match the feature reference against the active feature state and the feature list.
 
-If the command returns `ambiguous_feature`, write BLOCK report with `S0-004 (HIGH): ambiguous feature reference`.
+If the reference is ambiguous (matches multiple features), write BLOCK report with `S0-004 (HIGH): ambiguous feature reference`.
 
-If the command returns `feature_not_found`, write BLOCK report with `S0-005 (HIGH): feature not found`.
+If the reference matches no feature, write BLOCK report with `S0-005 (HIGH): feature not found`.
 
 Do not use `active_feature.py select` in this gate. This gate must not mutate runtime state merely to inspect.
 
@@ -308,8 +309,8 @@ Render one block per routed finding.
 Run:
 
 ```bash
-python3 .orderspec/scripts/traceability.py --feature-dir "$FEATURE_DIR" init
-python3 .orderspec/scripts/traceability.py --feature-dir "$FEATURE_DIR" extract-spec-ids
+python3 .orderspec/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" init
+python3 .orderspec/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" extract-spec-ids
 ```
 
 If either command fails:
@@ -323,7 +324,7 @@ If either command fails:
 Run:
 
 ```bash
-python3 .orderspec/scripts/traceability.py --feature-dir "$FEATURE_DIR" validate --stage spec --json
+python3 .orderspec/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" validate --stage spec --json
 ```
 
 Parse JSON output.
@@ -345,7 +346,7 @@ Use script-generated ID projection only.
 Primary path:
 
 ```bash
-python3 .orderspec/scripts/traceability.py --feature-dir "$FEATURE_DIR" get spec-ids
+python3 .orderspec/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" get spec-ids
 ```
 
 If this command is unsupported by the local script but `extract-spec-ids` succeeded, read:
@@ -494,8 +495,10 @@ exactly, always, never, must, only if, if and only if, every, no update, no dele
 Weakening indicators include:
 
 ```text
-SHOULD, MAY, best effort, reasonable, under normal load, unless practical, default, assumption
+SHOULD, MAY, best effort, reasonable, under normal load, unless practical
 ```
+
+Note: The `[default]` tag on an ASM does not by itself indicate weakening. Only check if the ASM text actually qualifies or limits an INV guarantee.
 
 If omitted pair is a real conflict → Route (HIGH).
 
@@ -571,16 +574,11 @@ Invalid for some covered operations → Route (MEDIUM).
 
 If only coverage for P1/core requirement → Route (HIGH).
 
-### C2.7 Restore exception for soft-delete specs
+### C2.7 Exception scoping for state-transition specs
 
-If restore is allowed, broad statements such as:
+If the spec defines a state transition (e.g., soft-delete to restore, draft to published), broad prohibition statements about a state MUST explicitly list exceptions or be scoped to non-exception operations.
 
-```text
-mutations on soft-deleted entities are rejected
-any modification of soft-deleted entities is rejected
-```
-
-must explicitly exclude restore or be scoped to non-restore mutations.
+Example: if "mutations on soft-deleted entities are rejected" is a REQ, and restore is allowed, the REQ must say "non-restore mutations on soft-deleted entities are rejected" or equivalent.
 
 If not scoped:
 
@@ -716,7 +714,7 @@ Missing P1/core failure AC → Route (HIGH).
 
 Missing non-core failure AC → Route (MEDIUM).
 
-Deduplicate with EDGE findings when same operation, state, and status code are involved.
+Deduplicate with EDGE findings when same operation, state, and status code are involved. Track reported (operation, state, status_code) tuples in a local set. Skip a C3.7 finding if the same tuple was already reported under C3.6 EDGE coverage.
 
 ### C3.8 Repo-independence and purity
 
@@ -825,7 +823,7 @@ If auto-fix is applied:
 
    ```bash
    python3 .orderspec/scripts/traceability.py --feature-dir "$FEATURE_DIR" extract-spec-ids
-   python3 .orderspec/scripts/traceability.py --feature-dir "$FEATURE_DIR" validate --stage spec --json
+   python3 .orderspec/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" validate --stage spec --json
    ```
 
 4. Refresh script-generated ID inventory.
@@ -840,15 +838,15 @@ Final verdict is determined from imported mechanical findings, semantic findings
 
 | Verdict | Conditions |
 |---|---|
-| ⛔ BLOCK | any routed CRITICAL/HIGH; traceability failure preventing reliable inspection; `spec.md` missing |
-| 🔀 ROUTING REQUIRED | no routed CRITICAL/HIGH, but at least one routed MEDIUM/LOW |
-| ✅ PASS | traceability succeeded and no routed findings remain |
+| BLOCK | any routed CRITICAL/HIGH; traceability failure preventing reliable inspection; `spec.md` missing |
+| ROUTING_REQUIRED | no routed CRITICAL/HIGH, but at least one routed MEDIUM/LOW |
+| PASS | traceability succeeded and no routed findings remain |
 
 Do not downgrade severity during verdict determination.
 
 ## Report Format
 
-Write Markdown report to `$REPORT`.
+Write Markdown report to `$REPORT` using `.orderspec/framework/templates/report-template.md` as the base template. Fill all template variables with actual values from the inspection.
 
 Report order:
 
@@ -868,16 +866,7 @@ Report order:
 
 ### Header
 
-```markdown
-<!--
-generator: order.spec-check
-prompt_version: "0.2.0"
-generated_at: <ISO-8601 UTC>
-verdict: <PASS|ROUTING_REQUIRED|BLOCK>
-feature_id: <FEATURE_ID>
-feature_directory: <FEATURE_DIR>
--->
-```
+Use the template file `.orderspec/framework/templates/report-template.md` which contains the correct HTML comment header. Fill the variables with actual values.
 
 ### Auto-Fixed
 
@@ -1008,6 +997,15 @@ Include:
 - Report file: path/to/spec-report.md
 ```
 
+## Report Write Failure
+
+If the report file cannot be written (permissions, disk full, path issues):
+
+1. Print the full report content to chat as a fallback.
+2. Include `S0-013 (HIGH): report file write failed` at the top.
+3. Use the chat output as the report of record.
+4. Do not silently swallow the write error.
+
 ## Report Self-Check
 
 Before finalizing, verify:
@@ -1032,14 +1030,14 @@ If self-check fails, fix the report before writing final output.
 
 After writing the report, respond in chat with:
 
-- verdict;
+- verdict (BLOCK, ROUTING_REQUIRED, or PASS);
 - report path;
 - number of findings by severity;
 - number of routing blocks;
 - number of auto-fixes;
 - next action:
-  - PASS → proceed to `/order.plan`;
-  - ROUTING REQUIRED/BLOCK → run routed `/order.spec` request(s), then rerun `/order.spec-check`.
+  - PASS -> proceed to `/order.plan`;
+  - ROUTING_REQUIRED/BLOCK -> run routed `/order.spec` request(s), then rerun `/order.spec-check`.
 
 ## Operating Principles
 
