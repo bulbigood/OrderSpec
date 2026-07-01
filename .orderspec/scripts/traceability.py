@@ -651,7 +651,12 @@ def _extract_grid_rows(section_10_text):
 
             if not in_table:
                 joined = " ".join(parts).lower()
-                if any(kw in joined for kw in ("invariant", "requirement", "inv", "req", "pair", "left", "source")):
+                # A header row uses descriptive words, not spec ID references.
+                # Exclude lines containing ID patterns (INV-NNN, REQ-NNN, etc.)
+                # from header detection so data rows are not swallowed.
+                has_id_ref = bool(ID_RE.search(parts[0])) if parts else False
+                header_keywords = ("invariant", "requirement", "pair", "left", "source", "tension", "verdict")
+                if not has_id_ref and any(kw in joined for kw in header_keywords):
                     in_table = True
                     continue
 
