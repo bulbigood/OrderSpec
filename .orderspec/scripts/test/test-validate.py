@@ -96,6 +96,15 @@ orderspec:
   feature_id: FEAT-001-test-validate
   slug: test-validate
   status: draft
+  refs:
+    framework_rules: ".orderspec/framework/orderspec-rules.md"
+    constitution: "constitution.md"
+    stack: "stack.md"
+    architecture: "architecture.md"
+    conventions: "conventions.md"
+  generator:
+    command: order.spec
+    model: test-model
 ---
 """
 

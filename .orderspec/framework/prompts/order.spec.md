@@ -564,34 +564,15 @@ When authoring or refining `spec.md`, follow the resolved template and these rul
 
 ### YAML frontmatter
 
-`spec.md` MUST start with YAML frontmatter:
+`spec.md` MUST start with YAML frontmatter. The template (`spec-template.md`) is the single source of truth for frontmatter structure. Substitute placeholders as follows:
 
-```yaml
----
-orderspec:
-  artifact: spec
-  slug: "<slug>"
-  feature_id: "FEAT-NNN-slug"
-  status: draft
-  refs:
-    framework_rules: ".orderspec/framework/orderspec-rules.md"
-    constitution: ".orderspec/contracts/constitution.md"
-    stack: ".orderspec/contracts/stack.md"
-    architecture: ".orderspec/contracts/architecture.md"
-    conventions: ".orderspec/contracts/conventions.md"
-  generator:
-    command: order.spec
-    model: "<current AI model name>"
----
-```
+| Placeholder | Value |
+|---|---|
+| `__FEATURE_SLUG__` | slug from `feature_spec.py` output |
+| `__FEATURE_ID__` | feature_id from `feature_spec.py` output |
+| `__MODEL_NAME__` | identifier of the AI model currently running this command |
 
-> **Note on metadata**: `model` MUST be the identifier of the AI model currently running this command (e.g., `kilo/moe-medium`, `claude-3.5-sonnet`).
-
-Allowed `orderspec.status`:
-
-```text
-draft, review, approved
-```
+Allowed `orderspec.status`: `draft`, `review`, `approved`.
 
 ### Requirements
 
