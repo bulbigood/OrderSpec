@@ -233,7 +233,7 @@ If ambiguous, ask one blocking question:
 If a target feature directory exists, check for a self gate report:
 
 ```text
-<feature-directory>/checklists/spec-report.md
+<feature-directory>/spec-report.md
 ```
 
 If absent, proceed with `$ARGUMENTS`.
@@ -452,8 +452,8 @@ Do not create directories, write `spec.md`, update active feature state, or init
    The script returns:
    - `feature_id`, e.g. `FEAT-001-user-auth`;
    - `slug`, e.g. `user-auth`;
-   - `feature_directory`, e.g. `specs/001-user-auth`;
-   - `spec_file`, e.g. `specs/001-user-auth/spec.md`.
+   - `feature_directory`, e.g. `.orderspec/features/001-user-auth`;
+   - `spec_file`, e.g. `.orderspec/features/001-user-auth/spec.md`.
 
    If the script exits non-zero, STOP and report the script JSON.
 
@@ -576,10 +576,10 @@ orderspec:
   status: draft
   refs:
     framework_rules: ".orderspec/framework/orderspec-rules.md"
-    constitution: "constitution.md"
-    stack: "stack.md"
-    architecture: "architecture.md"
-    conventions: "conventions.md"
+    constitution: ".orderspec/contracts/constitution.md"
+    stack: ".orderspec/contracts/stack.md"
+    architecture: ".orderspec/contracts/architecture.md"
+    conventions: ".orderspec/contracts/conventions.md"
   generator:
     command: order.spec
     prompt_version: "<prompt version>"

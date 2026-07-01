@@ -9,6 +9,9 @@ import tempfile
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR.parent))
+from common import FEATURES_DIR
+
 PY = sys.executable
 ACTIVE = SCRIPT_DIR.parent / "active_feature.py"
 
@@ -170,7 +173,7 @@ else:
 
 # 4. set valid FEAT feature_id succeeds
 root = fresh_work("set-valid")
-write_spec(root, "specs/001-user-auth", feature_id="FEAT-001-user-auth", slug="user-auth")
+write_spec(root, ".orderspec/features/001-user-auth", feature_id="FEAT-001-user-auth", slug="user-auth")
 rc, data, err = assert_ok_json(
     root,
     "set valid FEAT feature_id succeeds",
@@ -178,7 +181,7 @@ rc, data, err = assert_ok_json(
     "--feature-id",
     "FEAT-001-user-auth",
     "--feature-directory",
-    "specs/001-user-auth",
+    ".orderspec/features/001-user-auth",
     "--status",
     "specified",
     "--last-command",
@@ -188,8 +191,8 @@ rc, data, err = assert_ok_json(
 state = data.get("state", {})
 if (
     state.get("feature_id") == "FEAT-001-user-auth"
-    and state.get("feature_directory") == "specs/001-user-auth"
-    and state.get("spec_file") == "specs/001-user-auth/spec.md"
+    and state.get("feature_directory") == ".orderspec/features/001-user-auth"
+    and state.get("spec_file") == ".orderspec/features/001-user-auth/spec.md"
     and state.get("status") == "specified"
     and "slug" not in state
 ):
@@ -200,7 +203,7 @@ else:
 
 # 5. set invalid TASKS feature_id rejected
 root = fresh_work("set-invalid-tasks")
-(root / "specs/001-user-auth").mkdir(parents=True)
+(root / ".orderspec/features/001-user-auth").mkdir(parents=True)
 assert_error_json(
     root,
     "invalid_active_feature",
@@ -209,7 +212,7 @@ assert_error_json(
     "--feature-id",
     "TASKS-001",
     "--feature-directory",
-    "specs/001-user-auth",
+    ".orderspec/features/001-user-auth",
     "--status",
     "specified",
     "--json",
@@ -218,7 +221,7 @@ assert_error_json(
 
 # 6. set invalid directory-style feature_id rejected
 root = fresh_work("set-invalid-dirname")
-(root / "specs/001-user-auth").mkdir(parents=True)
+(root / ".orderspec/features/001-user-auth").mkdir(parents=True)
 assert_error_json(
     root,
     "invalid_active_feature",
@@ -227,7 +230,7 @@ assert_error_json(
     "--feature-id",
     "001-user-auth",
     "--feature-directory",
-    "specs/001-user-auth",
+    ".orderspec/features/001-user-auth",
     "--status",
     "specified",
     "--json",
@@ -236,7 +239,7 @@ assert_error_json(
 
 # 7. set invalid lowercase feat rejected
 root = fresh_work("set-invalid-lowercase")
-(root / "specs/001-user-auth").mkdir(parents=True)
+(root / ".orderspec/features/001-user-auth").mkdir(parents=True)
 assert_error_json(
     root,
     "invalid_active_feature",
@@ -245,7 +248,7 @@ assert_error_json(
     "--feature-id",
     "feat-001-user-auth",
     "--feature-directory",
-    "specs/001-user-auth",
+    ".orderspec/features/001-user-auth",
     "--status",
     "specified",
     "--json",
@@ -254,13 +257,13 @@ assert_error_json(
 
 # 8. set without explicit feature_id infers valid FEAT from spec.md
 root = fresh_work("set-infer-from-spec")
-write_spec(root, "specs/001-user-auth", feature_id="FEAT-001-user-auth", slug="user-auth")
+write_spec(root, ".orderspec/features/001-user-auth", feature_id="FEAT-001-user-auth", slug="user-auth")
 rc, data, err = assert_ok_json(
     root,
     "set infers valid FEAT feature_id from spec.md",
     "set",
     "--feature-directory",
-    "specs/001-user-auth",
+    ".orderspec/features/001-user-auth",
     "--status",
     "specified",
     "--json",
@@ -273,14 +276,14 @@ else:
 
 # 9. set without explicit feature_id rejects invalid inferred directory fallback
 root = fresh_work("set-invalid-inferred-fallback")
-(root / "specs/001-user-auth").mkdir(parents=True)
+(root / ".orderspec/features/001-user-auth").mkdir(parents=True)
 assert_error_json(
     root,
     "invalid_active_feature",
     "set rejects invalid inferred directory fallback feature_id",
     "set",
     "--feature-directory",
-    "specs/001-user-auth",
+    ".orderspec/features/001-user-auth",
     "--status",
     "specified",
     "--json",
@@ -297,7 +300,7 @@ state_file.write_text(
             "version": 1,
             "active": True,
             "feature_id": "TASKS-001",
-            "feature_directory": "specs/001-user-auth",
+            "feature_directory": ".orderspec/features/001-user-auth",
             "spec_file": None,
             "plan_file": None,
             "tasks_file": None,
@@ -320,7 +323,7 @@ else:
 
 # 11. list reads FEAT feature_id from spec frontmatter
 root = fresh_work("list")
-write_spec(root, "specs/001-user-auth", feature_id="FEAT-001-user-auth", slug="user-auth")
+write_spec(root, ".orderspec/features/001-user-auth", feature_id="FEAT-001-user-auth", slug="user-auth")
 rc, data, err = assert_ok_json(root, "list succeeds", "list", "--json")
 features = data.get("features", [])
 if len(features) == 1 and features[0].get("feature_id") == "FEAT-001-user-auth":
@@ -331,7 +334,7 @@ else:
 
 # 12. select by FEAT feature_id succeeds
 root = fresh_work("select-by-feature-id")
-write_spec(root, "specs/001-user-auth", feature_id="FEAT-001-user-auth", slug="user-auth")
+write_spec(root, ".orderspec/features/001-user-auth", feature_id="FEAT-001-user-auth", slug="user-auth")
 rc, data, err = assert_ok_json(
     root,
     "select by FEAT feature_id succeeds",
@@ -344,7 +347,7 @@ rc, data, err = assert_ok_json(
 state = data.get("state", {})
 if (
     state.get("feature_id") == "FEAT-001-user-auth"
-    and state.get("feature_directory") == "specs/001-user-auth"
+    and state.get("feature_directory") == ".orderspec/features/001-user-auth"
     and state.get("status") == "specified"
 ):
     ok("select by FEAT state metadata correct")
@@ -354,7 +357,7 @@ else:
 
 # 13. select by directory basename succeeds when spec has FEAT id
 root = fresh_work("select-by-dirname")
-write_spec(root, "specs/001-user-auth", feature_id="FEAT-001-user-auth", slug="user-auth")
+write_spec(root, ".orderspec/features/001-user-auth", feature_id="FEAT-001-user-auth", slug="user-auth")
 rc, data, err = assert_ok_json(
     root,
     "select by directory basename succeeds",
@@ -395,7 +398,7 @@ rc, out, err = run_active(
     "--feature-id",
     "FEAT-001-user-auth",
     "--feature-directory",
-    "specs/001-user-auth",
+    ".orderspec/features/001-user-auth",
     "--status",
     "draft",
     "--json",
@@ -411,7 +414,7 @@ else:
 
 # 16. get after set returns persisted active feature
 root = fresh_work("get-after-set")
-write_spec(root, "specs/001-user-auth", feature_id="FEAT-001-user-auth", slug="user-auth")
+write_spec(root, ".orderspec/features/001-user-auth", feature_id="FEAT-001-user-auth", slug="user-auth")
 assert_ok_json(
     root,
     "get-after-set setup succeeds",
@@ -419,7 +422,7 @@ assert_ok_json(
     "--feature-id",
     "FEAT-001-user-auth",
     "--feature-directory",
-    "specs/001-user-auth",
+    ".orderspec/features/001-user-auth",
     "--status",
     "specified",
     "--last-command",
@@ -432,7 +435,7 @@ if (
     data.get("exists") is True
     and data.get("active") is True
     and state.get("feature_id") == "FEAT-001-user-auth"
-    and state.get("feature_directory") == "specs/001-user-auth"
+    and state.get("feature_directory") == ".orderspec/features/001-user-auth"
     and state.get("status") == "specified"
 ):
     ok("get after set returns persisted active feature")
@@ -450,12 +453,12 @@ else:
 
 # 18. select by feature directory path
 root = fresh_work("select-by-path")
-write_spec(root, "specs/001-user-auth", feature_id="FEAT-001-user-auth", slug="user-auth")
+write_spec(root, ".orderspec/features/001-user-auth", feature_id="FEAT-001-user-auth", slug="user-auth")
 rc, data, err = assert_ok_json(
     root,
     "select by feature directory path succeeds",
     "select",
-    "specs/001-user-auth",
+    ".orderspec/features/001-user-auth",
     "--last-command",
     "order.spec",
     "--json",
@@ -468,7 +471,7 @@ else:
 
 # 19. select by short numeric prefix
 root = fresh_work("select-by-short-prefix")
-write_spec(root, "specs/001-user-auth", feature_id="FEAT-001-user-auth", slug="user-auth")
+write_spec(root, ".orderspec/features/001-user-auth", feature_id="FEAT-001-user-auth", slug="user-auth")
 rc, data, err = assert_ok_json(
     root,
     "select by short numeric prefix succeeds",
@@ -486,8 +489,8 @@ else:
 
 # 20. ambiguous short prefix is rejected
 root = fresh_work("ambiguous-prefix")
-write_spec(root, "specs/003-alpha", feature_id="FEAT-003-alpha", slug="alpha")
-write_spec(root, "specs/003-beta", feature_id="FEAT-003-beta", slug="beta")
+write_spec(root, ".orderspec/features/003-alpha", feature_id="FEAT-003-alpha", slug="alpha")
+write_spec(root, ".orderspec/features/003-beta", feature_id="FEAT-003-beta", slug="beta")
 rc, data, err = run_json(root, "select", "003", "--json")
 if rc != 0 and data.get("error") == "ambiguous_feature" and len(data.get("matches", [])) == 2:
     ok("ambiguous short prefix rejected")
@@ -497,10 +500,10 @@ else:
 
 # 21. list discovers only feature directories with spec.md
 root = fresh_work("list-filters")
-write_spec(root, "specs/001-alpha", feature_id="FEAT-001-alpha", slug="alpha")
-write_spec(root, "specs/002-beta", feature_id="FEAT-002-beta", slug="beta")
-(root / "specs" / "999-not-a-feature").mkdir(parents=True)
-write_file(root, "specs/999-not-a-feature/README.md", "not a feature\n")
+write_spec(root, ".orderspec/features/001-alpha", feature_id="FEAT-001-alpha", slug="alpha")
+write_spec(root, ".orderspec/features/002-beta", feature_id="FEAT-002-beta", slug="beta")
+(root / FEATURES_DIR / "999-not-a-feature").mkdir(parents=True)
+write_file(root, ".orderspec/features/999-not-a-feature/README.md", "not a feature\n")
 rc, data, err = assert_ok_json(root, "list filters setup succeeds", "list", "--json")
 ids = {f.get("feature_id") for f in data.get("features", [])}
 if data.get("count") == 2 and ids == {"FEAT-001-alpha", "FEAT-002-beta"}:
@@ -511,7 +514,7 @@ else:
 
 # 22. status inference: spec only => specified
 root = fresh_work("status-specified")
-write_spec(root, "specs/001-alpha", feature_id="FEAT-001-alpha", slug="alpha")
+write_spec(root, ".orderspec/features/001-alpha", feature_id="FEAT-001-alpha", slug="alpha")
 rc, data, err = assert_ok_json(root, "status specified select succeeds", "select", "001-alpha", "--json")
 if data.get("state", {}).get("status") == "specified":
     ok("status inference spec only => specified")
@@ -521,11 +524,11 @@ else:
 
 # 23. status inference: plan.md exists => planned
 root = fresh_work("status-planned")
-write_spec(root, "specs/001-alpha", feature_id="FEAT-001-alpha", slug="alpha")
-write_file(root, "specs/001-alpha/plan.md", "# Plan\n")
+write_spec(root, ".orderspec/features/001-alpha", feature_id="FEAT-001-alpha", slug="alpha")
+write_file(root, ".orderspec/features/001-alpha/plan.md", "# Plan\n")
 rc, data, err = assert_ok_json(root, "status planned select succeeds", "select", "001-alpha", "--json")
 state = data.get("state", {})
-if state.get("status") == "planned" and state.get("plan_file") == "specs/001-alpha/plan.md":
+if state.get("status") == "planned" and state.get("plan_file") == ".orderspec/features/001-alpha/plan.md":
     ok("status inference plan.md => planned")
 else:
     bad(f"status inference planned wrong :: {data!r}")
@@ -533,12 +536,12 @@ else:
 
 # 24. status inference: tasks.md exists => tasks
 root = fresh_work("status-tasks")
-write_spec(root, "specs/001-alpha", feature_id="FEAT-001-alpha", slug="alpha")
-write_file(root, "specs/001-alpha/plan.md", "# Plan\n")
-write_file(root, "specs/001-alpha/tasks.md", "# Tasks\n")
+write_spec(root, ".orderspec/features/001-alpha", feature_id="FEAT-001-alpha", slug="alpha")
+write_file(root, ".orderspec/features/001-alpha/plan.md", "# Plan\n")
+write_file(root, ".orderspec/features/001-alpha/tasks.md", "# Tasks\n")
 rc, data, err = assert_ok_json(root, "status tasks select succeeds", "select", "001-alpha", "--json")
 state = data.get("state", {})
-if state.get("status") == "tasks" and state.get("tasks_file") == "specs/001-alpha/tasks.md":
+if state.get("status") == "tasks" and state.get("tasks_file") == ".orderspec/features/001-alpha/tasks.md":
     ok("status inference tasks.md => tasks")
 else:
     bad(f"status inference tasks wrong :: {data!r}")
@@ -565,7 +568,7 @@ state_file.write_text(
         {
             "version": 1,
             "active": True,
-            "feature_directory": "specs/001-alpha",
+            "feature_directory": ".orderspec/features/001-alpha",
             "status": "specified",
             "last_command": "order.spec",
             "updated_at": "2026-06-29T00:00:00Z",
@@ -584,7 +587,7 @@ else:
 
 # 27. validate rejects state pointing to deleted feature directory
 root = fresh_work("deleted-feature-directory")
-write_spec(root, "specs/001-alpha", feature_id="FEAT-001-alpha", slug="alpha")
+write_spec(root, ".orderspec/features/001-alpha", feature_id="FEAT-001-alpha", slug="alpha")
 assert_ok_json(
     root,
     "deleted feature setup select succeeds",
@@ -594,7 +597,7 @@ assert_ok_json(
     "order.spec",
     "--json",
 )
-shutil.rmtree(root / "specs" / "001-alpha", ignore_errors=True)
+shutil.rmtree(root / FEATURES_DIR / "001-alpha", ignore_errors=True)
 rc, data, err = run_json(root, "validate", "--json")
 if rc != 0 and any("feature_directory does not exist" in e for e in data.get("validation_errors", [])):
     ok("validate rejects deleted feature directory")
@@ -604,7 +607,7 @@ else:
 
 # 28. validate rejects missing spec_file when state claims it exists
 root = fresh_work("missing-spec-file")
-(root / "specs" / "001-alpha").mkdir(parents=True)
+(root / FEATURES_DIR / "001-alpha").mkdir(parents=True)
 state_file = active_state_path(root)
 state_file.parent.mkdir(parents=True, exist_ok=True)
 state_file.write_text(
@@ -613,8 +616,8 @@ state_file.write_text(
             "version": 1,
             "active": True,
             "feature_id": "FEAT-001-alpha",
-            "feature_directory": "specs/001-alpha",
-            "spec_file": "specs/001-alpha/spec.md",
+            "feature_directory": ".orderspec/features/001-alpha",
+            "spec_file": ".orderspec/features/001-alpha/spec.md",
             "plan_file": None,
             "tasks_file": None,
             "status": "specified",
@@ -635,7 +638,7 @@ else:
 
 # 29. clear --delete removes state file
 root = fresh_work("clear-delete")
-write_spec(root, "specs/001-alpha", feature_id="FEAT-001-alpha", slug="alpha")
+write_spec(root, ".orderspec/features/001-alpha", feature_id="FEAT-001-alpha", slug="alpha")
 assert_ok_json(
     root,
     "clear delete setup select succeeds",
@@ -682,7 +685,7 @@ else:
 
 # 32. resolve by FEAT feature_id is read-only
 root = fresh_work("resolve-readonly")
-write_spec(root, "specs/001-user-auth", feature_id="FEAT-001-user-auth", slug="user-auth")
+write_spec(root, ".orderspec/features/001-user-auth", feature_id="FEAT-001-user-auth", slug="user-auth")
 rc, data, err = assert_ok_json(
     root,
     "resolve by FEAT feature_id succeeds",
@@ -695,7 +698,7 @@ if (
     data.get("action") == "resolved"
     and data.get("state_written") is False
     and state.get("feature_id") == "FEAT-001-user-auth"
-    and state.get("feature_directory") == "specs/001-user-auth"
+    and state.get("feature_directory") == ".orderspec/features/001-user-auth"
     and not active_state_path(root).exists()
 ):
     ok("resolve by FEAT feature_id is read-only")
@@ -705,7 +708,7 @@ else:
 
 # 33. resolve by directory basename is read-only
 root = fresh_work("resolve-by-dirname")
-write_spec(root, "specs/001-user-auth", feature_id="FEAT-001-user-auth", slug="user-auth")
+write_spec(root, ".orderspec/features/001-user-auth", feature_id="FEAT-001-user-auth", slug="user-auth")
 rc, data, err = assert_ok_json(
     root,
     "resolve by directory basename succeeds",
@@ -725,8 +728,8 @@ else:
 
 # 34. resolve ambiguous short prefix is rejected without writing state
 root = fresh_work("resolve-ambiguous-prefix")
-write_spec(root, "specs/003-alpha", feature_id="FEAT-003-alpha", slug="alpha")
-write_spec(root, "specs/003-beta", feature_id="FEAT-003-beta", slug="beta")
+write_spec(root, ".orderspec/features/003-alpha", feature_id="FEAT-003-alpha", slug="alpha")
+write_spec(root, ".orderspec/features/003-beta", feature_id="FEAT-003-beta", slug="beta")
 rc, data, err = run_json(root, "resolve", "003", "--json")
 if (
     rc != 0

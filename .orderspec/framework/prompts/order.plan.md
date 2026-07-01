@@ -126,7 +126,7 @@ case "$ARGUMENTS" in
 esac
 
 python3 .orderspec/scripts/upstream_gate.py \
-  --report        "$FEATURE_DIR/checklists/spec-report.md" \
+  --report        "$FEATURE_DIR/spec-report.md" \
   --artifact      "$FEATURE_SPEC" \
   --upstream-name "spec.md" \
   --this          "/order.plan" \
@@ -167,7 +167,7 @@ A plan maps an existing contract onto the codebase — it cannot be built first.
 
 ```text
 PLAN_BLOCKED: spec gate not passed
-Spec gate verdict: {verdict} (from checklists/spec-report.md, dated {date})
+Spec gate verdict: {verdict} (from spec-report.md, dated {date})
 The contract has unresolved findings. Resolve them first:
   1. Action each Routing block in spec-report.md via /order.spec "..."
   2. Re-run /order.spec-check until the verdict is ✅ PASS
@@ -182,7 +182,7 @@ Before regenerating `plan.md`, check whether a previous `/order.plan-check` repo
 ```bash
 PATHS_JSON="$(python3 .orderspec/scripts/setup.py paths --json)"
 FEATURE_DIR="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_DIR"])' <<< "$PATHS_JSON")"
-SELF_REPORT="$FEATURE_DIR/checklists/plan-report.md"
+SELF_REPORT="$FEATURE_DIR/plan-report.md"
 test -e "$SELF_REPORT" && echo "SELF_REPORT_PRESENT" || echo "SELF_REPORT_ABSENT"
 ```
 
@@ -209,7 +209,7 @@ If the report is BLOCK/ROUTING REQUIRED:
 
 After successful write and successful self-checks, if a BLOCK/ROUTING REQUIRED report was used:
 
-1. Replace `checklists/plan-report.md` with a `CONSUMED_STALE` marker.
+1. Replace `plan-report.md` with a `CONSUMED_STALE` marker.
 2. The marker MUST say this is **not PASS**.
 3. It MUST say the previous report was consumed by `/order.plan`.
 4. It MUST say `/order.plan-check` is required for a fresh verdict.
@@ -663,7 +663,7 @@ Run the **`after_plan`** phase per `.orderspec/memory/hooks-protocol.md`.
 
 ## Consumed Report Marker
 
-If a BLOCK/ROUTING REQUIRED `checklists/plan-report.md` was used, replace it after successful self-checks with:
+If a BLOCK/ROUTING REQUIRED `plan-report.md` was used, replace it after successful self-checks with:
 
 ```markdown
 # CONSUMED_STALE — plan-report.md

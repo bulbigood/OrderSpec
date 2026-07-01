@@ -48,7 +48,7 @@ FEATURE_DIR="$(jq -r '.feature_directory' .orderspec/feature.json)"
 FEATURE="$(basename "$FEATURE_DIR")"
 
 python3 .orderspec/scripts/upstream_gate.py \
-  --report        "$FEATURE_DIR/checklists/plan-report.md" \
+  --report        "$FEATURE_DIR/plan-report.md" \
   --artifact      "$FEATURE_DIR/plan.md" \
   --upstream-name "plan.md" \
   --this          "/order.tasks" \
@@ -88,7 +88,7 @@ Tasks break down an existing plan — the plan must exist first.
 
 ```text
 TASKS_BLOCKED: plan gate not passed
-Plan gate verdict: {verdict} (from checklists/plan-report.md, dated {date})
+Plan gate verdict: {verdict} (from plan-report.md, dated {date})
 The plan has unresolved findings. Resolve them first:
   1. Action each Routing block in plan-report.md via /order.plan "..."
   2. Re-run /order.plan-check until the verdict is ✅ PASS
@@ -98,12 +98,12 @@ To derive tasks anyway (NOT recommended), re-run with --force.
 
 ## Self Gate Report Intake
 
-If a gate report from a previous run exists at `checklists/tasks-report.md`, it is the
+If a gate report from a previous run exists at `tasks-report.md`, it is the
 cited input for refinement (written by the optional `/order.tasks-check` gate; this
 command only reads it if present):
 
 ```bash
-SELF_REPORT="$FEATURE_DIR/checklists/tasks-report.md"
+SELF_REPORT="$FEATURE_DIR/tasks-report.md"
 test -e "$SELF_REPORT" && echo "SELF_REPORT_PRESENT" || echo "SELF_REPORT_ABSENT"
 ```
 

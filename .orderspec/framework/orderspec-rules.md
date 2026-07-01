@@ -23,14 +23,14 @@ orderspec:
 OrderSpec uses the following authority hierarchy:
 
 1. `.orderspec/framework/orderspec-rules.md`
-2. `constitution.md`
-3. `stack.md`, `architecture.md`, `conventions.md`
-4. Feature artifacts under `specs/*/`
+2. `.orderspec/contracts/constitution.md`
+3. `.orderspec/contracts/stack.md`, `architecture.md`, `conventions.md`
+4. Feature artifacts under `.orderspec/features/*/`
 5. Downstream implementation artifacts
 
 On conflict, the higher layer wins.
 
-`constitution.md` is project governance. It may add stricter project-specific rules, but it MUST NOT weaken or override framework-level rules.
+`.orderspec/contracts/constitution.md` is project governance. It may add stricter project-specific rules, but it MUST NOT weaken or override framework-level rules.
 
 ## 2. Canonical Directory Layout
 
@@ -51,7 +51,7 @@ Runtime state lives under:
   - `active-feature.json` — current active feature
   - `tooling-detection.json` — runtime tool availability
 
-Project contracts live at repository root:
+Project contracts live under `.orderspec/contracts/`:
 
 - `constitution.md`
 - `stack.md`
@@ -60,7 +60,9 @@ Project contracts live at repository root:
 
 Feature artifacts live under:
 
-- `specs/<feature>/`
+- `.orderspec/features/<feature>/`
+
+No OrderSpec-generated artifact is written to the repository root. Everything lives under `.orderspec/`.
 
 ## 3. Artifact Ownership
 
@@ -71,13 +73,13 @@ Feature artifacts live under:
 | `.orderspec/tests/**` | Framework developer | Framework regression tests. |
 | `.orderspec/config/**` | Framework commands / operator config | Mutable configuration. |
 | `.orderspec/state/**` | Framework runtime | Generated runtime state. Do not edit manually unless recovering state. |
-| `constitution.md` | Operator via `/order.bootstrap` | Project-specific governance. |
-| `stack.md` | Operator via `/order.bootstrap` | Project stack contract. |
-| `architecture.md` | Operator via `/order.bootstrap` | Project architecture contract. |
-| `conventions.md` | Operator via `/order.bootstrap` | Project conventions contract. |
-| `specs/*/spec.md` | `/order.spec` | Stable WHAT-contract. |
-| `specs/*/plan.md` | `/order.plan` | Technical plan. |
-| `specs/*/tasks.md` | `/order.tasks` | Implementation tasks. |
+| `.orderspec/contracts/constitution.md` | Operator via `/order.bootstrap` | Project-specific governance. |
+| `.orderspec/contracts/stack.md` | Operator via `/order.bootstrap` | Project stack contract. |
+| `.orderspec/contracts/architecture.md` | Operator via `/order.bootstrap` | Project architecture contract. |
+| `.orderspec/contracts/conventions.md` | Operator via `/order.bootstrap` | Project conventions contract. |
+| `.orderspec/features/*/spec.md` | `/order.spec` | Stable WHAT-contract. |
+| `.orderspec/features/*/plan.md` | `/order.plan` | Technical plan. |
+| `.orderspec/features/*/tasks.md` | `/order.tasks` | Implementation tasks. |
 
 ## 4. Frontmatter Rule
 
@@ -382,9 +384,9 @@ Feature specs MUST reference project contract IDs instead of inlining technology
 
 Valid project contract ID prefixes:
 
-- `STACK-NNN` from `stack.md`
-- `ARCH-NNN` from `architecture.md`
-- `CONV-NNN` from `conventions.md`
+- `STACK-NNN` from `.orderspec/contracts/stack.md`
+- `ARCH-NNN` from `.orderspec/contracts/architecture.md`
+- `CONV-NNN` from `.orderspec/contracts/conventions.md`
 
 ## 8. Traceability and ID Policy
 
@@ -434,7 +436,8 @@ Host integrations MAY provide command entrypoints outside `.orderspec/`, but the
 - Framework rules: `.orderspec/framework/orderspec-rules.md`
 - Framework config: `.orderspec/config/`
 - Runtime state: `.orderspec/state/`
-- Feature artifacts: `specs/<feature>/`
+- Project contracts: `.orderspec/contracts/`
+- Feature artifacts: `.orderspec/features/<feature>/`
 
 Host integrations MUST NOT duplicate framework rules, runtime state, or feature source of truth in host-specific files.
 
@@ -476,10 +479,10 @@ When a feature is active, `.orderspec/state/active-feature.json` uses this shape
   "version": 1,
   "active": true,
   "feature_id": "003-user-auth",
-  "feature_directory": "specs/003-user-auth",
-  "spec_file": "specs/003-user-auth/spec.md",
-  "plan_file": "specs/003-user-auth/plan.md",
-  "tasks_file": "specs/003-user-auth/tasks.md",
+  "feature_directory": ".orderspec/features/003-user-auth",
+  "spec_file": ".orderspec/features/003-user-auth/spec.md",
+  "plan_file": ".orderspec/features/003-user-auth/plan.md",
+  "tasks_file": ".orderspec/features/003-user-auth/tasks.md",
   "status": "planned",
   "last_command": "order.plan",
   "updated_at": "2026-06-28T12:00:00Z"

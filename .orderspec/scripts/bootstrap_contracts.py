@@ -21,11 +21,14 @@ except ImportError:
 
 
 ROOT = Path(".")
+
+from common import CONTRACTS_DIR, CONTRACT_FILES
+
 PROJECT_DOCS = {
-    "stack": Path("stack.md"),
-    "architecture": Path("architecture.md"),
-    "conventions": Path("conventions.md"),
-    "constitution": Path("constitution.md"),
+    "stack": CONTRACT_FILES["stack"],
+    "architecture": CONTRACT_FILES["architecture"],
+    "conventions": CONTRACT_FILES["conventions"],
+    "constitution": CONTRACT_FILES["constitution"],
 }
 
 TOOLING_CONFIG_PATH = Path(".orderspec/config/tooling.json")

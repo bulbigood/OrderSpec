@@ -10,8 +10,10 @@ from pathlib import Path
 from typing import Any
 
 
+from common import SPECS_ROOT
+
 STATE_PATH = Path(".orderspec/state/active-feature.json")
-DEFAULT_SPECS_ROOT = Path("specs")
+DEFAULT_SPECS_ROOT = SPECS_ROOT
 
 VALID_STATUSES = {
     "unknown",

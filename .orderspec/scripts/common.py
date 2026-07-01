@@ -28,6 +28,19 @@ HOOKS_CONFIG = CONFIG_DIR / "hooks.yml"
 STATE_DIR = ORDERSPEC_DIR / "state"
 ACTIVE_FEATURE_STATE = STATE_DIR / "active-feature.json"
 
+# All generated artifacts live under .orderspec/. Nothing is written to the
+# repository root.
+CONTRACTS_DIR = ORDERSPEC_DIR / "contracts"
+CONTRACT_FILES = {
+    "constitution": CONTRACTS_DIR / "constitution.md",
+    "stack": CONTRACTS_DIR / "stack.md",
+    "architecture": CONTRACTS_DIR / "architecture.md",
+    "conventions": CONTRACTS_DIR / "conventions.md",
+}
+
+FEATURES_DIR = ORDERSPEC_DIR / "features"
+SPECS_ROOT = FEATURES_DIR
+
 SCRIPTS_DIR = ORDERSPEC_DIR / "scripts"
 
 # Presets are kept as an optional compatibility layer. Extensions are not.

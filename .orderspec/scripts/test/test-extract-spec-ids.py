@@ -27,7 +27,9 @@ if LOG_TO_FILE:
     LOG.write_text("", encoding="utf-8")
 
 WORK = Path(tempfile.mkdtemp(prefix="orderspec-test-"))
-SPECS_ROOT = WORK / "specs"
+sys.path.insert(0, str(SCRIPT_DIR.parent))
+from common import FEATURES_DIR
+SPECS_ROOT = WORK / FEATURES_DIR
 SPECS_ROOT.mkdir(parents=True, exist_ok=True)
 
 F = f".test-extract-spec-ids-{os.getpid()}"

@@ -295,10 +295,10 @@ else:
     bad(f"init A failed :: rc={rc} data={data} err={err!r}")
 
 for rel in [
-    "stack.md",
-    "architecture.md",
-    "conventions.md",
-    "constitution.md",
+    ".orderspec/contracts/stack.md",
+    ".orderspec/contracts/architecture.md",
+    ".orderspec/contracts/conventions.md",
+    ".orderspec/contracts/constitution.md",
 ]:
     assert_exists(rel, f"{rel} created")
 
@@ -326,12 +326,12 @@ else:
     bad(f"validate failed after init :: rc={rc} data={data} err={err!r}")
 
 
-# 6. constitution is root-level; old memory path is not created
+# 6. contracts live under .orderspec/contracts/; old memory path is not created; nothing at repo root
 assert_not_exists(".orderspec/memory/constitution.md", "old .orderspec/memory/constitution.md not created")
 
 
 # 7. stack contains Node/Express/Mongoose/Joi/Passport and excludes eslint devDependency
-stack = read(WORK / "stack.md")
+stack = read(WORK / ".orderspec/contracts/stack.md")
 if all(s in stack for s in ["STACK-001", "Node.js", "Express", "Mongoose", "Joi", "Passport"]) and "eslint" not in stack:
     ok("stack inference includes runtime/key dependencies and excludes dev tooling")
 else:
@@ -346,7 +346,7 @@ else:
 
 
 # 9. architecture uses explicit allowed dependency rules and avoids broad contradictory blanket
-arch = read(WORK / "architecture.md")
+arch = read(WORK / ".orderspec/contracts/architecture.md")
 if (
     "ARCH-001" in arch
     and "ARCH-006" in arch
@@ -358,7 +358,7 @@ else:
 
 
 # 10. conventions starts empty with no invented CONV-NNN rows
-conv = read(WORK / "conventions.md")
+conv = read(WORK / ".orderspec/contracts/conventions.md")
 if "CONV-001" not in conv and "| ID | Convention | Description | Notes |" in conv:
     ok("conventions starts empty with no invented CONV-NNN rows")
 else:
@@ -370,7 +370,7 @@ reset_work()
 setup_package_json()
 setup_layered_dirs()
 write(
-    WORK / "stack.md",
+    WORK / ".orderspec/contracts/stack.md",
     "# Existing Stack\n"
     "\n"
     "DO NOT OVERWRITE\n"
@@ -380,8 +380,8 @@ write(
     "| STACK-999 | Existing Runtime | 1.x | Runtime | Existing valid row |\n"
 )
 rc, data, err = init_a()
-stack_after = read(WORK / "stack.md")
-if rc == 0 and "DO NOT OVERWRITE" in stack_after and "stack.md" not in data.get("created", []):
+stack_after = read(WORK / ".orderspec/contracts/stack.md")
+if rc == 0 and "DO NOT OVERWRITE" in stack_after and ".orderspec/contracts/stack.md" not in data.get("created", []):
     ok("init preserves existing valid stack.md")
 else:
     bad(f"no-overwrite failed :: rc={rc} data={data} stack={stack_after!r} err={err!r}")
@@ -389,9 +389,9 @@ else:
 
 # 12. no-overwrite still creates missing sibling docs
 for rel in [
-    "architecture.md",
-    "conventions.md",
-    "constitution.md",
+    ".orderspec/contracts/architecture.md",
+    ".orderspec/contracts/conventions.md",
+    ".orderspec/contracts/constitution.md",
 ]:
     assert_exists(rel, f"no-overwrite init still creates {rel}")
 
@@ -401,7 +401,7 @@ reset_work()
 setup_package_json()
 setup_layered_dirs()
 rc, data, err = run_boot_json("init", "--gate-profile", "B", "--json")
-constitution = read(WORK / "constitution.md")
+constitution = read(WORK / ".orderspec/contracts/constitution.md")
 if rc == 0 and "[UNRESOLVED: TEST_COMMAND]" in constitution and "[UNRESOLVED: LINT_COMMAND]" in constitution:
     ok("gate profile B records unresolved commands when omitted")
 else:
@@ -422,7 +422,7 @@ rc, data, err = run_boot_json(
     "npm run lint",
     "--json",
 )
-constitution = read(WORK / "constitution.md")
+constitution = read(WORK / ".orderspec/contracts/constitution.md")
 if rc == 0 and "ALLOWED. run: npm test" in constitution and "ALLOWED. run: npm run lint" in constitution:
     ok("gate profile B writes provided commands")
 else:
@@ -466,7 +466,7 @@ else:
 reset_work()
 setup_pyproject_toml()
 rc, data, err = init_a()
-stack = read(WORK / "stack.md")
+stack = read(WORK / ".orderspec/contracts/stack.md")
 if (
     rc == 0
     and "Python" in stack
@@ -486,7 +486,7 @@ else:
 reset_work()
 setup_go_mod()
 rc, data, err = init_a()
-stack = read(WORK / "stack.md")
+stack = read(WORK / ".orderspec/contracts/stack.md")
 if (
     rc == 0
     and "Go" in stack
@@ -504,7 +504,7 @@ else:
 reset_work()
 setup_cargo_toml()
 rc, data, err = init_a()
-stack = read(WORK / "stack.md")
+stack = read(WORK / ".orderspec/contracts/stack.md")
 if (
     rc == 0
     and "Rust" in stack
@@ -523,7 +523,7 @@ else:
 reset_work()
 setup_pom_xml()
 rc, data, err = init_a()
-stack = read(WORK / "stack.md")
+stack = read(WORK / ".orderspec/contracts/stack.md")
 if (
     rc == 0
     and "Java" in stack

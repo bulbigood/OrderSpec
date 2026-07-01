@@ -167,7 +167,7 @@ python3 .orderspec/scripts/active_feature.py validate --json
 If active state validation fails, write a BLOCK report to:
 
 ```text
-.orderspec/reports/spec-check-report.md
+.orderspec/state/spec-check-report.md
 ```
 
 with `S0-003 (HIGH): active feature state invalid`, then stop.
@@ -196,7 +196,7 @@ If no explicit feature reference is supplied, use active feature state.
 If there is no active feature, write BLOCK report to:
 
 ```text
-.orderspec/reports/spec-check-report.md
+.orderspec/state/spec-check-report.md
 ```
 
 with `S0-000 (CRITICAL): no active feature`, and instruct the user to run `/order.spec` or provide a feature reference.
@@ -209,7 +209,7 @@ After target resolution:
 FEATURE_ID=<feature_id>
 FEATURE_DIR=<feature_directory>
 SPEC=<feature_directory>/spec.md
-REPORT=<feature_directory>/checklists/spec-report.md
+REPORT=<feature_directory>/spec-report.md
 ```
 
 If `SPEC` does not exist, write BLOCK report with `S0-001 (CRITICAL): spec.md missing`, then stop.
@@ -221,13 +221,13 @@ This command always writes a report.
 Feature-local report path:
 
 ```text
-$FEATURE_DIR/checklists/spec-report.md
+$FEATURE_DIR/spec-report.md
 ```
 
 Fallback report path when no feature can be resolved:
 
 ```text
-.orderspec/reports/spec-check-report.md
+.orderspec/state/spec-check-report.md
 ```
 
 A missing report means this gate did not run or failed before report rendering.

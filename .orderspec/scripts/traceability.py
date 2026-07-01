@@ -11,7 +11,7 @@ It intentionally supports both path models:
 
 1. Legacy basename mode:
       traceability.py -C <repo> init <feature-basename>
-      → <repo>/specs/<feature-basename>
+      → <repo>/.orderspec/features/<feature-basename>
 
 2. Current OrderSpec:
       SPECIFY_FEATURE_DIRECTORY / .orderspec/state/active-feature.json / --feature-dir
@@ -33,9 +33,10 @@ from pathlib import Path
 # traceability.py must remain portable, so keep a local fallback.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 try:
-    from common import ACTIVE_FEATURE_STATE
+    from common import ACTIVE_FEATURE_STATE, FEATURES_DIR
 except ImportError:
     ACTIVE_FEATURE_STATE = Path(".orderspec") / "state" / "active-feature.json"
+    FEATURES_DIR = Path(".orderspec") / "features"
 
 SCHEMA_VERSION = "v1"
 TAB = "\t"
@@ -160,7 +161,7 @@ def resolve_feature_dir(feature=None):
       2. SPECIFY_FEATURE_DIRECTORY
       3. explicit feature argument containing a slash or absolute path
       4. .orderspec/state/active-feature.json if feature is empty or basename matches
-      5. legacy <repo>/specs/<feature>
+      5. legacy <repo>/.orderspec/features/<feature>
     """
     if _FEATURE_DIR_OVERRIDE:
         return _repo_relative_or_abs(_FEATURE_DIR_OVERRIDE)
@@ -180,7 +181,7 @@ def resolve_feature_dir(feature=None):
             return active
 
     if feature:
-        return (resolved_root() / "specs" / feature).resolve()
+        return (resolved_root() / FEATURES_DIR / feature).resolve()
 
     die(
         "feature directory not found. Pass a feature name/path, use --feature-dir, "

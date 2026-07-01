@@ -130,7 +130,7 @@ The `Run` line is a concrete, copy-pasteable instruction to the owner, never an 
 
 ### 1. Initialize
 
-Run `.orderspec/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks` once from repo root; parse FEATURE_DIR and AVAILABLE_DOCS. Derive: SPEC = `FEATURE_DIR/spec.md`, PLAN = `FEATURE_DIR/plan.md`, TASKS = `FEATURE_DIR/tasks.md`, REPORT = `FEATURE_DIR/checklists/sync-report.md`. If EXISTS, load `.orderspec/memory/constitution.md` for governance constraints. For single quotes in args use `'I'\''m Groot'` or double quotes.
+Run `.orderspec/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks` once from repo root; parse FEATURE_DIR and AVAILABLE_DOCS. Derive: SPEC = `FEATURE_DIR/spec.md`, PLAN = `FEATURE_DIR/plan.md`, TASKS = `FEATURE_DIR/tasks.md`, REPORT = `FEATURE_DIR/sync-report.md`. If EXISTS, load `.orderspec/memory/constitution.md` for governance constraints. For single quotes in args use `'I'\''m Groot'` or double quotes.
 
 **Required vs degraded artifacts** (degrade, do not over-abort — a long-lived branch may have archived a downstream artifact):
 - `SPEC` is **required** — abort with instructions (re-run `/order.spec`) if missing.
@@ -313,7 +313,7 @@ Report body (merge mechanical `M*` and semantic `S*` findings):
 - Artifacts available: spec ✓ · plan {✓ | archived — S2 skipped} · tasks {✓ | archived — S1b skipped}
 - Script exit code: {0 | 1 | 3} · verdict floor applied: {none | non-PASS}
 - Mechanical scope: {full, no findings (exit 0) | full, findings present (exit 1) | full, artifact archived (exit 3) | DEGRADED — validator did not run (S0-001), M1–M14 skipped}
-- Report file: always written to checklists/sync-report.md
+- Report file: always written to sync-report.md
 ```
 
 After rendering, state in one line the `REPORT` path where the file was written (always).

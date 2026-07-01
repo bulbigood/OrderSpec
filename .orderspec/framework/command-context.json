@@ -72,28 +72,28 @@
       "authority": "framework"
     },
     "project.constitution": {
-      "path": "constitution.md",
+      "path": ".orderspec/contracts/constitution.md",
       "kind": "project_contract",
       "reason": "project governance",
       "usage": "constrain",
       "authority": "project"
     },
     "project.stack": {
-      "path": "stack.md",
+      "path": ".orderspec/contracts/stack.md",
       "kind": "project_contract",
       "reason": "project stack contract",
       "usage": "constrain",
       "authority": "project"
     },
     "project.architecture": {
-      "path": "architecture.md",
+      "path": ".orderspec/contracts/architecture.md",
       "kind": "project_contract",
       "reason": "project architecture contract",
       "usage": "constrain",
       "authority": "project"
     },
     "project.conventions": {
-      "path": "conventions.md",
+      "path": ".orderspec/contracts/conventions.md",
       "kind": "project_contract",
       "reason": "project conventions contract",
       "usage": "constrain",

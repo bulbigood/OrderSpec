@@ -23,7 +23,7 @@ This gate is a **pure inspector**.
 It writes only its own report:
 
 ```text
-<feature-dir>/checklists/plan-report.md
+<feature-dir>/plan-report.md
 ```
 
 It MUST NOT edit:
@@ -174,8 +174,8 @@ IMPL_PLAN="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["IMPL_PLAN"
 REPO_ROOT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["REPO_ROOT"])' <<< "$PATHS_JSON")"
 CURRENT_BRANCH="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("CURRENT_BRANCH",""))' <<< "$PATHS_JSON")"
 FEATURE="$(basename "$FEATURE_DIR")"
-REPORT="$FEATURE_DIR/checklists/plan-report.md"
-mkdir -p "$FEATURE_DIR/checklists"
+REPORT="$FEATURE_DIR/plan-report.md"
+mkdir -p "$FEATURE_DIR"
 ```
 
 If this fails because no active feature can be resolved, STOP and report to chat only:
@@ -225,7 +225,7 @@ FEATURE_DIR="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_
 FEATURE_SPEC="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_SPEC"])' <<< "$PATHS_JSON")"
 
 python3 .orderspec/scripts/upstream_gate.py \
-  --report        "$FEATURE_DIR/checklists/spec-report.md" \
+  --report        "$FEATURE_DIR/spec-report.md" \
   --artifact      "$FEATURE_SPEC" \
   --upstream-name "spec.md" \
   --this          "/order.plan-check" \
@@ -766,7 +766,7 @@ Do not interleave routing blocks with the Findings table. Put all routing blocks
 Always write:
 
 ```text
-<feature-dir>/checklists/plan-report.md
+<feature-dir>/plan-report.md
 ```
 
 Overwrite, never append.
@@ -814,7 +814,7 @@ Fill template placeholders as follows:
 | `{inventory_summary}` | pathmanifest/mechanism summary from scripts and inspection |
 | `{exit_code}` | mechanical baseline exit/failure summary |
 | `{floor_status}` | `none`, `non-PASS`, or `BLOCK` |
-| `{report_path}` | `checklists/plan-report.md` |
+| `{report_path}` | `plan-report.md` |
 
 The current shared `report-template.md` may use repeated generic `{n}` placeholders in Metrics.
 
@@ -959,7 +959,7 @@ Use this only if `.orderspec/templates/report-template.md` is missing.
 - Findings by severity: CRITICAL={critical_count} · HIGH={high_count} · MEDIUM={medium_count} · LOW={low_count}
 - Auto-fixed: 0 · Routing required: {routing_count} · defer-to-plan: 0
 - Script exit code: {exit_code} · verdict floor applied: {floor_status}
-- Report file: checklists/plan-report.md
+- Report file: plan-report.md
 ```
 
 ## Writing the Report
@@ -974,7 +974,7 @@ Steps:
 4. Write the final report to:
 
    ```text
-   <feature-dir>/checklists/plan-report.md
+   <feature-dir>/plan-report.md
    ```
 
 5. Overwrite, never append.
@@ -984,8 +984,8 @@ Use shell-safe write:
 ```bash
 PATHS_JSON="$(python3 .orderspec/scripts/setup.py paths --json)"
 FEATURE_DIR="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_DIR"])' <<< "$PATHS_JSON")"
-REPORT="$FEATURE_DIR/checklists/plan-report.md"
-mkdir -p "$FEATURE_DIR/checklists"
+REPORT="$FEATURE_DIR/plan-report.md"
+mkdir -p "$FEATURE_DIR"
 
 cat > "$REPORT" <<'EOF'
 <rendered report markdown here>

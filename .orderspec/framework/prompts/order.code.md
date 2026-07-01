@@ -33,7 +33,7 @@ and reads its gate verdict):
 FEATURE_DIR="$(jq -r '.feature_directory' .orderspec/feature.json)"
 
 python3 .orderspec/scripts/upstream_gate.py \
-  --report        "$FEATURE_DIR/checklists/tasks-report.md" \
+  --report        "$FEATURE_DIR/tasks-report.md" \
   --artifact      "$FEATURE_DIR/tasks.md" \
   --upstream-name "tasks.md" \
   --this          "/order.code" \
@@ -75,7 +75,7 @@ Implementation executes an existing task list — the tasks must exist first.
 
 ```text
 CODE_BLOCKED: tasks gate not passed
-Tasks gate verdict: {verdict} (from checklists/tasks-report.md, dated {date})
+Tasks gate verdict: {verdict} (from tasks-report.md, dated {date})
 The task list has unresolved findings. Resolve them first:
   1. Action each Routing block in tasks-report.md via /order.tasks "..."
   2. Re-run /order.tasks-check until the verdict is ✅ PASS
@@ -96,7 +96,7 @@ Before writing or changing code that uses a framework/library:
 
 1. **Setup**: Run `python3 .orderspec/scripts/setup.py code --json` from repo root; parse FEATURE_DIR and AVAILABLE_DOCS. All paths absolute. For single quotes in args use `'I'\''m Groot'` or double quotes.
 
-2. **Checklists gate** (if `FEATURE_DIR/checklists/` exists):
+2. **Gate reports** (if report files exist in `FEATURE_DIR/`):
    - For each checklist file count total (`- [ ]`, `- [x]`, `- [X]`), completed (`- [x]`/`- [X]`), incomplete (`- [ ]`) items; render a status table (Checklist | Total | Completed | Incomplete | Status).
    - If ALL checklists pass → display table, proceed.
    - If ANY is incomplete → display table, **STOP** and ask: "Some checklists are incomplete. Proceed with implementation anyway? (yes/no)". Continue only on explicit yes.

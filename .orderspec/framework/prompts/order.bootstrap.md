@@ -17,12 +17,12 @@ handoffs:
 
 | Document | Location | ID prefix | Content |
 |---|---|---|---|
-| `stack.md` | project root | `STACK-NNN` | Technologies, versions, purpose |
-| `architecture.md` | project root | `ARCH-NNN` | Layers, dependency rules |
-| `conventions.md` | project root | `CONV-NNN` | Error handling, serialization, validation patterns |
-| `constitution.md` | project root | named headings | Governance principles + capability grants for gates |
+| `stack.md` | `.orderspec/contracts/` | `STACK-NNN` | Technologies, versions, purpose |
+| `architecture.md` | `.orderspec/contracts/` | `ARCH-NNN` | Layers, dependency rules |
+| `conventions.md` | `.orderspec/contracts/` | `CONV-NNN` | Error handling, serialization, validation patterns |
+| `constitution.md` | `.orderspec/contracts/` | named headings | Governance principles + capability grants for gates |
 
-These are **stable, shared, project-wide**. They are NOT feature specs. They survive refactors. `spec.md` and `plan.md` cite them by ID.
+These are **stable, shared, project-wide**. They are NOT feature specs. They survive refactors. `spec.md` and `plan.md` cite them by ID. All four live under `.orderspec/contracts/` — no OrderSpec artifact is written to the repository root.
 
 This command **authors** project contracts. It does **not** rewrite feature specs, plans, or tasks that reference them — on conflict, it **routes** to the owning command.
 
@@ -505,7 +505,7 @@ If `combined_files` is empty, skip this phase entirely and report "No external r
 Read the policy from `constitution.md`:
 
 ```bash
-grep -A 3 "External Rules Integration" constitution.md 2>/dev/null || echo "NOT_FOUND"
+grep -A 3 "External Rules Integration" .orderspec/contracts/constitution.md 2>/dev/null || echo "NOT_FOUND"
 ```
 
 Policy values:
@@ -600,6 +600,8 @@ If user chose option B, present each statement individually and ask for approval
 
 <details>
 <summary>Emergency manual fallback (only when script is missing and user explicitly approves)</summary>
+
+> All four contract files are written under `.orderspec/contracts/` (create the directory first: `mkdir -p .orderspec/contracts`). Never write them to the repository root.
 
 ### Step 1 — Infer stack from repo (brownfield) or ask (greenfield)
 
@@ -809,8 +811,8 @@ Emit findings as a simple list:
 
 ```markdown
 ### Routing (owner must reconcile)
-- `specs/003-user-auth/spec.md` references `STACK-004` which was removed → run `/order.spec` for that feature
-- `specs/001-tasks/spec.md` references `ARCH-002` which changed → run `/order.spec` for that feature
+- `.orderspec/features/003-user-auth/spec.md` references `STACK-004` which was removed → run `/order.spec` for that feature
+- `.orderspec/features/001-tasks/spec.md` references `ARCH-002` which changed → run `/order.spec` for that feature
 - Constitution: test execution grant changed → re-run `/order.code-check` for all implemented features
 ```
 

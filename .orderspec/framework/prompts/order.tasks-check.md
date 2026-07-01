@@ -148,7 +148,7 @@ once from repo root; parse FEATURE_DIR and AVAILABLE_DOCS. Derive these
   PLAN   = `FEATURE_DIR/plan.md`
   TASKS  = `FEATURE_DIR/tasks.md`
   TRACE  = `FEATURE_DIR/.orderspec/traceability.tsv`
-  REPORT = `FEATURE_DIR/checklists/tasks-report.md`
+  REPORT = `FEATURE_DIR/tasks-report.md`
 and this **repo-root** path (NOT under FEATURE_DIR):
   CONSTITUTION = `.orderspec/memory/constitution.md`  ← project-level, repo root
 If CONSTITUTION exists, load it for governance constraints. Abort ... if any
@@ -281,7 +281,7 @@ Report body:
 - Findings by severity: C/H/M/L counts (semantic + T0-001 if present)
 - Auto-fixed: N · Routing required: M · upstream reroutes (T7): K
 - Traceability trace: {present — coverage proven by extract-trace | ABSENT — T0-001, coverage unverified this run}
-- Report file: always written to checklists/tasks-report.md
+- Report file: always written to tasks-report.md
 ```
 
 After rendering, state in one line the `REPORT` path where the file was written (always).

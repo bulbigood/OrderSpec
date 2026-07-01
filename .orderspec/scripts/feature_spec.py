@@ -16,8 +16,8 @@ Canonical mapping:
 - slug:              user-auth
 - feature number:    001
 - feature_id:        FEAT-001-user-auth
-- feature_directory: specs/001-user-auth
-- spec_file:         specs/001-user-auth/spec.md
+- feature_directory: .orderspec/features/001-user-auth
+- spec_file:         .orderspec/features/001-user-auth/spec.md
 
 /order.spec remains the owner of spec.md contract content.
 active_feature.py remains the owner of active-feature runtime state.
@@ -35,7 +35,9 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_SPECS_ROOT = "specs"
+from common import SPECS_ROOT
+
+DEFAULT_SPECS_ROOT = str(SPECS_ROOT)
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 FEATURE_DIR_RE = re.compile(r"^([0-9]{3})-([a-z0-9]+(?:-[a-z0-9]+)*)$")

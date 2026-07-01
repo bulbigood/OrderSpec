@@ -128,14 +128,12 @@ Bootstrap creates or amends the project-level contracts that all later commands 
 
 | File | Role |
 |---|---|
-| `constitution.md` | Project governance and capability grants. Defines what gates may do as evidence. Also defines external rules integration policy. |
-| `stack.md` | Project technology stack, with stable `STACK-NNN` IDs. |
-| `architecture.md` | Project architecture and dependency rules, with stable `ARCH-NNN` IDs. |
-| `conventions.md` | Project implementation conventions, with stable `CONV-NNN` IDs. |
+| `.orderspec/contracts/constitution.md` | Project governance and capability grants. Defines what gates may do as evidence. Also defines external rules integration policy. |
+| `.orderspec/contracts/stack.md` | Project technology stack, with stable `STACK-NNN` IDs. |
+| `.orderspec/contracts/architecture.md` | Project architecture and dependency rules, with stable `ARCH-NNN` IDs. |
+| `.orderspec/contracts/conventions.md` | Project implementation conventions, with stable `CONV-NNN` IDs. |
 
-These files intentionally live at the repository root.
-
-They are not hidden framework internals. They are first-class project documents, useful to humans, reviewers, and other tools even outside OrderSpec.
+These files live under `.orderspec/contracts/`. No OrderSpec artifact is written to the repository root.
 
 OrderSpec uses them as constraints during planning, tasking, implementation, and verification.
 
@@ -333,15 +331,6 @@ A typical OrderSpec-enabled project contains:
 
 ```text
 .
-├── constitution.md
-├── stack.md
-├── architecture.md
-├── conventions.md
-├── specs/
-│   └── <feature>/
-│       ├── spec.md
-│       ├── plan.md
-│       └── tasks.md
 └── .orderspec/
     ├── README.md                      ← this file
     ├── framework/
@@ -367,6 +356,16 @@ A typical OrderSpec-enabled project contains:
     │       ├── test-command-context.py
     │       ├── test-bootstrap-contracts.py
     │       └── test-agents-sync.py        ← multi-agent tests
+    ├── contracts/                         ← project contracts (generated/maintained by /order.bootstrap)
+    │   ├── constitution.md
+    │   ├── stack.md
+    │   ├── architecture.md
+    │   └── conventions.md
+    ├── features/                          ← generated feature artifacts
+    │   └── <feature>/
+    │       ├── spec.md
+    │       ├── plan.md
+    │       └── tasks.md
     ├── config/
     │   └── tooling.json
     ├── state/
@@ -376,20 +375,11 @@ A typical OrderSpec-enabled project contains:
     └── skills/                           ← project skills (single source of truth)
 ```
 
-### Why project contracts live at the root
+### Why everything lives under `.orderspec/`
 
-The root files:
+OrderSpec keeps **all** generated artifacts and project contracts inside `.orderspec/`. Nothing is written to the repository root. This keeps the project tree clean, makes OrderSpec-owned content easy to gitignore or review as a unit, and prevents overlap with other frameworks or existing project files.
 
-```text
-constitution.md
-stack.md
-architecture.md
-conventions.md
-```
-
-are project contracts, not framework internals.
-
-They are meant to be visible, reviewable, and useful outside OrderSpec.
+Project contracts (`constitution.md`, `stack.md`, `architecture.md`, `conventions.md`) live under `.orderspec/contracts/`. Feature artifacts live under `.orderspec/features/<feature>/`.
 
 ### Why framework files live under `.orderspec/`
 
@@ -397,6 +387,8 @@ They are meant to be visible, reviewable, and useful outside OrderSpec.
 |---|---|
 | `.orderspec/framework/` | Framework-owned rules, schemas, templates, protocols, adapters, and resolver manifest. |
 | `.orderspec/scripts/` | Deterministic framework utilities and tests. |
+| `.orderspec/contracts/` | Project contracts generated and maintained by `/order.bootstrap`. |
+| `.orderspec/features/` | Generated feature artifacts (`spec.md`, `plan.md`, `tasks.md`). |
 | `.orderspec/config/` | Operator/project configuration. |
 | `.orderspec/state/` | Generated runtime state. |
 | `.orderspec/skills/` | Project skills — single source of truth, registered in each agent's config. |
@@ -405,16 +397,14 @@ They are meant to be visible, reviewable, and useful outside OrderSpec.
 
 ## Multi-framework coexistence
 
-OrderSpec intentionally makes project contracts visible at the repository root.
-
-This is useful, but it can overlap with other frameworks or existing project files — especially `constitution.md`.
+OrderSpec keeps all of its generated content (project contracts, feature artifacts, state, reports) under `.orderspec/`, so it does not clutter the repository root or collide with other frameworks' files.
 
 The intended model is:
 
-- if a project contract is missing, `/order.bootstrap` creates it;
+- if a project contract is missing, `/order.bootstrap` creates it under `.orderspec/contracts/`;
 - if a contract already exists and is OrderSpec-owned, `/order.bootstrap` amends it;
-- if a similarly named non-OrderSpec file already exists, the command should not blindly overwrite it;
-- future versions may support namespaced or configurable contract paths.
+- OrderSpec does not write outside `.orderspec/`, so similarly named non-OrderSpec files at the repository root are left untouched;
+- future versions may support configurable contract paths.
 
 ---
 
@@ -426,7 +416,7 @@ Supported today:
 
 - optional verification gates;
 - project governance through `constitution.md`;
-- project stack/architecture/conventions through root contracts;
+- project stack/architecture/conventions through `.orderspec/contracts/`;
 - tooling policy through `.orderspec/config/tooling.json`;
 - deterministic framework scripts;
 - **multi-agent adapter pattern** for adding AI agent support;
@@ -488,7 +478,7 @@ In one line:
 | Core belief | spec = scaffolding for a smart model | spec = proposal to review | spec = contract a weak model must not break |
 | Primary audience | general | general | software engineers |
 | Optimized for | capable models | human alignment | relatively weak models |
-| Project governance | framework memory / templates | proposal process | root project contracts + constitution |
+| Project governance | framework memory / templates | proposal process | `.orderspec/contracts/` + constitution |
 | Document roles | spec / plan / tasks | proposal / spec / tasks | spec contract / repo-mapped plan / disposable tasks |
 | Gate behavior | generation-centric | review-centric | pure inspectors: detect + route |
 | Merge safety | limited | process-dependent | dedicated `sync-check` |
@@ -548,10 +538,10 @@ The principles that shape OrderSpec:
    This creates or amends:
 
    ```text
-   constitution.md
-   stack.md
-   architecture.md
-   conventions.md
+   .orderspec/contracts/constitution.md
+   .orderspec/contracts/stack.md
+   .orderspec/contracts/architecture.md
+   .orderspec/contracts/conventions.md
    .orderspec/config/tooling.json
    .orderspec/state/tooling-detection.json
    .orderspec/state/agents.json
@@ -632,7 +622,7 @@ Current status:
 - ✅ Adapter pattern for adding new agents.
 - ✅ Manual setup.
 - ✅ `/order.bootstrap` with agents discovery & sync phase.
-- ✅ Project contracts: `constitution.md`, `stack.md`, `architecture.md`, `conventions.md`.
+- ✅ Project contracts: `.orderspec/contracts/constitution.md`, `stack.md`, `architecture.md`, `conventions.md`.
 - ✅ Constitution includes external rules integration policy.
 - ✅ Command context resolver.
 - ✅ Deterministic bootstrap scripts.
@@ -659,7 +649,7 @@ Future work:
 
 - Setup is manual (no installer yet).
 - Python 3 is required for current framework scripts.
-- Root project contract names may overlap with other frameworks or existing project files.
+- Project contract files live under `.orderspec/contracts/`; names there may still overlap with other frameworks if paths are made configurable in the future.
 - Operator-defined procedural extensions are not supported yet.
 - Some project facts cannot be inferred safely during bootstrap and are marked unresolved instead of guessed.
 - Not all AI agents are supported yet — only Kilo Code and Claude Code.

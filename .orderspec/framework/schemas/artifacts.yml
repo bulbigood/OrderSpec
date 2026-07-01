@@ -26,4 +26,8 @@ feature_artifacts:
 
 generated_artifacts:
   - spec-ids.tsv
-  - checklists/spec-report.md
+  - spec-report.md
+  - plan-report.md
+  - tasks-report.md
+  - code-report.md
+  - sync-report.md

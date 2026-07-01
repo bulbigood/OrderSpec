@@ -9,6 +9,9 @@ import tempfile
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR.parent))
+from common import FEATURES_DIR
+
 PY = sys.executable
 FEATURE_SPEC = SCRIPT_DIR.parent / "feature_spec.py"
 
@@ -168,11 +171,11 @@ if (
     data.get("feature_id") == "FEAT-001-user-auth"
     and data.get("slug") == "user-auth"
     and data.get("feature_number") == "001"
-    and data.get("feature_directory") == "specs/001-user-auth"
-    and data.get("spec_file") == "specs/001-user-auth/spec.md"
+    and data.get("feature_directory") == ".orderspec/features/001-user-auth"
+    and data.get("spec_file") == ".orderspec/features/001-user-auth/spec.md"
     and data.get("created_directory") is True
-    and (root / "specs/001-user-auth").is_dir()
-    and not (root / "specs/001-user-auth/spec.md").exists()
+    and (root / ".orderspec/features/001-user-auth").is_dir()
+    and not (root / ".orderspec/features/001-user-auth/spec.md").exists()
 ):
     ok("create first feature metadata and filesystem are correct")
 else:
@@ -190,8 +193,8 @@ rc, data, err = assert_ok_json(
 )
 if (
     data.get("feature_id") == "FEAT-002-task-audit"
-    and data.get("feature_directory") == "specs/002-task-audit"
-    and (root / "specs/002-task-audit").is_dir()
+    and data.get("feature_directory") == ".orderspec/features/002-task-audit"
+    and (root / ".orderspec/features/002-task-audit").is_dir()
 ):
     ok("create second feature uses next free number")
 else:
@@ -200,8 +203,8 @@ else:
 
 # 7. existing non-feature directories are ignored for numbering
 root = fresh_work("ignore-non-feature-dirs")
-(root / "specs" / "abc-not-a-feature").mkdir(parents=True)
-(root / "specs" / "001").mkdir(parents=True)
+(root / FEATURES_DIR / "abc-not-a-feature").mkdir(parents=True)
+(root / FEATURES_DIR / "001").mkdir(parents=True)
 rc, data, err = assert_ok_json(
     root,
     "create ignores non-feature dirs",
@@ -218,8 +221,8 @@ else:
 
 # 8. gaps are reused: 001 and 003 existing → next is 002
 root = fresh_work("reuse-gap")
-(root / "specs" / "001-first").mkdir(parents=True)
-(root / "specs" / "003-third").mkdir(parents=True)
+(root / FEATURES_DIR / "001-first").mkdir(parents=True)
+(root / FEATURES_DIR / "003-third").mkdir(parents=True)
 rc, data, err = assert_ok_json(
     root,
     "create reuses numeric gap",
@@ -248,8 +251,8 @@ rc, data, err = assert_ok_json(
 )
 if (
     data.get("feature_id") == "FEAT-007-manual-number"
-    and data.get("feature_directory") == "specs/007-manual-number"
-    and (root / "specs/007-manual-number").is_dir()
+    and data.get("feature_directory") == ".orderspec/features/007-manual-number"
+    and (root / ".orderspec/features/007-manual-number").is_dir()
 ):
     ok("explicit number metadata correct")
 else:
@@ -301,8 +304,8 @@ if (
     data.get("action") == "dry_run"
     and data.get("created_directory") is False
     and data.get("feature_id") == "FEAT-001-dry-run-feature"
-    and data.get("feature_directory") == "specs/001-dry-run-feature"
-    and not (root / "specs/001-dry-run-feature").exists()
+    and data.get("feature_directory") == ".orderspec/features/001-dry-run-feature"
+    and not (root / ".orderspec/features/001-dry-run-feature").exists()
 ):
     ok("dry-run does not create directory")
 else:
@@ -336,7 +339,7 @@ assert_error_json(
 
 # 14. existing exact next directory collision is naturally avoided by next_free
 root = fresh_work("avoid-existing")
-(root / "specs" / "001-existing").mkdir(parents=True)
+(root / FEATURES_DIR / "001-existing").mkdir(parents=True)
 rc, data, err = assert_ok_json(
     root,
     "allocator skips existing 001",
@@ -419,7 +422,7 @@ assert_error_json(
 # 19. no free feature number rejected when 001..999 are used
 root = fresh_work("exhausted")
 for i in range(1, 1000):
-    (root / "specs" / f"{i:03d}-used").mkdir(parents=True)
+    (root / FEATURES_DIR / f"{i:03d}-used").mkdir(parents=True)
 assert_error_json(
     root,
     "no_free_feature_number",
@@ -433,7 +436,7 @@ assert_error_json(
 
 # 20. explicit number collision with existing directory rejected
 root = fresh_work("explicit-existing-dir")
-(root / "specs" / "005-existing").mkdir(parents=True)
+(root / FEATURES_DIR / "005-existing").mkdir(parents=True)
 assert_error_json(
     root,
     "feature_directory_exists",
