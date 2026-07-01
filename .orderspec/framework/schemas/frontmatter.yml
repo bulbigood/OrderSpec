@@ -13,16 +13,56 @@ artifact_types:
   - runtime_state
   - gate_report
 
+# ── command_prompt ────────────────────────────────────────────────────────────
+
 command_prompt_required_fields:
   - orderspec.artifact
   - orderspec.command
   - orderspec.phase
+  - description
+
+command_prompt_optional_fields:
+  - handoffs
+
+command_prompt_field_constraints:
+  orderspec.artifact:
+    const: command_prompt
+  orderspec.command:
+    pattern: '^order\.[a-z]+(-[a-z]+)*$'
+    example: order.spec
+  orderspec.phase:
+    enum:
+      - bootstrap
+      - specify
+      - plan
+      - tasks
+      - implement
+      - check
+
+command_prompt_handoffs_item_required_fields:
+  - label
+  - agent
+  - prompt
+
+command_prompt_handoffs_item_optional_fields:
+  - send
+
+# ── spec ──────────────────────────────────────────────────────────────────────
 
 spec_required_fields:
   - orderspec.artifact
   - orderspec.feature_id
   - orderspec.slug
   - orderspec.status
+  - orderspec.refs
+  - orderspec.refs.framework_rules
+  - orderspec.refs.constitution
+  - orderspec.refs.stack
+  - orderspec.refs.architecture
+  - orderspec.refs.conventions
+  - orderspec.generator
+  - orderspec.generator.command
+  - orderspec.generator.model
 
 spec_field_constraints:
   orderspec.artifact:
@@ -39,11 +79,67 @@ spec_field_constraints:
       - review
       - approved
 
+# ── gate_report ───────────────────────────────────────────────────────────────
+
+gate_report_required_fields:
+  - orderspec.artifact
+  - orderspec.command
+  - orderspec.model
+  - orderspec.generated_at
+  - orderspec.verdict
+  - orderspec.feature_id
+  - orderspec.feature_directory
+
+gate_report_field_constraints:
+  orderspec.artifact:
+    const: gate_report
+  orderspec.verdict:
+    enum:
+      - "PASS"
+      - "BLOCK"
+      - "ROUTING_REQUIRED"
+
+# ── project_contract ──────────────────────────────────────────────────────────
+
 project_contract_required_fields:
-  common:
-    - orderspec.artifact
-    - orderspec.kind
-  id_prefix_required_for:
-    - stack
-    - architecture
-    - conventions
+  - orderspec.artifact
+  - orderspec.kind
+
+project_contract_field_constraints:
+  orderspec.artifact:
+    const: project_contract
+  orderspec.kind:
+    enum:
+      - constitution
+      - stack
+      - architecture
+      - conventions
+
+project_contract_id_prefix_required_for:
+  - stack
+  - architecture
+  - conventions
+
+# ── framework_rules ───────────────────────────────────────────────────────────
+
+framework_rules_required_fields:
+  - orderspec.artifact
+  - orderspec.authority
+  - orderspec.customization
+
+framework_rules_field_constraints:
+  orderspec.artifact:
+    const: framework_rules
+  orderspec.authority:
+    const: framework
+  orderspec.customization:
+    const: forbidden
+
+# ── protocol ──────────────────────────────────────────────────────────────────
+
+protocol_required_fields:
+  - orderspec.artifact
+
+protocol_field_constraints:
+  orderspec.artifact:
+    const: protocol

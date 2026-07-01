@@ -582,7 +582,6 @@ orderspec:
   generator:
     command: order.spec
     model: "<current AI model name>"
-    model_tier: "<model tier>"
 ---
 ```
 

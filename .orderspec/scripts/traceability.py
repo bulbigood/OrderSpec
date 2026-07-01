@@ -817,6 +817,7 @@ def _looks_like_unresolved_placeholder(value):
         or s.endswith("__")
         or s.startswith("[")
         or s.endswith("]")
+        or s.startswith("{")
         or "TODO" in s.upper()
         or "TKTK" in s.upper()
     )
@@ -854,7 +855,7 @@ def _validate_yaml_frontmatter(spec_text):
             errors.append((field, f"Required metadata field 'orderspec.{field}' is missing, empty, or unresolved"))
 
     artifact = orderspec.get("artifact")
-    if artifact and artifact != "spec":
+    if artifact and not _looks_like_unresolved_placeholder(artifact) and artifact != "spec":
         errors.append(("artifact", f"orderspec.artifact must be 'spec', got '{artifact}'"))
 
     feature_id = orderspec.get("feature_id")
@@ -870,13 +871,259 @@ def _validate_yaml_frontmatter(spec_text):
         ))
 
     status = orderspec.get("status")
-    if status and status not in SPEC_STATUS_VALUES:
+    if status and not _looks_like_unresolved_placeholder(status) and status not in SPEC_STATUS_VALUES:
         errors.append((
             "status",
             f"orderspec.status must be one of {sorted(SPEC_STATUS_VALUES)}, got '{status}'",
         ))
 
     return errors
+
+
+COMMAND_PROMPT_REQUIRED_FIELDS = ["artifact", "command", "phase", "description", "handoffs"]
+COMMAND_PROMPT_PHASE_VALUES = {"bootstrap", "specify", "plan", "tasks", "implement", "check"}
+COMMAND_PROMPT_HANDOFFS_ITEM_FIELDS = {"label", "agent", "prompt"}
+
+GATE_REPORT_REQUIRED_FIELDS = [
+    "artifact", "command", "model", "generated_at",
+    "verdict", "feature_id", "feature_directory",
+]
+GATE_REPORT_VERDICT_VALUES = {"PASS", "BLOCK", "ROUTING_REQUIRED"}
+
+PROJECT_CONTRACT_REQUIRED_FIELDS = ["artifact", "kind"]
+PROJECT_CONTRACT_KIND_VALUES = {"constitution", "stack", "architecture", "conventions"}
+
+FRAMEWORK_RULES_REQUIRED_FIELDS = ["artifact", "authority", "customization"]
+
+PROTOCOL_REQUIRED_FIELDS = ["artifact"]
+
+
+def _validate_command_prompt_frontmatter(text):
+    """Validate command_prompt YAML frontmatter.
+
+    Required top-level: description, handoffs.
+    Required under orderspec: artifact, command, phase.
+    Returns list of (field, message) errors.
+    """
+    errors = []
+    fm = _extract_yaml_frontmatter(text)
+    if not fm:
+        errors.append(("__frontmatter", "No YAML frontmatter block found"))
+        return errors
+
+    orderspec = fm.get("orderspec", {})
+    if not isinstance(orderspec, dict):
+        errors.append(("orderspec", "orderspec block is not a mapping"))
+        return errors
+
+    for field in ["artifact", "command", "phase"]:
+        value = orderspec.get(field)
+        if _looks_like_unresolved_placeholder(value):
+            errors.append(("orderspec." + field, f"Required field 'orderspec.{field}' is missing, empty, or unresolved"))
+
+    artifact = orderspec.get("artifact")
+    if artifact and not _looks_like_unresolved_placeholder(artifact) and artifact != "command_prompt":
+        errors.append(("orderspec.artifact", f"orderspec.artifact must be 'command_prompt', got '{artifact}'"))
+
+    phase = orderspec.get("phase")
+    if phase and not _looks_like_unresolved_placeholder(phase) and phase not in COMMAND_PROMPT_PHASE_VALUES:
+        errors.append(("orderspec.phase", f"orderspec.phase must be one of {sorted(COMMAND_PROMPT_PHASE_VALUES)}, got '{phase}'"))
+
+    for field in ["description"]:
+        value = fm.get(field)
+        if _looks_like_unresolved_placeholder(value):
+            errors.append((field, f"Required field '{field}' is missing, empty, or unresolved"))
+
+    handoffs = fm.get("handoffs")
+    if isinstance(handoffs, list):
+        for i, item in enumerate(handoffs):
+            if not isinstance(item, dict):
+                errors.append(("handoffs", f"handoffs[{i}] must be a mapping"))
+                continue
+            for req in COMMAND_PROMPT_HANDOFFS_ITEM_FIELDS:
+                if _looks_like_unresolved_placeholder(item.get(req)):
+                    errors.append(("handoffs", f"handoffs[{i}].{req} is missing, empty, or unresolved"))
+
+    return errors
+
+
+def _validate_gate_report_frontmatter(text):
+    """Validate gate_report YAML frontmatter.
+
+    Required under orderspec: artifact, command, model, generated_at,
+    verdict, feature_id, feature_directory.
+    Returns list of (field, message) errors.
+    """
+    errors = []
+    fm = _extract_yaml_frontmatter(text)
+    if not fm:
+        errors.append(("__frontmatter", "No YAML frontmatter block found"))
+        return errors
+
+    orderspec = fm.get("orderspec", {})
+    if not isinstance(orderspec, dict):
+        errors.append(("orderspec", "orderspec block is not a mapping"))
+        return errors
+
+    for field in GATE_REPORT_REQUIRED_FIELDS:
+        value = orderspec.get(field)
+        if _looks_like_unresolved_placeholder(value):
+            errors.append(("orderspec." + field, f"Required field 'orderspec.{field}' is missing, empty, or unresolved"))
+
+    artifact = orderspec.get("artifact")
+    if artifact and not _looks_like_unresolved_placeholder(artifact) and artifact != "gate_report":
+        errors.append(("orderspec.artifact", f"orderspec.artifact must be 'gate_report', got '{artifact}'"))
+
+    verdict = orderspec.get("verdict")
+    if verdict and not _looks_like_unresolved_placeholder(verdict) and verdict not in GATE_REPORT_VERDICT_VALUES:
+        errors.append(("orderspec.verdict", f"orderspec.verdict must be one of {sorted(GATE_REPORT_VERDICT_VALUES)}, got '{verdict}'"))
+
+    return errors
+
+
+def _validate_project_contract_frontmatter(text, expected_kind=None):
+    """Validate project_contract YAML frontmatter.
+
+    Required under orderspec: artifact, kind.
+    Returns list of (field, message) errors.
+    """
+    errors = []
+    fm = _extract_yaml_frontmatter(text)
+    if not fm:
+        errors.append(("__frontmatter", "No YAML frontmatter block found"))
+        return errors
+
+    orderspec = fm.get("orderspec", {})
+    if not isinstance(orderspec, dict):
+        errors.append(("orderspec", "orderspec block is not a mapping"))
+        return errors
+
+    for field in PROJECT_CONTRACT_REQUIRED_FIELDS:
+        value = orderspec.get(field)
+        if _looks_like_unresolved_placeholder(value):
+            errors.append(("orderspec." + field, f"Required field 'orderspec.{field}' is missing, empty, or unresolved"))
+
+    artifact = orderspec.get("artifact")
+    if artifact and not _looks_like_unresolved_placeholder(artifact) and artifact != "project_contract":
+        errors.append(("orderspec.artifact", f"orderspec.artifact must be 'project_contract', got '{artifact}'"))
+
+    kind = orderspec.get("kind")
+    if kind and not _looks_like_unresolved_placeholder(kind) and kind not in PROJECT_CONTRACT_KIND_VALUES:
+        errors.append(("orderspec.kind", f"orderspec.kind must be one of {sorted(PROJECT_CONTRACT_KIND_VALUES)}, got '{kind}'"))
+
+    if expected_kind and kind and kind != expected_kind:
+        errors.append(("orderspec.kind", f"orderspec.kind must be '{expected_kind}', got '{kind}'"))
+
+    return errors
+
+
+def _validate_framework_rules_frontmatter(text):
+    """Validate framework_rules YAML frontmatter.
+
+    Required under orderspec: artifact, authority, customization.
+    Returns list of (field, message) errors.
+    """
+    errors = []
+    fm = _extract_yaml_frontmatter(text)
+    if not fm:
+        errors.append(("__frontmatter", "No YAML frontmatter block found"))
+        return errors
+
+    orderspec = fm.get("orderspec", {})
+    if not isinstance(orderspec, dict):
+        errors.append(("orderspec", "orderspec block is not a mapping"))
+        return errors
+
+    for field in FRAMEWORK_RULES_REQUIRED_FIELDS:
+        value = orderspec.get(field)
+        if _looks_like_unresolved_placeholder(value):
+            errors.append(("orderspec." + field, f"Required field 'orderspec.{field}' is missing, empty, or unresolved"))
+
+    artifact = orderspec.get("artifact")
+    if artifact and not _looks_like_unresolved_placeholder(artifact) and artifact != "framework_rules":
+        errors.append(("orderspec.artifact", f"orderspec.artifact must be 'framework_rules', got '{artifact}'"))
+
+    authority = orderspec.get("authority")
+    if authority and not _looks_like_unresolved_placeholder(authority) and authority != "framework":
+        errors.append(("orderspec.authority", f"orderspec.authority must be 'framework', got '{authority}'"))
+
+    customization = orderspec.get("customization")
+    if customization and not _looks_like_unresolved_placeholder(customization) and customization != "forbidden":
+        errors.append(("orderspec.customization", f"orderspec.customization must be 'forbidden', got '{customization}'"))
+
+    return errors
+
+
+def _validate_protocol_frontmatter(text):
+    """Validate protocol YAML frontmatter.
+
+    Required under orderspec: artifact.
+    Returns list of (field, message) errors.
+    """
+    errors = []
+    fm = _extract_yaml_frontmatter(text)
+    if not fm:
+        errors.append(("__frontmatter", "No YAML frontmatter block found"))
+        return errors
+
+    orderspec = fm.get("orderspec", {})
+    if not isinstance(orderspec, dict):
+        errors.append(("orderspec", "orderspec block is not a mapping"))
+        return errors
+
+    for field in PROTOCOL_REQUIRED_FIELDS:
+        value = orderspec.get(field)
+        if _looks_like_unresolved_placeholder(value):
+            errors.append(("orderspec." + field, f"Required field 'orderspec.{field}' is missing, empty, or unresolved"))
+
+    artifact = orderspec.get("artifact")
+    if artifact and not _looks_like_unresolved_placeholder(artifact) and artifact != "protocol":
+        errors.append(("orderspec.artifact", f"orderspec.artifact must be 'protocol', got '{artifact}'"))
+
+    return errors
+
+
+def cmd_validate_frontmatter(args, remaining):
+    """Standalone frontmatter validation for any artifact type."""
+    artifact_type = getattr(args, "artifact_type", None) or (remaining[0] if remaining else None)
+    file_path = getattr(args, "file", None) or (remaining[1] if len(remaining) > 1 else None)
+
+    if not artifact_type or not file_path:
+        die("usage: traceability.py validate-frontmatter <artifact-type> <file>", 64)
+
+    if not Path(file_path).is_file():
+        die(f"file not found: {file_path}", 2)
+
+    text = Path(file_path).read_text(encoding="utf-8")
+
+    validators = {
+        "spec": _validate_yaml_frontmatter,
+        "command_prompt": _validate_command_prompt_frontmatter,
+        "gate_report": _validate_gate_report_frontmatter,
+        "project_contract": lambda t: _validate_project_contract_frontmatter(t),
+        "framework_rules": _validate_framework_rules_frontmatter,
+        "protocol": _validate_protocol_frontmatter,
+    }
+
+    validator = validators.get(artifact_type)
+    if not validator:
+        die(f"unknown artifact type: {artifact_type}. Valid: {sorted(validators.keys())}", 64)
+
+    errors = validator(text)
+
+    if args.json:
+        output = {
+            "ok": len(errors) == 0,
+            "artifact_type": artifact_type,
+            "file": file_path,
+            "errors": [{"field": f, "message": m} for f, m in errors],
+        }
+        print(json.dumps(output, indent=2))
+    else:
+        for field, message in errors:
+            print(f"{field}: {message}")
+
+    sys.exit(0 if not errors else 1)
 
 
 def _load_specids(feature=None):
@@ -2521,6 +2768,11 @@ def main():
     val_parser.add_argument("--stage", choices=["spec", "plan", "tasks"])
     val_parser.add_argument("feature", nargs="?")
 
+    vfm_parser = subparsers.add_parser("validate-frontmatter", help="validate-frontmatter <type> <file> [--json]")
+    vfm_parser.add_argument("--json", action="store_true")
+    vfm_parser.add_argument("artifact_type", nargs="?")
+    vfm_parser.add_argument("file", nargs="?")
+
     args, remaining = parser.parse_known_args()
 
     global _ROOT, _FEATURE_DIR_OVERRIDE
@@ -2573,6 +2825,8 @@ def main():
         cmd_diff_summary(args)
     elif cmd == "validate":
         cmd_validate(args)
+    elif cmd == "validate-frontmatter":
+        cmd_validate_frontmatter(args, remaining)
     else:
         parser.print_help()
         sys.exit(64)

@@ -13,7 +13,6 @@ orderspec:
   generator:
     command: order.spec
     model: "__MODEL_NAME__"
-    model_tier: "__MODEL_TIER__"
 ---
 
 # Software Design Document & Feature Specification: [FEATURE NAME]

@@ -1,3 +1,8 @@
+---
+orderspec:
+  artifact: protocol
+---
+
 # OrderSpec Tooling Protocol
 
 ## Purpose
