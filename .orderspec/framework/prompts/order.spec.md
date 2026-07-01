@@ -461,6 +461,8 @@ Do not create directories, write `spec.md`, update active feature state, or init
    - Every `REQ-NNN` MUST be listed in the `Covers` field of at least one `UJ-NNN`.
    - Every `INV-NNN` containing absolute words (`MUST`, `exactly`, `always`, `never`) MUST have a corresponding row in the `Contradiction Grid` (§10).
    - Every HTTP status code mentioned in an `AC-NNN` (e.g., "returns 200") MUST explicitly appear in the `Success` or `Failure` field of the corresponding `IF-NNN` record in §9.
+   - Conversely, every HTTP status code in an `IF-NNN` `Success` field MUST be covered by at least one `AC-NNN` (M29, HIGH severity).
+   - Every HTTP status code in an `IF-NNN` `Failure` field SHOULD be covered by at least one `AC-NNN` (M29, MEDIUM severity).
    - Only use `STACK-NNN`, `ARCH-NNN`, `CONV-NNN` IDs that exist in the loaded project contracts.
 8. Author the full `spec.md` content.
 9. Write `spec.md` in one complete mutation. Do not leave placeholder partial specs.
@@ -685,19 +687,25 @@ If multiple fields encode the same logical state, add an invariant defining thei
 
 `§10` MUST include a contradiction grid.
 
-Include rows for:
+Every `INV-NNN` containing absolute quantifiers (`MUST have`, `MUST produce`, `exactly`, `always`, `never`) MUST have at least one explicit row in the Contradiction Grid, even if the verdict is `compatible`.
 
-- INV × NFR where INV is absolute and NFR weakens or qualifies behaviour;
+Also include rows for:
+
+- INV × NFR where NFR weakens or qualifies behaviour;
 - INV × ASM where ASM weakens or qualifies behaviour;
 - REQ × ASM where ASM narrows a REQ.
 
-If no pairs exist, state:
+Every INV-NNN containing absolute quantifiers (`MUST have`, `MUST produce`, `exactly`, `always`, `never`) MUST have at least one explicit row in the Contradiction Grid, even if the verdict is `compatible`.
 
-```text
-No absolute INV × weakening NFR/ASM pairs.
-```
+This ensures every absolute invariant is consciously checked against weakening NFRs/ASMs.
 
-Any conflict must be resolved before completion or routed through Clarification Protocol.
+Example for an invariant with no weakening tension:
+
+| Pair | Source | Tension | Verdict |
+|------|--------|---------|---------|
+| INV-001 × NFR-002 | INV-001: "MUST have at least one"; NFR-002: "preserve indefinitely" | NFR-002 strengthens retention, does not weaken the create guarantee | compatible |
+
+Any conflict (verdict other than `compatible`) must be resolved before completion or routed through Clarification Protocol.
 
 ### Edge cases
 
@@ -820,7 +828,7 @@ Before completion, reason through these checks. Do not write a checklist file.
 - Every AC has inline `[Covers: ...]`.
 - IF `Covers` references defined IDs.
 - IF success/failure outcomes match related ACs.
-- Authorization is specified for mutating interfaces and cross-tenant reads.
+- Authorization is specified for mutating interfaces and cross-owner reads (where the resource owner differs from the authenticated user).
 - Atomic/best-effort/compensating semantics are specified for multi-entity writes.
 - Contradiction grid is present and has no unresolved conflict.
 - DEC/ASM separation is correct.

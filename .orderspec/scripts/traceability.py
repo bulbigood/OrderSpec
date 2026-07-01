@@ -567,7 +567,16 @@ def _extract_ac_inline_covers(section_12_text):
 
 
 def _extract_status_codes(text):
-    """Extract contextual HTTP-like status codes from text."""
+    """Extract contextual HTTP-like status codes from text.
+
+    Context is determined per-clause: text is split by semicolons, newlines,
+    and pipe characters (markdown table cell separators). Each clause is
+    evaluated independently — a keyword in one clause does not validate
+    status codes in another clause on the same line.
+
+    This prevents the bug where "400 validation error; 403 not owner" on one
+    line would extract 403 just because "error" appears elsewhere on the line.
+    """
     statuses = set()
     http_keywords = [
         "status",
@@ -581,6 +590,7 @@ def _extract_status_codes(text):
         "error",
         "forbidden",
         "unauthorized",
+        "unauthenticated",
         "server error",
         "success",
         "created",
@@ -592,29 +602,32 @@ def _extract_status_codes(text):
         "successful",
     ]
 
-    lines = text.splitlines()
+    valid_codes = {
+        "200", "201", "202", "204",
+        "400", "401", "403", "404", "409", "410", "422",
+        "500", "503",
+    }
 
-    for i, line in enumerate(lines):
-        numbers = re.findall(r"\b([1-5]\d{2})\b", line)
+    # Split into clauses by semicolons, newlines, and pipe chars.
+    # Each clause is evaluated independently for keyword presence.
+    clauses = re.split(r"[;\n|]", text)
+
+    for clause in clauses:
+        clause_lower = clause.lower().strip()
+        if not clause_lower:
+            continue
+
+        numbers = re.findall(r"\b([1-5]\d{2})\b", clause)
         if not numbers:
             continue
 
-        context = line.lower()
-
-        if i > 0:
-            context = lines[i - 1].lower() + " " + context
-
-        if i < len(lines) - 1:
-            context = context + " " + lines[i + 1].lower()
+        has_keyword = any(kw in clause_lower for kw in http_keywords)
+        if not has_keyword:
+            continue
 
         for num in numbers:
-            if num in {
-                "200", "201", "202", "204",
-                "400", "401", "403", "404", "409", "410", "422",
-                "500", "503",
-            }:
-                if any(kw in context for kw in http_keywords):
-                    statuses.add(num)
+            if num in valid_codes:
+                statuses.add(num)
 
     return statuses
 
@@ -1820,6 +1833,54 @@ def cmd_validate(args):
                                 f"{ac_id} references status {st} for {if_id} but it is not in IF Success/Failure",
                             )
                     break
+
+    # M29: IF->AC status code coverage (every status in IF must be covered by at least one AC)
+    # Success codes: HIGH severity (must be tested)
+    # Failure codes: MEDIUM severity (should be tested, but not all failure paths require AC)
+    for if_id, rec in if_records.items():
+        fields = rec["fields"]
+        kind = fields.get("Kind", "")
+
+        if not kind:
+            continue
+
+        kind_lower = kind.lower()
+        if "http" not in kind_lower and "endpoint" not in kind_lower:
+            continue
+
+        if_success_statuses = _extract_status_codes(fields.get("Success", ""))
+        if_failure_statuses = _extract_status_codes(fields.get("Failure", ""))
+        if_all_statuses = if_success_statuses | if_failure_statuses
+
+        covering_acs = if_to_acs.get(if_id, set())
+
+        # Collect all statuses referenced by covering ACs
+        ac_statuses_for_if = set()
+        for ac_id in covering_acs:
+            for line in section_12.splitlines():
+                if line.strip().startswith(f"- **{ac_id}**"):
+                    ac_statuses_for_if |= _extract_status_codes(line)
+                    break
+
+        # Check Success codes: every success status must be covered by at least one AC
+        for st in sorted(if_success_statuses):
+            if st not in ac_statuses_for_if:
+                add(
+                    "M29",
+                    "HIGH",
+                    "spec.md:\u00a79",
+                    f"{if_id} Success status {st} is not covered by any AC",
+                )
+
+        # Check Failure codes: warn if not covered (not all failure paths need AC)
+        for st in sorted(if_failure_statuses):
+            if st not in ac_statuses_for_if:
+                add(
+                    "M29",
+                    "MEDIUM",
+                    "spec.md:\u00a79",
+                    f"{if_id} Failure status {st} is not covered by any AC (consider adding AC for this failure path)",
+                )
 
     # M20: every IF must be covered by at least one AC via inline Covers
     for if_id in if_records:
