@@ -1,11 +1,14 @@
-<!--
-generator: {generator_cmd}
-prompt_version: "{prompt_version}"
-generated_at: {DATE}
-verdict: {VERDICT}
-feature_id: {FEATURE_ID}
-feature_directory: {FEATURE_DIR}
--->
+---
+orderspec:
+  artifact: gate_report
+  command: "{generator_cmd}"
+  prompt_version: "{prompt_version}"
+  model: "{model_name}"
+  generated_at: "{DATE}"
+  verdict: "{VERDICT}"
+  feature_id: "{FEATURE_ID}"
+  feature_directory: "{FEATURE_DIR}"
+---
 
 ## {gate_title} ({target_doc} — {gate_focus})
 

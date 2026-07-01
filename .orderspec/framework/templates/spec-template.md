@@ -13,6 +13,7 @@ orderspec:
   generator:
     command: order.spec
     prompt_version: "__PROMPT_VERSION__"
+    model: "__MODEL_NAME__"
     model_tier: "__MODEL_TIER__"
 ---
 

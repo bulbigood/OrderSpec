@@ -2,7 +2,7 @@
 orderspec:
   artifact: command_prompt
   command: order.spec
-  prompt_version: "0.2.0"
+  prompt_version: "0.3.0"
   phase: specify
 description: Create or update the feature specification — the stable WHAT-contract with logical architecture. Owns spec.md contract content.
 handoffs:
@@ -583,9 +583,12 @@ orderspec:
   generator:
     command: order.spec
     prompt_version: "<prompt version>"
+    model: "<current AI model name>"
     model_tier: "<model tier>"
 ---
 ```
+
+> **Note on metadata**: `prompt_version` MUST be the exact version from the `order.spec.md` frontmatter. `model` MUST be the identifier of the AI model currently running this command (e.g., `kilo/moe-medium`, `claude-3.5-sonnet`).
 
 Allowed `orderspec.status`:
 
