@@ -577,6 +577,8 @@ def _extract_status_codes(text):
         "accepted",
         "conflict",
         "unprocessable",
+        "ok",
+        "successful",
     ]
 
     lines = text.splitlines()
@@ -2523,7 +2525,13 @@ def main():
     elif os.environ.get("ORDERSPEC_ROOT"):
         _ROOT = Path(os.environ["ORDERSPEC_ROOT"]).resolve()
     else:
-        _ROOT = script_dir().parent.parent
+        # Prefer current working directory if it looks like an OrderSpec project.
+        # This handles cases where .orderspec is symlinked from another repo.
+        cwd = Path.cwd()
+        if (cwd / ".orderspec").is_dir():
+            _ROOT = cwd
+        else:
+            _ROOT = script_dir().parent.parent
 
     if args.feature_dir:
         _FEATURE_DIR_OVERRIDE = args.feature_dir

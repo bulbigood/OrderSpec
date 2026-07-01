@@ -458,8 +458,13 @@ Do not create directories, write `spec.md`, update active feature state, or init
    If the script exits non-zero, STOP and report the script JSON.
 
 6. Load the resolved spec template from command context.
-7. Author the full `spec.md` content.
-8. Write `spec.md` in one complete mutation. Do not leave placeholder partial specs.
+7. **Pre-Write Validation Checklist**: Before drafting content, verify these invariants to ensure mechanical validation passes on the first try:
+   - Every `REQ-NNN` MUST be listed in the `Covers` field of at least one `UJ-NNN`.
+   - Every `INV-NNN` containing absolute words (`MUST`, `exactly`, `always`, `never`) MUST have a corresponding row in the `Contradiction Grid` (§10).
+   - Every HTTP status code mentioned in an `AC-NNN` (e.g., "returns 200") MUST explicitly appear in the `Success` or `Failure` field of the corresponding `IF-NNN` record in §9.
+   - Only use `STACK-NNN`, `ARCH-NNN`, `CONV-NNN` IDs that exist in the loaded project contracts.
+8. Author the full `spec.md` content.
+9. Write `spec.md` in one complete mutation. Do not leave placeholder partial specs.
 9. Run traceability projection and validation.
 10. Update active feature state with `active_feature.py set`.
 
@@ -788,10 +793,13 @@ Blocking questions must be resolved before `spec.md` is ready for `/order.plan`.
 After writing or refining `spec.md`, run these commands in order:
 
 ```bash
-python3 .orderspec/scripts/traceability.py --feature-dir "$FEATURE_DIR" init
-python3 .orderspec/scripts/traceability.py --feature-dir "$FEATURE_DIR" extract-spec-ids
-python3 .orderspec/scripts/traceability.py --feature-dir "$FEATURE_DIR" validate --stage spec --json
+python3 .orderspec/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" init
+python3 .orderspec/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" extract-spec-ids
+python3 .orderspec/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" validate --stage spec --json
 ```
+
+> **Note on symlinks**: The `-C "$PWD"` flag is critical if your `.orderspec` directory is symlinked from another repository. It forces the script to use the current working directory as the project root instead of resolving the symlink to the framework source.
+
 
 Rules:
 
