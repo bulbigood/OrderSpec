@@ -55,7 +55,7 @@ Before starting command-specific logic:
 1. Resolve command context:
 
    ```bash
-   python3 .orderspec/scripts/command_context.py resolve order.spec --json
+   python3 .orderspec/framework/scripts/command_context.py resolve order.spec --json
    ```
 
 2. If `ok` is `false` or `missing_required` is non-empty, STOP and report the missing required context.
@@ -86,9 +86,9 @@ Before any mutation, verify these framework scripts exist when their step is nee
 
 | Script | Required for |
 |---|---|
-| `.orderspec/scripts/feature_spec.py` | create mode feature directory allocation |
-| `.orderspec/scripts/active_feature.py` | active feature state reads/writes |
-| `.orderspec/scripts/traceability.py` | spec ID projection and mechanical validation |
+| `.orderspec/framework/scripts/feature_spec.py` | create mode feature directory allocation |
+| `.orderspec/framework/scripts/active_feature.py` | active feature state reads/writes |
+| `.orderspec/framework/scripts/traceability.py` | spec ID projection and mechanical validation |
 
 If a required script is missing, STOP and report the missing script. Do not manually replace script-owned mechanics.
 
@@ -175,13 +175,13 @@ State the detected mode in one line before proceeding.
 Read current state:
 
 ```bash
-python3 .orderspec/scripts/active_feature.py get --json
+python3 .orderspec/framework/scripts/active_feature.py get --json
 ```
 
 Validate current state:
 
 ```bash
-python3 .orderspec/scripts/active_feature.py validate --json
+python3 .orderspec/framework/scripts/active_feature.py validate --json
 ```
 
 If validation fails, STOP and report the script JSON. Do not hand-repair `.orderspec/state/active-feature.json`.
@@ -189,7 +189,7 @@ If validation fails, STOP and report the script JSON. Do not hand-repair `.order
 If `$ARGUMENTS` contains an explicit feature reference for an existing feature, resolve it with:
 
 ```bash
-python3 .orderspec/scripts/active_feature.py select <feature-ref> --last-command order.spec --json
+python3 .orderspec/framework/scripts/active_feature.py select <feature-ref> --last-command order.spec --json
 ```
 
 Use `select` only when the command is committed to operating on that existing feature. Never silently choose among ambiguous matches.
@@ -445,7 +445,7 @@ Do not create directories, write `spec.md`, update active feature state, or init
 5. Allocate the feature directory using the deterministic script:
 
    ```bash
-   python3 .orderspec/scripts/feature_spec.py create --slug "<slug-or-title>" --json
+   python3 .orderspec/framework/scripts/feature_spec.py create --slug "<slug-or-title>" --json
    ```
 
    The script returns:
@@ -782,9 +782,9 @@ Blocking questions must be resolved before `spec.md` is ready for `/order.plan`.
 After writing or refining `spec.md`, run these commands in order:
 
 ```bash
-python3 .orderspec/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" init
-python3 .orderspec/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" extract-spec-ids
-python3 .orderspec/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" validate --stage spec --json
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" init
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" extract-spec-ids
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" validate --stage spec --json
 ```
 
 > **Note on symlinks**: The `-C "$PWD"` flag is critical if your `.orderspec` directory is symlinked from another repository. It forces the script to use the current working directory as the project root instead of resolving the symlink to the framework source.
@@ -805,7 +805,7 @@ Rules:
 After successful write, ID extraction, and mechanical validation, update active feature state:
 
 ```bash
-python3 .orderspec/scripts/active_feature.py set \
+python3 .orderspec/framework/scripts/active_feature.py set \
   --feature-id "$FEATURE_ID" \
   --feature-directory "$FEATURE_DIR" \
   --status specified \

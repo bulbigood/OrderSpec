@@ -134,7 +134,7 @@ The `Run` line is a concrete, copy-pasteable instruction to the owner, never an 
 
 ### 1. Initialize
 
-Run `.orderspec/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks` once from repo root; parse FEATURE_DIR and AVAILABLE_DOCS. Derive: SPEC = `FEATURE_DIR/spec.md`, PLAN = `FEATURE_DIR/plan.md`, TASKS = `FEATURE_DIR/tasks.md`, REPORT = `FEATURE_DIR/sync-report.md`. If EXISTS, load `.orderspec/memory/constitution.md` for governance constraints. For single quotes in args use `'I'\''m Groot'` or double quotes.
+Run `.orderspec/framework/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks` once from repo root; parse FEATURE_DIR and AVAILABLE_DOCS. Derive: SPEC = `FEATURE_DIR/spec.md`, PLAN = `FEATURE_DIR/plan.md`, TASKS = `FEATURE_DIR/tasks.md`, REPORT = `FEATURE_DIR/sync-report.md`. If EXISTS, load `.orderspec/memory/constitution.md` for governance constraints. For single quotes in args use `'I'\''m Groot'` or double quotes.
 
 **Required vs degraded artifacts** (degrade, do not over-abort — a long-lived branch may have archived a downstream artifact):
 - `SPEC` is **required** — abort with instructions (re-run `/order.spec`) if missing.
@@ -151,7 +151,7 @@ Run `.orderspec/scripts/bash/check-prerequisites.sh --json --require-tasks --inc
 Run the full cross-stage validation (sync inspects the whole assembly, so no `--stage` restriction):
 
 ```bash
-.orderspec/scripts/bash/validate-traceability.sh --json "$FEATURE_DIR"
+.orderspec/framework/scripts/bash/validate-traceability.sh --json "$FEATURE_DIR"
 ```
 
 > **Where to read the exit code:** the script embeds it in the JSON as

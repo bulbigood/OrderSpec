@@ -14,7 +14,7 @@ import argparse
 from datetime import datetime, timezone
 
 # Add framework to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'framework'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 from adapters.registry import get_all_adapters
 from adapters.base import AgentAdapter

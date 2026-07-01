@@ -152,15 +152,15 @@ Mechanism decisions for `REQ`, `IF`, `AC`, `EDGE`, `INV`, and `NFR` IDs are stor
 This file is written only by:
 
 ```bash
-python3 .orderspec/scripts/traceability.py put-mechanisms <feature>
+python3 .orderspec/framework/scripts/traceability.py put-mechanisms <feature>
 ```
 
 and checked by:
 
 ```bash
-python3 .orderspec/scripts/traceability.py lint <feature>
-python3 .orderspec/scripts/traceability.py check-mechanisms <feature>
-python3 .orderspec/scripts/traceability.py validate --stage plan <feature>
+python3 .orderspec/framework/scripts/traceability.py lint <feature>
+python3 .orderspec/framework/scripts/traceability.py check-mechanisms <feature>
+python3 .orderspec/framework/scripts/traceability.py validate --stage plan <feature>
 ```
 
 Do not mirror the mechanism matrix as a Markdown table in `plan.md`.

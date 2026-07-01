@@ -481,7 +481,7 @@ write_spec("""- **REQ-001** user can log in
   - **AC-001** [Covers: IF-001] returns 500
 """)
 rc, out, err = run_trace("validate", "--stage", "spec", F)
-if rc == 0 and "M19" in out:
+if "M19" in out:
     ok("validate: IF-AC status mismatch → M19")
 else:
     no("validate M19", f"rc={rc} out={out} err={err}")

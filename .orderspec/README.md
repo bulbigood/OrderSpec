@@ -14,7 +14,7 @@
 After copying the `.orderspec/` directory into your project, run this command in your terminal:
 
 ```bash
-python3 .orderspec/scripts/agents_sync.py sync
+python3 .orderspec/framework/scripts/agents_sync.py sync
 ```
 
 The script will automatically detect installed AI agents and prompt you to select which ones to integrate. It will copy the OrderSpec prompts and register the skills directory for the selected agents.
@@ -26,7 +26,7 @@ Once the sync is complete, you can launch the bootstrap command inside your AI a
 ```
 
 > **Note:** You can also sync specific agents directly by passing their IDs:
-> `python3 .orderspec/scripts/agents_sync.py sync --agents kilocode claude_code`
+> `python3 .orderspec/framework/scripts/agents_sync.py sync --agents kilocode claude_code`
 
 ---
 
@@ -104,7 +104,7 @@ Multi-agent configuration and sync state lives in:
 .orderspec/state/agents.json
 ```
 
-This file is generated and maintained by `.orderspec/scripts/agents_sync.py`. It records which agents are enabled, their detection info, and sync state (last sync timestamp, copied/skipped prompts).
+This file is generated and maintained by `.orderspec/framework/scripts/agents_sync.py`. It records which agents are enabled, their detection info, and sync state (last sync timestamp, copied/skipped prompts).
 
 ### Adding a new agent adapter
 
@@ -300,7 +300,7 @@ OrderSpec commands do not manually maintain long preload lists in prompts.
 At command start, each command resolves its context through the framework resolver:
 
 ```bash
-python3 .orderspec/scripts/command_context.py resolve <order.command> --json
+python3 .orderspec/framework/scripts/command_context.py resolve <order.command> --json
 ```
 
 The resolver output tells the agent which files to read and how to treat them.
@@ -332,37 +332,13 @@ A typical OrderSpec-enabled project contains:
 ```text
 .
 └── .orderspec/
-    ├── README.md                      ← this file
-    ├── framework/
-    │   ├── orderspec-rules.md
-    │   ├── command-context.json
-    │   ├── protocols/
-    │   ├── schemas/
-    │   │   ├── agents-state.schema.json   ← multi-agent state schema
-    │   │   └── ...
-    │   ├── templates/
-    │   ├── prompts/                       ← single source of truth for all prompts
-    │   └── adapters/                      ← multi-agent adapters
-    │       ├── base.py
-    │       ├── registry.py
-    │       ├── kilocode.py
-    │       ├── claude_code.py
-    │       └── jsonc_utils.py
-    ├── scripts/
-    │   ├── command_context.py
-    │   ├── bootstrap_contracts.py
-    │   ├── agents_sync.py                 ← multi-agent orchestrator
-    |   ├── run_all_tests.py               ← run all tests from test/
-    │   └── test/
-    │       ├── test-command-context.py
-    │       ├── test-bootstrap-contracts.py
-    │       └── test-agents-sync.py        ← multi-agent tests
-    ├── contracts/                         ← project contracts (generated/maintained by /order.bootstrap)
+    ├── README.md                ← this file
+    ├── contracts/               ← project contracts (maintained by /order.bootstrap)
     │   ├── constitution.md
     │   ├── stack.md
     │   ├── architecture.md
     │   └── conventions.md
-    ├── features/                          ← generated feature artifacts
+    ├── features/                ← generated feature artifacts
     │   └── <feature>/
     │       ├── spec.md
     │       ├── plan.md
@@ -370,10 +346,31 @@ A typical OrderSpec-enabled project contains:
     ├── config/
     │   └── tooling.json
     ├── state/
-    │   ├── agents.json                   ← multi-agent state
+    │   ├── agents.json                      ← multi-agent state
     │   ├── tooling-detection.json
     │   └── active-feature.json
-    └── skills/                           ← project skills (single source of truth)
+    ├── skills/                              ← project skills (single source of truth)
+    └── framework/
+        ├── orderspec-rules.md
+        ├── command-context.json
+        ├── protocols/
+        ├── schemas/
+        │   ├── agents-state.schema.json     ← multi-agent state schema
+        │   └── ...
+        ├── templates/
+        ├── prompts/                         ← single source of truth for all prompts
+        ├── adapters/                        ← multi-agent adapters
+        │   ├── base.py
+        │   ├── registry.py
+        │   ├── kilocode.py
+        │   ├── claude_code.py
+        │   └── jsonc_utils.py
+        └── scripts/                         ← deterministic utilities and tests
+            ├── command_context.py
+            ├── bootstrap_contracts.py
+            ├── agents_sync.py               ← multi-agent orchestrator
+            ├── run_all_tests.py             ← run all tests from test/
+            └── test/                        ← regression test files
 ```
 
 ### Why everything lives under `.orderspec/`
@@ -387,7 +384,7 @@ Project contracts (`constitution.md`, `stack.md`, `architecture.md`, `convention
 | Directory | Meaning |
 |---|---|
 | `.orderspec/framework/` | Framework-owned rules, schemas, templates, protocols, adapters, and resolver manifest. |
-| `.orderspec/scripts/` | Deterministic framework utilities and tests. |
+| `.orderspec/framework/scripts/` | Deterministic framework utilities and tests. |
 | `.orderspec/contracts/` | Project contracts generated and maintained by `/order.bootstrap`. |
 | `.orderspec/features/` | Generated feature artifacts (`spec.md`, `plan.md`, `tasks.md`). |
 | `.orderspec/config/` | Operator/project configuration. |
@@ -521,13 +518,13 @@ The principles that shape OrderSpec:
 
    ```bash
    # For Kilo Code:
-   python3 .orderspec/scripts/agents_sync.py sync --agents kilocode
+   python3 .orderspec/framework/scripts/agents_sync.py sync --agents kilocode
 
    # For Claude Code:
-   python3 .orderspec/scripts/agents_sync.py sync --agents claude_code
+   python3 .orderspec/framework/scripts/agents_sync.py sync --agents claude_code
 
    # For both:
-   python3 .orderspec/scripts/agents_sync.py sync --agents kilocode claude_code
+   python3 .orderspec/framework/scripts/agents_sync.py sync --agents kilocode claude_code
    ```
 
 3. Run bootstrap:
@@ -588,29 +585,29 @@ These are framework-level checks, useful during development or debugging:
 
 ```bash
 # Command context resolver
-python3 .orderspec/scripts/command_context.py validate --json
-python3 .orderspec/scripts/command_context.py resolve order.bootstrap --json
+python3 .orderspec/framework/scripts/command_context.py validate --json
+python3 .orderspec/framework/scripts/command_context.py resolve order.bootstrap --json
 
 # Bootstrap contracts
-python3 .orderspec/scripts/bootstrap_contracts.py inspect --json
-python3 .orderspec/scripts/bootstrap_contracts.py validate --json
+python3 .orderspec/framework/scripts/bootstrap_contracts.py inspect --json
+python3 .orderspec/framework/scripts/bootstrap_contracts.py validate --json
 
 # Multi-agent sync
-python3 .orderspec/scripts/agents_sync.py detect --json
-python3 .orderspec/scripts/agents_sync.py sync --agents kilocode claude_code --json
-python3 .orderspec/scripts/agents_sync.py read-rules --agents kilocode claude_code --json
-python3 .orderspec/scripts/agents_sync.py state
+python3 .orderspec/framework/scripts/agents_sync.py detect --json
+python3 .orderspec/framework/scripts/agents_sync.py sync --agents kilocode claude_code --json
+python3 .orderspec/framework/scripts/agents_sync.py read-rules --agents kilocode claude_code --json
+python3 .orderspec/framework/scripts/agents_sync.py state
 ```
 
 Framework tests:
 
 ```bash
-python3 -m py_compile .orderspec/scripts/command_context.py
-python3 -m py_compile .orderspec/scripts/bootstrap_contracts.py
-python3 -m py_compile .orderspec/scripts/agents_sync.py
-python3 .orderspec/scripts/test/test-command-context.py
-python3 .orderspec/scripts/test/test-bootstrap-contracts.py
-python3 .orderspec/scripts/test/test-agents-sync.py
+python3 -m py_compile .orderspec/framework/scripts/command_context.py
+python3 -m py_compile .orderspec/framework/scripts/bootstrap_contracts.py
+python3 -m py_compile .orderspec/framework/scripts/agents_sync.py
+python3 .orderspec/framework/scripts/test/test-command-context.py
+python3 .orderspec/framework/scripts/test/test-bootstrap-contracts.py
+python3 .orderspec/framework/scripts/test/test-agents-sync.py
 ```
 
 ---

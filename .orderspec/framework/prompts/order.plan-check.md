@@ -73,7 +73,7 @@ This prompt assumes Configuration B:
 - Mechanism decisions are written only through:
 
   ```bash
-  python3 .orderspec/scripts/traceability.py put-mechanisms <feature>
+  python3 .orderspec/framework/scripts/traceability.py put-mechanisms <feature>
   ```
 
 - This gate reads mechanisms from:
@@ -159,7 +159,7 @@ Tool shell sessions may not preserve variables across separate invocations.
 Every shell block that uses `FEATURE_DIR`, `FEATURE_SPEC`, `IMPL_PLAN`, `REPO_ROOT`, `FEATURE`, or `REPORT` MUST rehydrate them from:
 
 ```bash
-python3 .orderspec/scripts/setup.py paths --json
+python3 .orderspec/framework/scripts/setup.py paths --json
 ```
 
 Do not assume variables from previous shell commands still exist.
@@ -171,7 +171,7 @@ Do not assume variables from previous shell commands still exist.
 Run from repository root:
 
 ```bash
-PATHS_JSON="$(python3 .orderspec/scripts/setup.py paths --json)"
+PATHS_JSON="$(python3 .orderspec/framework/scripts/setup.py paths --json)"
 FEATURE_DIR="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_DIR"])' <<< "$PATHS_JSON")"
 FEATURE_SPEC="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_SPEC"])' <<< "$PATHS_JSON")"
 IMPL_PLAN="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["IMPL_PLAN"])' <<< "$PATHS_JSON")"
@@ -196,7 +196,7 @@ In this case no report file can be reliably written.
 Check:
 
 ```bash
-PATHS_JSON="$(python3 .orderspec/scripts/setup.py paths --json)"
+PATHS_JSON="$(python3 .orderspec/framework/scripts/setup.py paths --json)"
 FEATURE_DIR="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_DIR"])' <<< "$PATHS_JSON")"
 FEATURE_SPEC="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_SPEC"])' <<< "$PATHS_JSON")"
 IMPL_PLAN="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["IMPL_PLAN"])' <<< "$PATHS_JSON")"
@@ -224,11 +224,11 @@ A plan-check must not issue PASS over a known failed spec gate.
 Run:
 
 ```bash
-PATHS_JSON="$(python3 .orderspec/scripts/setup.py paths --json)"
+PATHS_JSON="$(python3 .orderspec/framework/scripts/setup.py paths --json)"
 FEATURE_DIR="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_DIR"])' <<< "$PATHS_JSON")"
 FEATURE_SPEC="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_SPEC"])' <<< "$PATHS_JSON")"
 
-python3 .orderspec/scripts/upstream_gate.py \
+python3 .orderspec/framework/scripts/upstream_gate.py \
   --report        "$FEATURE_DIR/spec-report.md" \
   --artifact      "$FEATURE_SPEC" \
   --upstream-name "spec.md" \
@@ -264,12 +264,12 @@ Read:
 Run:
 
 ```bash
-PATHS_JSON="$(python3 .orderspec/scripts/setup.py paths --json)"
+PATHS_JSON="$(python3 .orderspec/framework/scripts/setup.py paths --json)"
 FEATURE_DIR="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_DIR"])' <<< "$PATHS_JSON")"
 FEATURE="$(basename "$FEATURE_DIR")"
 
-python3 .orderspec/scripts/traceability.py get "$FEATURE" spec-ids
-python3 .orderspec/scripts/traceability.py summarize-mechanisms --json "$FEATURE"
+python3 .orderspec/framework/scripts/traceability.py get "$FEATURE" spec-ids
+python3 .orderspec/framework/scripts/traceability.py summarize-mechanisms --json "$FEATURE"
 ```
 
 If `spec-ids.tsv` or `mechanisms.tsv` is missing or unreadable:
@@ -284,25 +284,25 @@ Run all mechanical checks.
 Use a single shell block so exit codes are captured reliably:
 
 ```bash
-PATHS_JSON="$(python3 .orderspec/scripts/setup.py paths --json)"
+PATHS_JSON="$(python3 .orderspec/framework/scripts/setup.py paths --json)"
 FEATURE_DIR="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_DIR"])' <<< "$PATHS_JSON")"
 FEATURE="$(basename "$FEATURE_DIR")"
 
 set +e
 
-python3 .orderspec/scripts/traceability.py lint "$FEATURE"
+python3 .orderspec/framework/scripts/traceability.py lint "$FEATURE"
 LINT_RC=$?
 
-python3 .orderspec/scripts/traceability.py check-plan "$FEATURE"
+python3 .orderspec/framework/scripts/traceability.py check-plan "$FEATURE"
 CHECK_PLAN_RC=$?
 
-python3 .orderspec/scripts/traceability.py check-mechanisms "$FEATURE"
+python3 .orderspec/framework/scripts/traceability.py check-mechanisms "$FEATURE"
 CHECK_MECH_RC=$?
 
-python3 .orderspec/scripts/traceability.py validate --stage plan "$FEATURE"
+python3 .orderspec/framework/scripts/traceability.py validate --stage plan "$FEATURE"
 VALIDATE_RC=$?
 
-python3 .orderspec/scripts/traceability.py summarize-mechanisms --json "$FEATURE"
+python3 .orderspec/framework/scripts/traceability.py summarize-mechanisms --json "$FEATURE"
 SUMMARY_RC=$?
 
 echo "LINT_RC=$LINT_RC"
@@ -315,7 +315,7 @@ echo "SUMMARY_RC=$SUMMARY_RC"
 If `validate --json --stage plan` is supported, you may additionally run it:
 
 ```bash
-python3 .orderspec/scripts/traceability.py validate --json --stage plan "$FEATURE"
+python3 .orderspec/framework/scripts/traceability.py validate --json --stage plan "$FEATURE"
 ```
 
 Mechanical findings are ground truth.
@@ -898,7 +898,7 @@ Important: `CON` rows do not require mechanism rows, but they must be honored by
 Paste values from:
 
 ```bash
-python3 .orderspec/scripts/traceability.py summarize-mechanisms --json "$FEATURE"
+python3 .orderspec/framework/scripts/traceability.py summarize-mechanisms --json "$FEATURE"
 ```
 
 Render as:
@@ -986,7 +986,7 @@ Steps:
 Use shell-safe write:
 
 ```bash
-PATHS_JSON="$(python3 .orderspec/scripts/setup.py paths --json)"
+PATHS_JSON="$(python3 .orderspec/framework/scripts/setup.py paths --json)"
 FEATURE_DIR="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_DIR"])' <<< "$PATHS_JSON")"
 REPORT="$FEATURE_DIR/plan-report.md"
 mkdir -p "$FEATURE_DIR"

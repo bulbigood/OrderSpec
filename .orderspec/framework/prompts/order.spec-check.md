@@ -41,7 +41,7 @@ Before command-specific logic:
 1. Resolve command context:
 
    ```bash
-   python3 .orderspec/scripts/command_context.py resolve order.spec-check --json
+   python3 .orderspec/framework/scripts/command_context.py resolve order.spec-check --json
    ```
 
 2. If `ok` is `false` or `missing_required` is non-empty, STOP and report missing required context.
@@ -104,7 +104,7 @@ Do not:
 Every finding from:
 
 ```bash
-python3 .orderspec/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" validate --stage spec --json
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" validate --stage spec --json
 ```
 
 is a deterministic finding.
@@ -159,8 +159,8 @@ Determine the target feature before inspection.
 Run:
 
 ```bash
-python3 .orderspec/scripts/active_feature.py get --json
-python3 .orderspec/scripts/active_feature.py validate --json
+python3 .orderspec/framework/scripts/active_feature.py get --json
+python3 .orderspec/framework/scripts/active_feature.py validate --json
 ```
 
 If active state validation fails, write a BLOCK report to:
@@ -176,8 +176,8 @@ with `S0-003 (HIGH): active feature state invalid`, then stop.
 If `$ARGUMENTS` contains an explicit feature reference, resolve it read-only:
 
 ```bash
-python3 .orderspec/scripts/active_feature.py get --json
-python3 .orderspec/scripts/active_feature.py list --json
+python3 .orderspec/framework/scripts/active_feature.py get --json
+python3 .orderspec/framework/scripts/active_feature.py list --json
 ```
 
 Match the feature reference against the active feature state and the feature list.
@@ -308,8 +308,8 @@ Render one block per routed finding.
 Run:
 
 ```bash
-python3 .orderspec/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" init
-python3 .orderspec/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" extract-spec-ids
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" init
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" extract-spec-ids
 ```
 
 If either command fails:
@@ -323,7 +323,7 @@ If either command fails:
 Run:
 
 ```bash
-python3 .orderspec/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" validate --stage spec --json
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" validate --stage spec --json
 ```
 
 Parse JSON output.
@@ -345,7 +345,7 @@ Use script-generated ID projection only.
 Primary path:
 
 ```bash
-python3 .orderspec/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" get "" spec-ids
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" get "" spec-ids
 ```
 
 If this command is unsupported by the local script but `extract-spec-ids` succeeded, read:
@@ -821,8 +821,8 @@ If auto-fix is applied:
 3. Rerun:
 
    ```bash
-   python3 .orderspec/scripts/traceability.py --feature-dir "$FEATURE_DIR" extract-spec-ids
-   python3 .orderspec/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" validate --stage spec --json
+   python3 .orderspec/framework/scripts/traceability.py --feature-dir "$FEATURE_DIR" extract-spec-ids
+   python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" validate --stage spec --json
    ```
 
 4. Refresh script-generated ID inventory.

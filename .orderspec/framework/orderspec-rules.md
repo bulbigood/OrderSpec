@@ -37,7 +37,7 @@ On conflict, the higher layer wins.
 Framework-owned files live under:
 
 - `.orderspec/framework/`
-- `.orderspec/scripts/`
+- `.orderspec/framework/scripts/`
 - `.orderspec/tests/`
 
 Framework configuration lives under:
@@ -69,7 +69,7 @@ No OrderSpec-generated artifact is written to the repository root. Everything li
 | Artifact | Owner | Notes |
 |---|---|---|
 | `.orderspec/framework/**` | Framework developer | Operator MUST NOT customize for project-specific rules. |
-| `.orderspec/scripts/**` | Framework developer | Deterministic framework utilities. |
+| `.orderspec/framework/scripts/**` | Framework developer | Deterministic framework utilities. |
 | `.orderspec/tests/**` | Framework developer | Framework regression tests. |
 | `.orderspec/config/**` | Framework commands / operator config | Mutable configuration. |
 | `.orderspec/state/**` | Framework runtime | Generated runtime state. Do not edit manually unless recovering state. |
@@ -122,7 +122,7 @@ Commands MUST NOT mutate files before completing read-only mode detection unless
 Commands MUST resolve their command-specific context at command start with:
 
 ```bash
-python3 .orderspec/scripts/command_context.py resolve <order.command> --json
+python3 .orderspec/framework/scripts/command_context.py resolve <order.command> --json
 ```
 
 The resolver output is the only canonical source of command preload context.
@@ -147,7 +147,7 @@ The manifest format is defined for framework tooling by:
 
 - `.orderspec/framework/schemas/command-context.schema.json`
 
-Agents do not manually validate the manifest against this schema. Agents rely on `.orderspec/scripts/command_context.py` resolver output.
+Agents do not manually validate the manifest against this schema. Agents rely on `.orderspec/framework/scripts/command_context.py` resolver output.
 
 Each resolved item includes `usage`, which defines how the command must treat the file:
 
@@ -200,7 +200,7 @@ If extension execution is introduced later, it MUST be implemented through a det
 
 ## Deterministic Script Authority
 
-Framework scripts under `.orderspec/scripts/` are deterministic framework utilities.
+Framework scripts under `.orderspec/framework/scripts/` are deterministic framework utilities.
 
 When a command-specific prompt instructs an agent to run a framework script, the script output is authoritative for that command step.
 
@@ -298,11 +298,11 @@ This file is runtime state. It is the source of truth for:
 - Per-agent detection info (config paths, prompts directory, symlink support)
 - Per-agent sync state (last sync timestamp, copied/skipped prompt files)
 
-The file MUST NOT be edited manually. Use `.orderspec/scripts/agents_sync.py` to manage it.
+The file MUST NOT be edited manually. Use `.orderspec/framework/scripts/agents_sync.py` to manage it.
 
 ### Sync Orchestrator
 
-The sync orchestrator is at `.orderspec/scripts/agents_sync.py`.
+The sync orchestrator is at `.orderspec/framework/scripts/agents_sync.py`.
 
 It provides four subcommands:
 
@@ -466,7 +466,7 @@ Feature resolution order:
 2. Active feature from `.orderspec/state/active-feature.json`.
 3. Operator clarification question.
 
-Commands SHOULD use `.orderspec/scripts/active_feature.py` when available.
+Commands SHOULD use `.orderspec/framework/scripts/active_feature.py` when available.
 
 Never silently choose a feature when multiple candidates match. Ask the operator or use `active_feature.py select`, which rejects ambiguous references.
 
@@ -511,7 +511,7 @@ When no feature is active, the state uses this shape:
 Select an existing feature by ID, feature directory, directory name, or unambiguous short prefix:
 
 ```bash
-python3 .orderspec/scripts/active_feature.py select <feature-id-or-directory> \
+python3 .orderspec/framework/scripts/active_feature.py select <feature-id-or-directory> \
   --last-command <order.command> \
   --json
 ```
@@ -519,7 +519,7 @@ python3 .orderspec/scripts/active_feature.py select <feature-id-or-directory> \
 Set a feature explicitly:
 
 ```bash
-python3 .orderspec/scripts/active_feature.py set \
+python3 .orderspec/framework/scripts/active_feature.py set \
   --feature-id <feature_id> \
   --feature-directory <feature_directory> \
   --status <status> \
@@ -530,7 +530,7 @@ python3 .orderspec/scripts/active_feature.py set \
 Clear active feature:
 
 ```bash
-python3 .orderspec/scripts/active_feature.py clear \
+python3 .orderspec/framework/scripts/active_feature.py clear \
   --last-command <order.command> \
   --json
 ```
@@ -538,13 +538,13 @@ python3 .orderspec/scripts/active_feature.py clear \
 Validate active feature state:
 
 ```bash
-python3 .orderspec/scripts/active_feature.py validate --json
+python3 .orderspec/framework/scripts/active_feature.py validate --json
 ```
 
 List discovered features:
 
 ```bash
-python3 .orderspec/scripts/active_feature.py list --json
+python3 .orderspec/framework/scripts/active_feature.py list --json
 ```
 
 ### Status values
@@ -578,5 +578,5 @@ Only `.orderspec/state/active-feature.json` stores active feature state.
 
 Do not create secondary active-feature source-of-truth files.
 Do not treat generated files as source of truth.
-Do not update active feature state by hand when `.orderspec/scripts/active_feature.py` is available.
+Do not update active feature state by hand when `.orderspec/framework/scripts/active_feature.py` is available.
 <!-- orderspec-active-feature-protocol:end -->

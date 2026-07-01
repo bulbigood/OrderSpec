@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """run_all_tests.py — master test runner for OrderSpec scripts.
 
-Recursively discovers and runs all test files in .orderspec/scripts/test/.
+Recursively discovers and runs all test files in .orderspec/framework/scripts/test/.
 Aggregates results and exits non-zero if any test failed.
 """
 

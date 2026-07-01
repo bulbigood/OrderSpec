@@ -40,7 +40,7 @@ Before starting command-specific logic:
 1. Resolve command context:
 
    ```bash
-   python3 .orderspec/scripts/command_context.py resolve order.bootstrap --json
+   python3 .orderspec/framework/scripts/command_context.py resolve order.bootstrap --json
    ```
 
 2. If `ok` is `false` or `missing_required` is non-empty, STOP and report the missing required context.
@@ -78,7 +78,7 @@ State the detected mode in one line before proceeding.
 For weak-model reliability, Init Mode MUST delegate mechanical creation and validation to:
 
 ```bash
-.orderspec/scripts/bootstrap_contracts.py
+.orderspec/framework/scripts/bootstrap_contracts.py
 ```
 
 The model MUST NOT hand-write `stack.md`, `architecture.md`, `conventions.md`, or `constitution.md` during Init Mode.
@@ -88,12 +88,12 @@ The model MUST NOT hand-write `stack.md`, `architecture.md`, `conventions.md`, o
 Before Init Mode file creation, verify:
 
 ```bash
-test -f .orderspec/scripts/bootstrap_contracts.py || echo "MISSING: bootstrap_contracts.py"
+test -f .orderspec/framework/scripts/bootstrap_contracts.py || echo "MISSING: bootstrap_contracts.py"
 ```
 
 If missing → STOP and report:
 
-> Bootstrap script not found. Restore `.orderspec/scripts/bootstrap_contracts.py` from the OrderSpec distribution.
+> Bootstrap script not found. Restore `.orderspec/framework/scripts/bootstrap_contracts.py` from the OrderSpec distribution.
 
 Do not manually create project contracts unless the user explicitly requests emergency manual fallback.
 
@@ -104,7 +104,7 @@ Execute Init Mode in this exact order:
 1. Run:
 
    ```bash
-   python3 .orderspec/scripts/bootstrap_contracts.py inspect --json
+   python3 .orderspec/framework/scripts/bootstrap_contracts.py inspect --json
    ```
 
 2. Parse the JSON output.
@@ -116,7 +116,7 @@ Execute Init Mode in this exact order:
 6. Run:
 
    ```bash
-   python3 .orderspec/scripts/bootstrap_contracts.py init      --gate-profile <A|B|C>      --json
+   python3 .orderspec/framework/scripts/bootstrap_contracts.py init      --gate-profile <A|B|C>      --json
    ```
 
    Include `--test-command "<command>"` and `--lint-command "<command>"` when applicable.
@@ -124,7 +124,7 @@ Execute Init Mode in this exact order:
 7. Run:
 
    ```bash
-   python3 .orderspec/scripts/bootstrap_contracts.py validate --json
+   python3 .orderspec/framework/scripts/bootstrap_contracts.py validate --json
    ```
 
 8. If `init` or `validate` exits non-zero, STOP and report the script JSON. Do not repair generated files manually.
@@ -173,7 +173,7 @@ This phase runs in **both Init and Amend modes**. On Amend, it re-syncs all enab
 ### Step 1 — Detect installed agents
 
 ```bash
-python3 .orderspec/scripts/agents_sync.py detect --json
+python3 .orderspec/framework/scripts/agents_sync.py detect --json
 ```
 
 Parse the JSON output. Filter to agents where `detected` is `true`.
@@ -232,7 +232,7 @@ Validate that each requested agent ID was detected. If user requests an agent th
 Run the synchronization script with the determined agent list:
 
 ```bash
-python3 .orderspec/scripts/agents_sync.py sync --agents <agent_id1> <agent_id2> ... --json
+python3 .orderspec/framework/scripts/agents_sync.py sync --agents <agent_id1> <agent_id2> ... --json
 ```
 
 Parse the JSON output. Check for:
@@ -408,7 +408,7 @@ ls -la .orderspec/skills/
 You MUST NOT edit `.orderspec/config/tooling.json` manually. Use the deterministic script:
 
 ```bash
-python3 .orderspec/scripts/tooling_config.py add-binding \
+python3 .orderspec/framework/scripts/tooling_config.py add-binding \
   --stack-id STACK-006 \
   --technology "Express" \
   --skills "nodejs-express-server,express-oauth2-jwt-bearer" \
@@ -429,7 +429,7 @@ mv ~/.agents/skills/<skill-name> .orderspec/skills/<skill-name>
 
 If `context7` is available, ensure it is configured as required:
 ```bash
-python3 .orderspec/scripts/tooling_config.py set-docs-policy \
+python3 .orderspec/framework/scripts/tooling_config.py set-docs-policy \
   --source context7 \
   --policy required_if_available \
   --commands "order.plan,order.tasks,order.code" \
@@ -450,7 +450,7 @@ Rules:
 Before reporting, run:
 
 ```bash
-python3 .orderspec/scripts/validate_tooling.py --json
+python3 .orderspec/framework/scripts/validate_tooling.py --json
 ```
 
 If `ok` is `false`:
@@ -492,7 +492,7 @@ This phase respects the **External Rules Integration Policy** defined in `consti
 ```bash
 # Get enabled agents from state
 ENABLED_AGENTS=$(python3 -c "import json; s=json.load(open('.orderspec/state/agents.json')); print(' '.join(s.get('enabled_agents', [])))")
-python3 .orderspec/scripts/agents_sync.py read-rules --agents $ENABLED_AGENTS --json
+python3 .orderspec/framework/scripts/agents_sync.py read-rules --agents $ENABLED_AGENTS --json
 ```
 
 Parse the JSON output. Collect `combined_files` and `combined_contents`.
@@ -776,7 +776,7 @@ After applying the requested change, re-synchronize agents to ensure prompt upda
 ENABLED_AGENTS=$(python3 -c "import json; s=json.load(open('.orderspec/state/agents.json')); print(' '.join(s.get('enabled_agents', [])))" 2>/dev/null)
 
 if [ -n "$ENABLED_AGENTS" ]; then
-    python3 .orderspec/scripts/agents_sync.py sync --agents $ENABLED_AGENTS --json
+    python3 .orderspec/framework/scripts/agents_sync.py sync --agents $ENABLED_AGENTS --json
 else
     echo '{"sync_results": [], "warnings": ["No agents enabled — run bootstrap to configure agent support"]}'
 fi
@@ -871,10 +871,10 @@ No operator-defined post-execution extension phases are supported in the current
 
 - [ ] Command context resolved via `command_context.py` and every `to_read` file was read
 - [ ] Mode detected and stated
-- [ ] Init Mode: `.orderspec/scripts/bootstrap_contracts.py inspect --json` was run
+- [ ] Init Mode: `.orderspec/framework/scripts/bootstrap_contracts.py inspect --json` was run
 - [ ] Init Mode: required gate question was asked when `requires_gate_question` was true
-- [ ] Init Mode: `.orderspec/scripts/bootstrap_contracts.py init ... --json` was run
-- [ ] Init Mode: `.orderspec/scripts/bootstrap_contracts.py validate --json` succeeded
+- [ ] Init Mode: `.orderspec/framework/scripts/bootstrap_contracts.py init ... --json` was run
+- [ ] Init Mode: `.orderspec/framework/scripts/bootstrap_contracts.py validate --json` succeeded
 - [ ] All targeted bootstrap-owned artifacts created or amended
 - [ ] `.orderspec/config/tooling.json` is valid JSON with `version: 2`, `skills.bindings` array, and `docs_sources` object
 - [ ] IDs are append-only, no duplicates, tombstoned on removal

@@ -36,7 +36,7 @@ and reads its gate verdict):
 ```bash
 FEATURE_DIR="$(jq -r '.feature_directory' .orderspec/feature.json)"
 
-python3 .orderspec/scripts/upstream_gate.py \
+python3 .orderspec/framework/scripts/upstream_gate.py \
   --report        "$FEATURE_DIR/tasks-report.md" \
   --artifact      "$FEATURE_DIR/tasks.md" \
   --upstream-name "tasks.md" \
@@ -98,7 +98,7 @@ Before writing or changing code that uses a framework/library:
 
 ## Outline
 
-1. **Setup**: Run `python3 .orderspec/scripts/setup.py code --json` from repo root; parse FEATURE_DIR and AVAILABLE_DOCS. All paths absolute. For single quotes in args use `'I'\''m Groot'` or double quotes.
+1. **Setup**: Run `python3 .orderspec/framework/scripts/setup.py code --json` from repo root; parse FEATURE_DIR and AVAILABLE_DOCS. All paths absolute. For single quotes in args use `'I'\''m Groot'` or double quotes.
 
 2. **Gate reports** (if report files exist in `FEATURE_DIR/`):
    - For each checklist file count total (`- [ ]`, `- [x]`, `- [X]`), completed (`- [x]`/`- [X]`), incomplete (`- [ ]`) items; render a status table (Checklist | Total | Completed | Incomplete | Status).

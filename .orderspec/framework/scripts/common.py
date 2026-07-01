@@ -89,7 +89,7 @@ def get_repo_root():
       1. Search upward for a directory containing `.orderspec/`.
       2. `ORDERSPEC_ROOT` environment variable.
       3. Two levels up from this script's location
-         (repo/.orderspec/scripts/ → repo).
+         (repo/.orderspec/framework/scripts/ → repo).
     """
     root = find_orderspec_root()
     if root is not None:

@@ -51,7 +51,7 @@ the deterministic guard (it checks that `plan.md` exists and reads its gate verd
 FEATURE_DIR="$(jq -r '.feature_directory' .orderspec/feature.json)"
 FEATURE="$(basename "$FEATURE_DIR")"
 
-python3 .orderspec/scripts/upstream_gate.py \
+python3 .orderspec/framework/scripts/upstream_gate.py \
   --report        "$FEATURE_DIR/plan-report.md" \
   --artifact      "$FEATURE_DIR/plan.md" \
   --upstream-name "plan.md" \
@@ -135,7 +135,7 @@ Before deriving tasks:
 
 ## Outline
 
-1. **Setup**: Run `python3 .orderspec/scripts/setup.py tasks --json` from repo root; parse
+1. **Setup**: Run `python3 .orderspec/framework/scripts/setup.py tasks --json` from repo root; parse
    FEATURE_DIR, TASKS_TEMPLATE, AVAILABLE_DOCS (absolute paths). For single quotes in args
    use `'I'\''m Groot'` or double quotes.
 
@@ -148,7 +148,7 @@ Before deriving tasks:
    cover live in `mechanisms.tsv`, not in your recollection of the spec:
 
    ```bash
-   python3 .orderspec/scripts/traceability.py get "$FEATURE" mechanisms
+   python3 .orderspec/framework/scripts/traceability.py get "$FEATURE" mechanisms
    ```
 
    This emits `spec_id  coverage_kind  mechanism  primary_files  test_type`. Obey `coverage_kind`
@@ -276,7 +276,7 @@ Before deriving tasks:
 6. **Prove coverage with the tool — do not eyeball it.** After writing `tasks.md`:
 
    ```bash
-   python3 .orderspec/scripts/traceability.py extract-trace "$FEATURE"
+   python3 .orderspec/framework/scripts/traceability.py extract-trace "$FEATURE"
    rc=$?
    ```
 
@@ -285,7 +285,7 @@ Before deriving tasks:
      Then render the human mirror:
 
      ```bash
-     python3 .orderspec/scripts/traceability.py render "$FEATURE"
+     python3 .orderspec/framework/scripts/traceability.py render "$FEATURE"
      ```
 
    - **rc ≠ 0** → read the tool's stderr; it names the exact defect, e.g.:

@@ -28,7 +28,7 @@ Commands MUST NOT independently decide to preload tooling files.
 Preloaded tooling files MUST come from:
 
 ```bash
-python3 .orderspec/scripts/command_context.py resolve <order.command> --json
+python3 .orderspec/framework/scripts/command_context.py resolve <order.command> --json
 ```
 
 Agents MUST read tooling files returned in `to_read` according to their resolved `usage` and `authority`.

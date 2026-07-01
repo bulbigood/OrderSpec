@@ -145,7 +145,7 @@ The `Run` line is a copy-pasteable instruction to the owner. It is a recommendat
 
 ### 1. Initialize
 
-Run `.orderspec/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks`
+Run `.orderspec/framework/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks`
 once from repo root; parse FEATURE_DIR and AVAILABLE_DOCS. Derive these
 **feature-relative** paths (under FEATURE_DIR):
   SPEC   = `FEATURE_DIR/spec.md`

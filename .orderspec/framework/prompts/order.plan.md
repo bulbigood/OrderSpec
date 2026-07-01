@@ -83,7 +83,7 @@ As you execute this command in agentic mode, maintain a Markdown To-Do list in r
 Before any gate or setup that may write files, resolve the active feature using the Python path resolver. Do **not** use `jq` or any external dependency.
 
 ```bash
-PATHS_JSON="$(python3 .orderspec/scripts/setup.py paths --json)"
+PATHS_JSON="$(python3 .orderspec/framework/scripts/setup.py paths --json)"
 FEATURE_DIR="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_DIR"])' <<< "$PATHS_JSON")"
 FEATURE_SPEC="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_SPEC"])' <<< "$PATHS_JSON")"
 IMPL_PLAN="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["IMPL_PLAN"])' <<< "$PATHS_JSON")"
@@ -120,7 +120,7 @@ A plan must not ignore a known failed upstream contract gate. Gates are optional
 Run:
 
 ```bash
-PATHS_JSON="$(python3 .orderspec/scripts/setup.py paths --json)"
+PATHS_JSON="$(python3 .orderspec/framework/scripts/setup.py paths --json)"
 FEATURE_DIR="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_DIR"])' <<< "$PATHS_JSON")"
 FEATURE_SPEC="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_SPEC"])' <<< "$PATHS_JSON")"
 
@@ -129,7 +129,7 @@ case "$ARGUMENTS" in
   *"--force"*) FORCE_FLAG="--force" ;;
 esac
 
-python3 .orderspec/scripts/upstream_gate.py \
+python3 .orderspec/framework/scripts/upstream_gate.py \
   --report        "$FEATURE_DIR/spec-report.md" \
   --artifact      "$FEATURE_SPEC" \
   --upstream-name "spec.md" \
@@ -184,7 +184,7 @@ To build the plan anyway (NOT recommended), re-run with --force.
 Before regenerating `plan.md`, check whether a previous `/order.plan-check` report exists.
 
 ```bash
-PATHS_JSON="$(python3 .orderspec/scripts/setup.py paths --json)"
+PATHS_JSON="$(python3 .orderspec/framework/scripts/setup.py paths --json)"
 FEATURE_DIR="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_DIR"])' <<< "$PATHS_JSON")"
 SELF_REPORT="$FEATURE_DIR/plan-report.md"
 test -e "$SELF_REPORT" && echo "SELF_REPORT_PRESENT" || echo "SELF_REPORT_ABSENT"
@@ -234,7 +234,7 @@ Hard rules:
 - The only writer of `mechanisms.tsv` is:
 
   ```bash
-  python3 .orderspec/scripts/traceability.py put-mechanisms "$FEATURE"
+  python3 .orderspec/framework/scripts/traceability.py put-mechanisms "$FEATURE"
   ```
 
 - `put-mechanisms` prepends the contract header, lints rows, and writes atomically.
@@ -339,7 +339,7 @@ Before producing implementation strategy:
 Run setup with template refresh. `plan.md` is regenerable; do not patch stale generated prose.
 
 ```bash
-SETUP_JSON="$(python3 .orderspec/scripts/setup.py plan --json --refresh-template)"
+SETUP_JSON="$(python3 .orderspec/framework/scripts/setup.py plan --json --refresh-template)"
 FEATURE_DIR="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_DIR"])' <<< "$SETUP_JSON")"
 FEATURE_SPEC="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_SPEC"])' <<< "$SETUP_JSON")"
 IMPL_PLAN="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["IMPL_PLAN"])' <<< "$SETUP_JSON")"
@@ -361,15 +361,15 @@ Read:
 Read registered spec IDs from machine state:
 
 ```bash
-python3 .orderspec/scripts/traceability.py get "$FEATURE" spec-ids
+python3 .orderspec/framework/scripts/traceability.py get "$FEATURE" spec-ids
 ```
 
 If this fails because `spec-ids.tsv` is missing, recover mechanically:
 
 ```bash
-python3 .orderspec/scripts/traceability.py init "$FEATURE"
-python3 .orderspec/scripts/traceability.py extract-spec-ids "$FEATURE"
-python3 .orderspec/scripts/traceability.py get "$FEATURE" spec-ids
+python3 .orderspec/framework/scripts/traceability.py init "$FEATURE"
+python3 .orderspec/framework/scripts/traceability.py extract-spec-ids "$FEATURE"
+python3 .orderspec/framework/scripts/traceability.py get "$FEATURE" spec-ids
 ```
 
 Do not hand-write or hand-read `spec-ids.tsv`.
@@ -594,7 +594,7 @@ printf '%s\n' \
   "AC-001	delegated:IF-001	acceptance covered through IF-001 integration path	src/routes/auth.route.js	integration" \
   "INV-001	direct	unique active session check in persistence adapter	src/models/session.model.js	integration" \
   "NFR-001	documented	performance budget noted for implementer; no executable assertion	plan.md	documented" \
-| python3 .orderspec/scripts/traceability.py put-mechanisms "$FEATURE"
+| python3 .orderspec/framework/scripts/traceability.py put-mechanisms "$FEATURE"
 ```
 
 Rows must contain literal tabs between fields.
@@ -609,8 +609,8 @@ If `put-mechanisms` exits non-zero:
 Then run:
 
 ```bash
-python3 .orderspec/scripts/traceability.py lint "$FEATURE"
-python3 .orderspec/scripts/traceability.py check-mechanisms "$FEATURE"
+python3 .orderspec/framework/scripts/traceability.py lint "$FEATURE"
+python3 .orderspec/framework/scripts/traceability.py check-mechanisms "$FEATURE"
 ```
 
 Both must pass before completion.
@@ -620,15 +620,15 @@ Both must pass before completion.
 Run:
 
 ```bash
-python3 .orderspec/scripts/traceability.py check-plan "$FEATURE"
-python3 .orderspec/scripts/traceability.py validate --stage plan "$FEATURE"
-python3 .orderspec/scripts/traceability.py summarize-mechanisms --json "$FEATURE"
+python3 .orderspec/framework/scripts/traceability.py check-plan "$FEATURE"
+python3 .orderspec/framework/scripts/traceability.py validate --stage plan "$FEATURE"
+python3 .orderspec/framework/scripts/traceability.py summarize-mechanisms --json "$FEATURE"
 ```
 
 If `validate` supports JSON in your environment, prefer:
 
 ```bash
-python3 .orderspec/scripts/traceability.py validate --json --stage plan "$FEATURE"
+python3 .orderspec/framework/scripts/traceability.py validate --json --stage plan "$FEATURE"
 ```
 
 Blocking findings:
