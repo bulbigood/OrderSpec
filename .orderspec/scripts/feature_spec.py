@@ -21,7 +21,7 @@ Canonical mapping:
 
 /order.spec remains the owner of spec.md contract content.
 active_feature.py remains the owner of active-feature runtime state.
-traceability.py remains the owner of feature .orderspec-state traceability files.
+traceability.py remains the owner of feature .state traceability files.
 """
 
 from __future__ import annotations

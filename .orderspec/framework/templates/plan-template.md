@@ -146,7 +146,7 @@ The machine-readable mechanism matrix is **not authored in this document**.
 Mechanism decisions for `REQ`, `IF`, `AC`, `EDGE`, `INV`, and `NFR` IDs are stored in:
 
 ```text
-.orderspec-state/mechanisms.tsv
+.state/mechanisms.tsv
 ```
 
 This file is written only by:

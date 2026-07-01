@@ -352,7 +352,7 @@ python3 .orderspec/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR
 If this command is unsupported by the local script but `extract-spec-ids` succeeded, read:
 
 ```text
-$FEATURE_DIR/.orderspec-state/spec-ids.tsv
+$FEATURE_DIR/.state/spec-ids.tsv
 ```
 
 This is allowed only as reading the script-generated projection artifact. Do not count IDs directly from `spec.md`.

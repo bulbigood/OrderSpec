@@ -31,8 +31,8 @@ It MUST NOT edit:
 - `spec.md`;
 - `plan.md`;
 - `tasks.md`;
-- `.orderspec-state/spec-ids.tsv`;
-- `.orderspec-state/mechanisms.tsv`;
+- `.state/spec-ids.tsv`;
+- `.state/mechanisms.tsv`;
 - source code.
 
 All plan content changes are owned by `/order.plan`.  
@@ -54,7 +54,7 @@ This gate validates only `plan.md` as derived from:
 
 - `spec.md`;
 - repository reconnaissance;
-- machine state in `.orderspec-state/`.
+- machine state in `.state/`.
 
 It does not validate task ordering, implementation code, or repo drift over time.
 
@@ -75,10 +75,10 @@ This prompt assumes Configuration B:
 - This gate reads mechanisms from:
 
   ```text
-  <feature-dir>/.orderspec-state/mechanisms.tsv
+  <feature-dir>/.state/mechanisms.tsv
   ```
 
-Do not ask the user to manually edit `.orderspec-state/*.tsv`.
+Do not ask the user to manually edit `.state/*.tsv`.
 
 ## Boundaries
 
@@ -254,7 +254,7 @@ Read:
 - `plan.md`;
 - `.orderspec/memory/constitution.md` if present;
 - `.orderspec/templates/report-template.md` if present;
-- `.orderspec-state/mechanisms.tsv` through scripts, not by hand-editing;
+- `.state/mechanisms.tsv` through scripts, not by hand-editing;
 - `spec-ids.tsv` through scripts, not by hand-editing.
 
 Run:
@@ -403,7 +403,7 @@ Examples:
 Expected Configuration B text:
 
 - `Mechanism Matrix` section is a notice only.
-- It points to `.orderspec-state/mechanisms.tsv`.
+- It points to `.state/mechanisms.tsv`.
 - It does not mirror mechanism rows.
 
 ## P2. Role Purity

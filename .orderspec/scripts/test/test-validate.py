@@ -35,7 +35,7 @@ SPECS_ROOT.mkdir(parents=True, exist_ok=True)
 
 F = f".test-validate-{os.getpid()}"
 SPECS = SPECS_ROOT / F
-SDIR = SPECS / ".orderspec-state"
+SDIR = SPECS / ".state"
 
 pass_count = 0
 fail_count = 0

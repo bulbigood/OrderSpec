@@ -59,7 +59,7 @@ def find_orderspec_root(start_dir=None):
 
     Returns the Path or None if not found.
 
-    NOTE: Feature-level state directories are named `.orderspec-state` (not
+    NOTE: Feature-level state directories are named `.state` (not
     `.orderspec`) precisely so that this function does not mistake a feature
     directory for the repo root. Do not rename feature state dirs back to
     `.orderspec` — it will break root resolution.

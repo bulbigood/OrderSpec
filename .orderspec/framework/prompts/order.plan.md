@@ -24,7 +24,7 @@ Properties:
 - **Regenerable**: derived from `spec.md` + actual repository state. If the repo changes, re-run this command. Do not edit `spec.md` to fit the code.
 - **Non-duplicating**: reference stable Spec IDs (`REQ-`, `IF-`, `AC-`, `INV-`, `EDGE-`, `NFR-`, `CON-`) instead of copying contract text. Do not restate the Executive Summary. Do not redraw spec logical diagrams.
 - **Concrete**: exact repo-relative files, verified stack facts, verified test/build commands, and physical implementation mapping.
-- **Mechanism-aware**: implementation mechanism decisions are written to machine state (`.orderspec-state/mechanisms.tsv`) through `traceability.py put-mechanisms`, not mirrored as a Markdown table in `plan.md`.
+- **Mechanism-aware**: implementation mechanism decisions are written to machine state (`.state/mechanisms.tsv`) through `traceability.py put-mechanisms`, not mirrored as a Markdown table in `plan.md`.
 
 `spec.md` remains the source of truth for **WHAT** and logical architecture. `plan.md` is a repo snapshot for **WHERE/HOW**.
 
@@ -219,7 +219,7 @@ After successful write and successful self-checks, if a BLOCK/ROUTING REQUIRED r
 Mechanism decisions for this feature live in machine state:
 
 ```text
-<feature-dir>/.orderspec-state/mechanisms.tsv
+<feature-dir>/.state/mechanisms.tsv
 ```
 
 They do **not** live as a table inside `plan.md`.

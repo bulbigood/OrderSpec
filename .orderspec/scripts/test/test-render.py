@@ -35,7 +35,7 @@ SPECS_ROOT.mkdir(parents=True, exist_ok=True)
 
 F = f".test-render-{os.getpid()}"
 SPECS = SPECS_ROOT / F
-SDIR = SPECS / ".orderspec-state"
+SDIR = SPECS / ".state"
 TAB = "\t"
 
 pass_count = 0
