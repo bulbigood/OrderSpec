@@ -352,6 +352,7 @@ A typical OrderSpec-enabled project contains:
     │   ├── command_context.py
     │   ├── bootstrap_contracts.py
     │   ├── agents_sync.py                 ← multi-agent orchestrator
+    |   ├── run_all_tests.py               ← run all tests from test/
     │   └── test/
     │       ├── test-command-context.py
     │       ├── test-bootstrap-contracts.py
