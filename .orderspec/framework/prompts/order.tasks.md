@@ -1,4 +1,8 @@
 ---
+orderspec:
+  artifact: command_prompt
+  command: order.tasks
+  phase: tasks
 description: Generate a disposable, Expand-Migrate-Contract ordered tasks.md from spec.md (IDs) and plan.md (paths). Sequential phases are the backbone; parallelism is an optional annotation. Coverage is proven by the deterministic traceability tool, never hand-built.
 handoffs:
   - label: Analyze For Consistency

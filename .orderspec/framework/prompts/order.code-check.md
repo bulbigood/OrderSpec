@@ -1,4 +1,8 @@
 ---
+orderspec:
+  artifact: command_prompt
+  command: order.code-check
+  phase: check
 description: Terminal verification gate — the only gate that inspects executable CODE rather than a Markdown artifact, and the only one with NO write permission of any kind (zero auto-fix; everything is Route). Verifies that the written/merged code faithfully implements the contract (spec AC/INV/§12 + plan mechanisms). Test execution, compilation, and builds are CONSTITUTION-GATED capabilities: the gate runs them ONLY when the constitution explicitly permits, and degrades to static inspection otherwise (silence means deny; it never violates governance to gather evidence). Where permitted, tests are the primary oracle; otherwise it spot-checks code against obligations directly. Operates whole-tree or on a git delta (PR / merged branch). It ALWAYS writes a report file (every run, every verdict) so that "no file" unambiguously means "the gate did not run". Routes code defects to /order.code, contract-root defects to /order.spec/.plan, and cross-artifact desync to /order.sync-check. Linting/style is out of scope — wire it as an after_code_check hook.
 ---
 

@@ -126,6 +126,13 @@
       "reason": "framework version and schema versions",
       "usage": "parse",
       "authority": "framework"
+    },
+    "schema.orderspec_meta": {
+      "path": ".orderspec/framework/schemas/orderspec-meta.schema.json",
+      "kind": "schema",
+      "reason": "orderspec.json validation schema",
+      "usage": "parse",
+      "authority": "framework"
     }
   },
   "groups": {

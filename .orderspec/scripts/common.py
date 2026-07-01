@@ -22,6 +22,8 @@ FRAMEWORK_PROTOCOLS_DIR = FRAMEWORK_DIR / "protocols"
 FRAMEWORK_SCHEMAS_DIR = FRAMEWORK_DIR / "schemas"
 FRAMEWORK_RULES = FRAMEWORK_DIR / "orderspec-rules.md"
 
+ORDERSPEC_JSON = ORDERSPEC_DIR / "orderspec.json"
+
 CONFIG_DIR = ORDERSPEC_DIR / "config"
 TEMPLATE_OVERRIDES_DIR = CONFIG_DIR / "templates" / "overrides"
 HOOKS_CONFIG = CONFIG_DIR / "hooks.yml"
@@ -98,6 +100,62 @@ def get_repo_root():
         return Path(env_root).resolve()
 
     return script_dir().parent.parent
+
+
+# ── framework metadata ───────────────────────────────────────────────────────
+
+def load_orderspec_meta(repo_root=None):
+    """Load and return the parsed contents of orderspec.json.
+
+    Returns a dict. Raises FileNotFoundError if the file is missing,
+    ValueError if it is not valid JSON or not a dict.
+    """
+    root = Path(repo_root) if repo_root else get_repo_root()
+    path = root / ORDERSPEC_JSON
+    if not path.exists():
+        raise FileNotFoundError(f"orderspec.json not found: {path}")
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError) as exc:
+        raise ValueError(f"orderspec.json invalid: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError("orderspec.json must be a JSON object")
+    return data
+
+
+def get_framework_version(repo_root=None):
+    """Return framework_version string from orderspec.json.
+
+    Raises FileNotFoundError / ValueError on missing or malformed file.
+    Raises KeyError if framework_version is absent.
+    """
+    meta = load_orderspec_meta(repo_root)
+    version = meta.get("framework_version")
+    if not isinstance(version, str) or not version:
+        raise KeyError("framework_version missing or empty in orderspec.json")
+    return version
+
+
+def get_schema_version(schema_name, repo_root=None):
+    """Return an integer schema version for the given schema_name.
+
+    schema_name must be a key in orderspec.json → schema_versions
+    (e.g. "frontmatter", "artifacts", "lifecycle", "traceability").
+
+    Raises FileNotFoundError / ValueError on missing or malformed file.
+    Raises KeyError if schema_name is absent.
+    """
+    meta = load_orderspec_meta(repo_root)
+    versions = meta.get("schema_versions")
+    if not isinstance(versions, dict):
+        raise KeyError("schema_versions missing or not an object in orderspec.json")
+    if schema_name not in versions:
+        raise KeyError(
+            f"Schema '{schema_name}' not in orderspec.json schema_versions. "
+            f"Available: {sorted(versions.keys())}"
+        )
+    return versions[schema_name]
 
 
 # ── feature state ────────────────────────────────────────────────────────────

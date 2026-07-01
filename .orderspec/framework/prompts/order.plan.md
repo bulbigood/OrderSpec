@@ -1,4 +1,8 @@
 ---
+orderspec:
+  artifact: command_prompt
+  command: order.plan
+  phase: plan
 description: Map the spec's logical architecture onto the current repository state — physical structure, verified stack, path manifest, and mechanism machine state.
 handoffs:
   - label: Create Tasks

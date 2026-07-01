@@ -2,7 +2,6 @@
 orderspec:
   artifact: command_prompt
   command: order.spec-check
-  prompt_version: "0.3.0"
   phase: check
 description: Per-stage gate validating spec.md for coverage, internal integrity, and contract completeness. Pure inspector; routes contractual changes to /order.spec and writes a report on every run.
 ---
@@ -869,7 +868,6 @@ Report order:
 Use the template file `.orderspec/framework/templates/report-template.md` which contains the YAML frontmatter. Fill the variables with actual values.
 
 The `generator.model` field MUST be set to the identifier of the AI model currently running this gate (e.g., `kilo/moe-medium`, `claude-3.5-sonnet`).
-The `generator.prompt_version` MUST be the exact value from the `orderspec.prompt_version` field in this prompt's YAML frontmatter.
 
 ### Auto-Fixed
 

@@ -297,7 +297,6 @@ write_spec_content(
     "    conventions: \"conventions.md\"\n"
     "  generator:\n"
     "    command: order.spec\n"
-    "    prompt_version: \"1.0.0\"\n"
     "    model_tier: \"medium\"\n"
     "---\n"
     "# Test Spec\n"

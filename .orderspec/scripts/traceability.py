@@ -38,7 +38,11 @@ except ImportError:
     ACTIVE_FEATURE_STATE = Path(".orderspec") / "state" / "active-feature.json"
     FEATURES_DIR = Path(".orderspec") / "features"
 
-SCHEMA_VERSION = "v1"
+try:
+    from common import get_schema_version
+    SCHEMA_VERSION = f"v{get_schema_version('traceability')}"
+except Exception:
+    SCHEMA_VERSION = "v1"
 TAB = "\t"
 
 FEATURE_STATE_DIRNAME = ".state"

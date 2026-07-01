@@ -1,4 +1,8 @@
 ---
+orderspec:
+  artifact: command_prompt
+  command: order.tasks-check
+  phase: check
 description: Per-stage inspector gate validating tasks.md as a faithful, well-ordered projection of plan.md. The deterministic traceability tool (extract-trace, Variant C) already proves coverage/cap/subset-binding/no-documented/no-delegated at /order.tasks time; this gate NEVER re-judges those facts. It spends its LLM context only on what no script can decide: faithfulness to plan (no invented decisions), E-M-C ordering, test-first discipline, and SC buildability. A pure inspector: it auto-fixes only mechanical/structural-per-methodology defects (ordering, GATE/verification insertion, tags, numbering) and routes everything content/coverage to /order.tasks (or /order.plan / /order.spec for upstream defects). It ALWAYS writes a report file so that "no file" unambiguously means "the gate did not run".
 ---
 

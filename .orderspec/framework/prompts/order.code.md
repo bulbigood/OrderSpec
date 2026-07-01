@@ -1,4 +1,8 @@
 ---
+orderspec:
+  artifact: command_prompt
+  command: order.code
+  phase: implement
 description: Execute tasks.md phase by phase in sequential task order, respecting [P] parallel hints, story checkpoints, and the irreversible Contract GATE.
 ---
 

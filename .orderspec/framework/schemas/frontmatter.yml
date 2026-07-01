@@ -16,7 +16,6 @@ artifact_types:
 command_prompt_required_fields:
   - orderspec.artifact
   - orderspec.command
-  - orderspec.prompt_version
   - orderspec.phase
 
 spec_required_fields:

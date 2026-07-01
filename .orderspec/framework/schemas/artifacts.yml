@@ -10,12 +10,15 @@ project_contract_id_prefixes:
   conventions: CONV
 
 framework_artifacts:
+  - orderspec.json
+  - orderspec-meta.schema.json
   - orderspec-rules.md
   - command-context.json
   - command-context.schema.json
   - artifacts.yml
   - frontmatter.yml
   - lifecycle.yml
+  - traceability.yml
   - tooling-protocol.md
   - agents-state.schema.json
 

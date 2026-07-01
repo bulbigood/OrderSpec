@@ -2,7 +2,6 @@
 orderspec:
   artifact: command_prompt
   command: order.bootstrap
-  prompt_version: "0.2.0"
   phase: bootstrap
 description: Create or amend four project-level contract documents — stack.md, architecture.md, conventions.md, and constitution.md. Infers stack and architecture from the repository on first run.
 handoffs:

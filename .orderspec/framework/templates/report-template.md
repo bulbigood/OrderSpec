@@ -2,7 +2,6 @@
 orderspec:
   artifact: gate_report
   command: "{generator_cmd}"
-  prompt_version: "{prompt_version}"
   model: "{model_name}"
   generated_at: "{DATE}"
   verdict: "{VERDICT}"

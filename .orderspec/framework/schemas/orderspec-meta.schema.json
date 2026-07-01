@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "orderspec://schemas/orderspec-meta.schema.json",
+  "title": "OrderSpec Framework Metadata",
+  "description": "Single source of truth for framework version and schema versions. Lives at .orderspec/orderspec.json",
+  "type": "object",
+  "required": ["framework_version", "schema_versions"],
+  "additionalProperties": false,
+  "properties": {
+    "framework_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "Semantic version of the OrderSpec framework"
+    },
+    "schema_versions": {
+      "type": "object",
+      "required": ["frontmatter", "artifacts", "lifecycle", "traceability"],
+      "additionalProperties": false,
+      "description": "Integer versions for each schema domain. Scripts derive their version markers from these values.",
+      "properties": {
+        "frontmatter": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Schema version for artifact frontmatter validation"
+        },
+        "artifacts": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Schema version for artifact classification and registry"
+        },
+        "lifecycle": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Schema version for lifecycle states and transitions"
+        },
+        "traceability": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Schema version for traceability TSV files and markers"
+        }
+      }
+    }
+  }
+}

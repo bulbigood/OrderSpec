@@ -1,4 +1,8 @@
 ---
+orderspec:
+  artifact: command_prompt
+  command: order.plan-check
+  phase: check
 description: Inspect plan.md as a correct, complete, role-pure physical mapping of spec.md onto the current repository. Pure inspector: detects and routes defects; writes plan-report.md every run using the shared report-template.md; does not author or edit plan/spec/tasks content.
 ---
 

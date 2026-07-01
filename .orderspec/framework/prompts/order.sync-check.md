@@ -1,4 +1,8 @@
 ---
+orderspec:
+  artifact: command_prompt
+  command: order.sync-check
+  phase: check
 description: Cross-artifact synchronization gate. NOT a pipeline stage and NOT a per-document validator — an event-triggered inspector run when something has shifted one artifact relative to the others outside the normal owner→gate flow: a merge/rebase/PR-conflict, a long-lived branch, a hand-edit, or a skipped per-stage check. A pure inspector: it detects temporal drift, cross-version ID collisions after a merge, repo-staleness of plan's physical mapping, cross-artifact contradictions, and whole-system constitution alignment, but NEVER authors content, deletes/regenerates artifacts, or merges/resolves a conflict — any reconciliation is routed to the owner. It auto-fixes only cross-artifact terminology drift and stale ID-references; routes everything source-of-truth / drift / collision / contradiction / constitution to the owning command. It ALWAYS writes a report file (every run, every verdict) so that "no file" unambiguously means "the gate did not run" — critical for the post-merge case. Mechanical traceability via validate-traceability.sh, plus git diff against the merge-base when a merge is in progress. Inspects ARTIFACTS + repo, never the implementation delta — code-vs-contract is /order.code-check.
 ---
 
