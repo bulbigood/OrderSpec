@@ -70,17 +70,75 @@ Include:
 
 Do not silently compensate for an incomplete or contradictory spec.
 
+## Command Context Bootstrap
+
+Before starting command-specific logic:
+
+1. Resolve command context:
+
+   ```bash
+   python3 .orderspec/framework/scripts/command_context.py resolve order.plan --json
+   ```
+
+2. If `ok` is `false` or `missing_required` is non-empty, STOP and report the missing required context.
+3. Read every file returned in `to_read`, in returned order.
+4. Interpret each file according to its `usage` field:
+   - `apply`: apply as procedural command/framework/template rules.
+   - `constrain`: enforce as project constraints only.
+   - `parse`: parse as structured config or runtime state.
+   - `inspect`: inspect as command input/output artifact.
+   - `reference`: use only as reference or evidence.
+5. Do not manually load additional framework rules, protocols, configuration files, project contracts, templates, or runtime state before the main command logic unless they are returned by `command_context.py`.
+
+Project contracts returned with `usage: "constrain"` constrain this command, but do not override framework rules.
+
+If required project contracts are missing, STOP and tell the user:
+
+> Project contracts not found or incomplete. Run `/order.bootstrap` first to create or repair `constitution.md`, `stack.md`, `architecture.md`, and `conventions.md`.
+
 ## Pre-Execution Checks
 
-Run the **`before_plan`** phase per `.orderspec/memory/hooks-protocol.md`.
+No operator-defined pre-execution extension phases are supported in the current OrderSpec core.
 
-## Execution Tracking
+Complete Command Context Bootstrap before mode detection.
 
-As you execute this command in agentic mode, maintain a Markdown To-Do list in reasoning or scratchpad if supported. Check off steps as completed.
+## Script Availability Checks
+
+Before any mutation, verify these framework scripts exist when their step is needed:
+
+| Script | Required for |
+|---|---|
+| `.orderspec/framework/scripts/setup.py` | path resolution and plan template setup |
+| `.orderspec/framework/scripts/upstream_gate.py` | checking upstream spec gate status |
+| `.orderspec/framework/scripts/traceability.py` | mechanism matrix writes and mechanical validation |
+
+If a required script is missing, STOP and report the missing script. Do not manually replace script-owned mechanics.
+
+## Mode Detection
+
+Determine mode before writing any managed file.
+
+Read-only operations allowed during mode detection:
+
+- command context resolution;
+- reading files returned by resolver;
+- reading `$ARGUMENTS`;
+- running `setup.py paths --json`;
+- reading an existing `plan.md` only after the target feature is resolved;
+- checking whether target files exist.
+
+Do not create directories, write `plan.md`, update active feature state, or run traceability writers during mode detection.
+
+### Modes
+
+1. **Regenerate** — active non-template `spec.md` exists, and `plan.md` needs to be recreated from the current repo state.
+2. **Refine** — active `plan.md` exists, and the request changes specific mechanisms or paths without changing the spec contract.
+
+State the detected mode in one line before proceeding.
 
 ## Resolve Feature Paths
 
-Before any gate or setup that may write files, resolve the active feature using the Python path resolver. Do **not** use `jq` or any external dependency.
+Before any gate or setup that may write files, resolve the active feature paths.
 
 ```bash
 PATHS_JSON="$(python3 .orderspec/framework/scripts/setup.py paths --json)"
@@ -101,8 +159,6 @@ Every shell block that uses these variables MUST either:
 
 1. rehydrate them from `setup.py paths --json`; or
 2. execute all dependent commands inside the same compound shell invocation.
-
-If a command unexpectedly reports an empty artifact/path, first suspect uninitialized shell variables.
 
 If `setup.py paths --json` fails because no active feature directory can be resolved, STOP:
 
@@ -231,12 +287,7 @@ They do **not** live as a table inside `plan.md`.
 Hard rules:
 
 - You MUST NOT author, hand-edit, or mirror a mechanism table in `plan.md`.
-- The only writer of `mechanisms.tsv` is:
-
-  ```bash
-  python3 .orderspec/framework/scripts/traceability.py put-mechanisms "$FEATURE"
-  ```
-
+- The only writer of `mechanisms.tsv` is `traceability.py put-mechanisms`.
 - `put-mechanisms` prepends the contract header, lints rows, and writes atomically.
 - If lint rejects the data, fix the emitted rows and re-run. Never hand-write the file.
 - Downstream `/order.tasks` reads mechanisms via script/machine state, not from prose.
@@ -320,17 +371,19 @@ If an implementation file is the primary file, strongly prefer `direct` or `dele
 
 ## Tooling and Documentation Verification
 
-Before producing implementation strategy:
+Tooling protocol and configuration are loaded via Command Context Bootstrap.
 
-1. Load `.orderspec/config/tooling.json` if present.
-2. Load `.orderspec/framework/protocols/tooling-protocol.md`.
-3. For every library-specific implementation decision, verify one evidence source:
-   - Context7 docs evidence;
-   - configured OrderSpec skill;
-   - user-provided documentation.
-4. If Context7 is available and policy is `required_if_available`, query Context7 for every relevant library from `stack.md`.
-5. Record results in `plan.md` under `## Library Documentation Evidence`.
-6. Do not invent APIs, options, middleware order, driver return shapes, or config syntax without evidence.
+For every library-specific implementation decision, verify one evidence source:
+
+- Context7 docs evidence;
+- configured OrderSpec skill;
+- user-provided documentation.
+
+If Context7 is available and policy is `required_if_available`, query Context7 for every relevant library from `stack.md`.
+
+Record results in `plan.md` under `## Library Documentation Evidence`.
+
+Do not invent APIs, options, middleware order, driver return shapes, or config syntax without evidence.
 
 ## Outline
 
@@ -355,21 +408,20 @@ Read:
 
 - `FEATURE_SPEC`;
 - resolved `plan-template.md` already copied to `IMPL_PLAN`;
-- `.orderspec/memory/constitution.md` if present;
 - prior `plan-report.md` if intake requires it.
 
 Read registered spec IDs from machine state:
 
 ```bash
-python3 .orderspec/framework/scripts/traceability.py get "$FEATURE" spec-ids
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" get spec-ids
 ```
 
 If this fails because `spec-ids.tsv` is missing, recover mechanically:
 
 ```bash
-python3 .orderspec/framework/scripts/traceability.py init "$FEATURE"
-python3 .orderspec/framework/scripts/traceability.py extract-spec-ids "$FEATURE"
-python3 .orderspec/framework/scripts/traceability.py get "$FEATURE" spec-ids
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" init
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" extract-spec-ids
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" get spec-ids
 ```
 
 Do not hand-write or hand-read `spec-ids.tsv`.
@@ -594,7 +646,7 @@ printf '%s\n' \
   "AC-001	delegated:IF-001	acceptance covered through IF-001 integration path	src/routes/auth.route.js	integration" \
   "INV-001	direct	unique active session check in persistence adapter	src/models/session.model.js	integration" \
   "NFR-001	documented	performance budget noted for implementer; no executable assertion	plan.md	documented" \
-| python3 .orderspec/framework/scripts/traceability.py put-mechanisms "$FEATURE"
+| python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" put-mechanisms
 ```
 
 Rows must contain literal tabs between fields.
@@ -609,8 +661,8 @@ If `put-mechanisms` exits non-zero:
 Then run:
 
 ```bash
-python3 .orderspec/framework/scripts/traceability.py lint "$FEATURE"
-python3 .orderspec/framework/scripts/traceability.py check-mechanisms "$FEATURE"
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" lint
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" check-mechanisms
 ```
 
 Both must pass before completion.
@@ -620,15 +672,9 @@ Both must pass before completion.
 Run:
 
 ```bash
-python3 .orderspec/framework/scripts/traceability.py check-plan "$FEATURE"
-python3 .orderspec/framework/scripts/traceability.py validate --stage plan "$FEATURE"
-python3 .orderspec/framework/scripts/traceability.py summarize-mechanisms --json "$FEATURE"
-```
-
-If `validate` supports JSON in your environment, prefer:
-
-```bash
-python3 .orderspec/framework/scripts/traceability.py validate --json --stage plan "$FEATURE"
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" check-plan
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" validate --stage plan --json
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" summarize-mechanisms --json
 ```
 
 Blocking findings:
@@ -643,27 +689,9 @@ Blocking findings:
 
 Medium/low findings must be fixed if meaning-preserving and local. If fixing requires contract change, STOP and route to `/order.spec`.
 
-### 7. Agent context update
-
-Adapter-specific context updates should be performed by `after_plan` hooks if configured.
-
-Do not hand-edit Kilo-specific adapter files unless the hook protocol explicitly requires it.
-
-## Key Rules
-
-- Use absolute paths for filesystem operations.
-- Use repo-relative paths inside documents and TSV rows.
-- Do not use `jq` or external dependencies.
-- Do not silently change the contract.
-- Do not generate downstream artifacts (`tasks.md`) in this command.
-- Do not write `mechanisms.tsv` except through `put-mechanisms`.
-- Do not mirror mechanism rows in `plan.md`.
-- Do not complete with any blocking `M5`, `M9`, `M10`, `M15`, `M16`, `M17`, or `M27` finding.
-- On a forced upstream gate, stamp the warning at the top of `plan.md`.
-
 ## Post-Execution Checks
 
-Run the **`after_plan`** phase per `.orderspec/memory/hooks-protocol.md`.
+No operator-defined post-execution extension phases are supported in the current OrderSpec core.
 
 ## Consumed Report Marker
 
@@ -693,7 +721,7 @@ Report to chat:
   - `put-mechanisms` exited zero;
   - `lint` exited zero;
   - `check-mechanisms` exited zero;
-  - row counts from `traceability.py summarize-mechanisms --json`, not manual counting;
+  - row counts from `summarize-mechanisms --json`, not manual counting;
 - `check-plan` result;
 - `validate --stage plan` result;
 - prior `plan-report.md` findings addressed, if any;
@@ -703,7 +731,11 @@ Report to chat:
 
 This self-check is for the generator only. Do not copy it into `plan.md`.
 
-- [ ] Feature paths resolved via `setup.py paths --json`; no `jq` used.
+- [ ] Command context resolved via `command_context.py`
+- [ ] Every `to_read` file was read and interpreted by `usage`
+- [ ] Mode detected and stated
+- [ ] No hooks or operator-defined extension phases executed
+- [ ] Feature paths resolved via `setup.py paths`; no `jq` used.
 - [ ] Upstream gate respected: `ok`/`advisory`/`forced`, not `halt`/`stop`.
 - [ ] On forced upstream gate, warning stamped at top of `plan.md`.
 - [ ] `plan.md` regenerated from current template via `setup.py plan --json --refresh-template`.
@@ -712,11 +744,11 @@ This self-check is for the generator only. Do not copy it into `plan.md`.
 - [ ] Repository reconnaissance stayed focused and cited only files that affected planning decisions.
 - [ ] Technical context, constitution check, pathmanifest, naming evidence, architectural mapping, and component diagram are filled.
 - [ ] `pathmanifest` lists files only; every line has exactly one `[NEW]` or `[MOD]`.
-- [ ] Mechanism rows emitted through `put-mechanisms`; no mechanism table authored in `plan.md`.
-- [ ] `traceability.py lint "$FEATURE"` passes.
-- [ ] `traceability.py check-mechanisms "$FEATURE"` passes.
-- [ ] `traceability.py check-plan "$FEATURE"` passes.
-- [ ] `traceability.py validate --stage plan "$FEATURE"` has no blocking findings.
-- [ ] `traceability.py summarize-mechanisms --json "$FEATURE"` was used for row counts.
+- [ ] Mechanism rows emitted through `traceability.py put-mechanisms`; no mechanism table authored in `plan.md`.
+- [ ] `traceability.py lint` passes.
+- [ ] `traceability.py check-mechanisms` passes.
+- [ ] `traceability.py check-plan` passes.
+- [ ] `traceability.py validate --stage plan` has no blocking findings.
+- [ ] `traceability.py summarize-mechanisms --json` was used for row counts.
 - [ ] If a BLOCK/ROUTING `plan-report.md` was used, it was replaced with `CONSUMED_STALE`.
 - [ ] Completion Report provided.
