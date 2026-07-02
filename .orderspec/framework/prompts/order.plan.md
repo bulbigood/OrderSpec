@@ -111,6 +111,7 @@ Before any mutation, verify these framework scripts exist when their step is nee
 | `.orderspec/framework/scripts/setup.py` | path resolution and plan template setup |
 | `.orderspec/framework/scripts/upstream_gate.py` | checking upstream spec gate status |
 | `.orderspec/framework/scripts/traceability.py` | mechanism matrix writes and mechanical validation |
+| `.orderspec/framework/scripts/validate_tooling.py` | deterministic `tooling.json` and installed skills validation |
 
 If a required script is missing, STOP and report the missing script. Do not manually replace script-owned mechanics.
 
@@ -369,19 +370,59 @@ Do not point documented rows at implementation source files unless the file is a
 
 If an implementation file is the primary file, strongly prefer `direct` or `delegated:<ID>`.
 
-## Tooling and Documentation Verification
+## Tooling and Skills Verification
 
-Tooling protocol and configuration are loaded via Command Context Bootstrap.
+Tooling protocol (`.orderspec/framework/protocols/tooling-protocol.md`) and tooling configuration (`.orderspec/config/tooling.json`) are loaded via Command Context Bootstrap.
 
-For every library-specific implementation decision, verify one evidence source:
+You MUST follow the tooling protocol for all tooling and documentation verification decisions. Do not duplicate or reinterpret its rules in this prompt.
 
-- Context7 docs evidence;
-- configured OrderSpec skill;
-- user-provided documentation.
+### Deterministic skill availability check
 
-If Context7 is available and policy is `required_if_available`, query Context7 for every relevant library from `stack.md`.
+Before planning library-specific mechanisms, run:
 
-Record results in `plan.md` under `## Library Documentation Evidence`.
+```bash
+python3 .orderspec/framework/scripts/validate_tooling.py -C "$PWD" --json
+```
+
+This script deterministically verifies that bindings with `status: "installed"` in `tooling.json` have corresponding files in `.orderspec/skills/`.
+
+Interpret the JSON output:
+
+| Field | Meaning | Action |
+|-------|---------|--------|
+| `installed_and_verified` | Binding declared installed and skill files exist | Use these skills as evidence source |
+| `installed_but_missing` | Binding declared installed but skill files NOT found | Follow `tooling-protocol.md` rule 6: MUST NOT silently continue; ask user to install or proceed without library-specific claims |
+| `discovered_only` | Binding exists but skill is not yet installed | Ask user before installing per `tooling-protocol.md` rule 4 |
+| `pending` | Binding awaiting resolution | Treat as unavailable; do not use as evidence |
+
+Do not manually inspect `.orderspec/skills/` to determine availability. Rely on `validate_tooling.py` output.
+
+### Skill matching procedure
+
+For each `STACK-NNN` referenced in `spec.md` §6:
+
+1. Look up the technology name in `.orderspec/contracts/stack.md` using the `STACK-NNN` ID.
+2. Search `tooling.json` `skills.bindings` for a binding where `match.stack_id` equals that `STACK-NNN`.
+3. If a binding exists, use `validate_tooling.py` output to check whether the required skills are `installed_and_verified`.
+4. If no binding exists for a `STACK-NNN` that requires library-specific implementation, follow `tooling-protocol.md` rule 6: do not silently proceed.
+
+### Documentation source availability
+
+For each source in `tooling.json` `docs_sources`:
+
+1. Check whether the current command (`order.plan`) is listed in the source's `commands` array.
+2. If yes and `policy` is `required_if_available`, check whether the source is available as a runtime tool in the current agent environment.
+3. If available, consult it before making library-specific implementation claims.
+4. If unavailable, apply `fallback_when_unavailable` from the config (default: block library-specific claims without other evidence).
+
+Do not hardcode tool names. Use only the source names and policies from `tooling.json`.
+
+### Evidence recording
+
+Record all tooling evidence in `plan.md` under `## Library Documentation Evidence`:
+
+- For each library-specific claim, cite the evidence source (skill name, documentation source name, or user-provided reference).
+- If a required source was unavailable, record that fact and the fallback applied.
 
 Do not invent APIs, options, middleware order, driver return shapes, or config syntax without evidence.
 
@@ -409,6 +450,14 @@ Read:
 - `FEATURE_SPEC`;
 - resolved `plan-template.md` already copied to `IMPL_PLAN`;
 - prior `plan-report.md` if intake requires it.
+
+Run deterministic tooling validation:
+
+```bash
+python3 .orderspec/framework/scripts/validate_tooling.py -C "$PWD" --json
+```
+
+Store the JSON output for use during planning. Do not manually inspect `.orderspec/skills/`.
 
 Read registered spec IDs from machine state:
 
@@ -743,6 +792,8 @@ This self-check is for the generator only. Do not copy it into `plan.md`.
 - [ ] No contract drift introduced.
 - [ ] Repository reconnaissance stayed focused and cited only files that affected planning decisions.
 - [ ] Technical context, constitution check, pathmanifest, naming evidence, architectural mapping, and component diagram are filled.
+- [ ] `validate_tooling.py --json` was run and skill availability was determined deterministically.
+- [ ] Tooling evidence recorded in `plan.md` under `## Library Documentation Evidence` (or "No library-specific claims" if none).
 - [ ] `pathmanifest` lists files only; every line has exactly one `[NEW]` or `[MOD]`.
 - [ ] Mechanism rows emitted through `traceability.py put-mechanisms`; no mechanism table authored in `plan.md`.
 - [ ] `traceability.py lint` passes.
