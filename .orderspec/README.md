@@ -581,7 +581,9 @@ The principles that shape OrderSpec:
 
 ## Useful direct checks
 
-These are framework-level checks, useful during development or debugging:
+These are framework-level checks, useful during development or debugging.
+
+> **Note:** The list below is not exhaustive. Additional framework scripts (like `setup.py`, `upstream_gate.py`, `tooling_config.py`, `feature_spec.py`) are used internally by commands and documented in their respective command prompts. Full framework documentation will be available in future `docs/`.
 
 ```bash
 # Command context resolver

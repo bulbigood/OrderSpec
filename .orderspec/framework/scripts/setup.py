@@ -41,6 +41,15 @@ def output_json(data):
     """Print a single JSON object to stdout."""
     print(json.dumps(data))
 
+def output_result(data, args):
+    """Print result as JSON or eval-ready shell variables."""
+    if getattr(args, "shell_vars", False):
+        for key, value in data.items():
+            if isinstance(value, str):
+                print(f'{key}="{value}"')
+        return
+    output_json(data)
+
 
 def die(msg, rc=1):
     """Print error to stderr and exit."""
@@ -81,10 +90,14 @@ def base_paths_payload(paths):
     `FEATURE_DIR` is the canonical key.
     `SPECS_DIR` is retained as a deprecated compatibility alias for older prompts.
     """
+    feature_dir_name = Path(paths["FEATURE_DIR"]).name
+    feature_id = f"FEAT-{feature_dir_name}" if not feature_dir_name.startswith("FEAT-") else feature_dir_name
+    
     return {
         "REPO_ROOT": paths["REPO_ROOT"],
         "CURRENT_BRANCH": paths["CURRENT_BRANCH"],
         "BRANCH": paths["CURRENT_BRANCH"],
+        "FEATURE_ID": feature_id,
         "FEATURE_DIR": paths["FEATURE_DIR"],
         "SPECS_DIR": paths["FEATURE_DIR"],  # deprecated alias
         "FEATURE_SPEC": paths["FEATURE_SPEC"],
@@ -121,7 +134,8 @@ def cmd_paths(args):
         "PLAN_EXISTS": Path(paths["IMPL_PLAN"]).is_file(),
         "TASKS_EXISTS": Path(paths["TASKS"]).is_file(),
     })
-    output_json(payload)
+    
+    output_result(payload, args)
 
 
 # ── subcommand: plan ─────────────────────────────────────────────────────────
@@ -181,7 +195,7 @@ def cmd_plan(args):
         "PLAN_TEMPLATE": template or "",
         "PLAN_REFRESHED": bool(args.refresh_template),
     })
-    output_json(payload)
+    output_result(payload, args)
 
 
 # ── subcommand: tasks ────────────────────────────────────────────────────────
@@ -336,6 +350,11 @@ def main():
         action="store_true",
         help="Output in JSON (always on)",
     )
+    paths_parser.add_argument(
+        "--shell-vars",
+        action="store_true",
+        help="Output as eval-ready shell variable assignments",
+    )
 
     spec_parser = subparsers.add_parser("spec", help="Setup for /order.spec")
     spec_parser.add_argument(
@@ -343,12 +362,22 @@ def main():
         action="store_true",
         help="Output in JSON (always on)",
     )
+    spec_parser.add_argument(
+        "--shell-vars",
+        action="store_true",
+        help="Output as eval-ready shell variable assignments",
+    )
 
     plan_parser = subparsers.add_parser("plan", help="Setup for /order.plan")
     plan_parser.add_argument(
         "--json",
         action="store_true",
         help="Output in JSON (always on)",
+    )
+    plan_parser.add_argument(
+        "--shell-vars",
+        action="store_true",
+        help="Output as eval-ready shell variable assignments",
     )
     plan_parser.add_argument(
         "--refresh-template",
@@ -362,12 +391,22 @@ def main():
         action="store_true",
         help="Output in JSON (always on)",
     )
+    tasks_parser.add_argument(
+        "--shell-vars",
+        action="store_true",
+        help="Output as eval-ready shell variable assignments",
+    )
 
     code_parser = subparsers.add_parser("code", help="Setup for /order.code")
     code_parser.add_argument(
         "--json",
         action="store_true",
         help="Output in JSON (always on)",
+    )
+    code_parser.add_argument(
+        "--shell-vars",
+        action="store_true",
+        help="Output as eval-ready shell variable assignments",
     )
 
     args = parser.parse_args()

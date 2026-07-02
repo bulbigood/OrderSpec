@@ -70,16 +70,16 @@ Include:
 
 Do not silently compensate for an incomplete or contradictory spec.
 
-## Path Bootstrap and JSON Parsing Rules
+## Path Bootstrap and Shell Variable Rules
 
-Throughout this command, paths are resolved via `setup.py paths --json` / `setup.py plan --json`.
+Throughout this command, paths are resolved via `setup.py paths --shell-vars` / `setup.py plan --shell-vars`.
 
-JSON parsing rules:
+Shell variable rules:
 
-- You MUST parse JSON output using `python3 -c '...'` inline snippets, as shown in each block.
-- You MUST NOT use `jq`, `grep`, `sed`, or any non-Python tool to parse JSON.
+- You MUST use the `--shell-vars` flag to output `eval`-ready variable assignments.
+- You MUST NOT use `jq`, `grep`, `sed`, or `python3 -c` inline snippets to parse JSON output.
 - You MUST NOT hand-write paths or hardcode feature directory names.
-- Shell variables resolved from JSON (`FEATURE_DIR`, `FEATURE_SPEC`, `IMPL_PLAN`, `REPO_ROOT`, `FEATURE`) are valid only within the same compound shell invocation. Rehydrate them at the start of every new block by re-running `setup.py paths --json` or by using the result of `setup.py plan --json`.
+- Variables resolved via `eval "$(setup.py ... --shell-vars)"` are valid only within the same compound shell invocation. Rehydrate them at the start of every new block by re-running `setup.py paths --shell-vars`.
 
 ---
 
@@ -155,26 +155,21 @@ State the detected mode in one line before proceeding.
 Before any gate or setup that may write files, resolve the active feature paths.
 
 ```bash
-PATHS_JSON="$(python3 .orderspec/framework/scripts/setup.py paths --json)"
-FEATURE_DIR="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_DIR"])' <<< "$PATHS_JSON")"
-FEATURE_SPEC="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_SPEC"])' <<< "$PATHS_JSON")"
-IMPL_PLAN="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["IMPL_PLAN"])' <<< "$PATHS_JSON")"
-REPO_ROOT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["REPO_ROOT"])' <<< "$PATHS_JSON")"
-FEATURE="$(basename "$FEATURE_DIR")"
+eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 ```
 
 ### Shell Variable Persistence Warning
 
 Tool shell sessions may not preserve variables across separate invocations.
 
-Do not assume `FEATURE_DIR`, `FEATURE_SPEC`, `IMPL_PLAN`, `REPO_ROOT`, or `FEATURE` remain available in later shell calls.
+Do not assume `FEATURE_ID`, `FEATURE_DIR`, `FEATURE_SPEC`, `IMPL_PLAN`, or `REPO_ROOT` remain available in later shell calls.
 
 Every shell block that uses these variables MUST either:
 
-1. rehydrate them from `setup.py paths --json`; or
+1. rehydrate them from `setup.py paths --shell-vars`; or
 2. execute all dependent commands inside the same compound shell invocation.
 
-If `setup.py paths --json` fails because no active feature directory can be resolved, STOP:
+If `setup.py paths --shell-vars` fails because no active feature directory can be resolved, STOP:
 
 ```text
 PLAN_STOPPED: no active feature
@@ -190,9 +185,7 @@ A plan must not ignore a known failed upstream contract gate. Gates are optional
 Run:
 
 ```bash
-PATHS_JSON="$(python3 .orderspec/framework/scripts/setup.py paths --json)"
-FEATURE_DIR="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_DIR"])' <<< "$PATHS_JSON")"
-FEATURE_SPEC="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_SPEC"])' <<< "$PATHS_JSON")"
+eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 
 FORCE_FLAG=""
 case "$ARGUMENTS" in
@@ -254,8 +247,7 @@ To build the plan anyway (NOT recommended), re-run with --force.
 Before regenerating `plan.md`, check whether a previous `/order.plan-check` report exists.
 
 ```bash
-PATHS_JSON="$(python3 .orderspec/framework/scripts/setup.py paths --json)"
-FEATURE_DIR="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_DIR"])' <<< "$PATHS_JSON")"
+eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 SELF_REPORT="$FEATURE_DIR/plan-report.md"
 test -e "$SELF_REPORT" && echo "SELF_REPORT_PRESENT" || echo "SELF_REPORT_ABSENT"
 ```
@@ -348,6 +340,28 @@ Lint-enforced invariants:
 | `documented` | asserted by plan/spec documentation, no executable task should exercise it | `documented` |
 | `delegated:<ID>` | coverage is provided by another ID's mechanism | `unit` or `integration` |
 
+**Quick reference — valid combinations:**
+
+| coverage_kind | test_type | Valid? |
+|---|---|---|
+| `direct` | `unit` | ✅ |
+| `direct` | `integration` | ✅ |
+| `direct` | `documented` | ❌ INVALID |
+| `documented` | `documented` | ✅ |
+| `documented` | `unit` | ❌ INVALID |
+| `documented` | `integration` | ❌ INVALID |
+| `delegated:<ID>` | `unit` | ✅ |
+| `delegated:<ID>` | `integration` | ✅ |
+| `delegated:<ID>` | `documented` | ❌ INVALID |
+
+**Forbidden mechanism rows:**
+
+- `DEC-NNN` — decisions are documented in plan.md, no mechanism rows
+- `SC-NNN` — success criteria are meta, no mechanism rows
+- `CON-NNN` — constraints are referenced, no mechanism rows
+- `UJ-NNN` — user journeys are collections, no mechanism rows
+- `Q-NNN` — open questions are unresolved, no mechanism rows
+
 Additional rules:
 
 - `primary_files` contains exactly one file, not a `;`-separated list.
@@ -401,6 +415,31 @@ python3 .orderspec/framework/scripts/validate_tooling.py -C "$PWD" --json
 
 Store the JSON output for use during planning. Interpret it strictly according to the global policy.
 
+### Verify skill bindings registration
+
+If planning requires new library-specific skills, verify they are registered in tooling.json:
+
+```bash
+python3 .orderspec/framework/scripts/tooling_config.py list-bindings --json
+```
+
+If a required skill binding is missing for a `STACK-NNN` referenced in spec.md §6:
+
+1. Ask the user for confirmation before registering.
+2. Register the binding:
+
+```bash
+python3 .orderspec/framework/scripts/tooling_config.py add-binding \
+  --stack-id STACK-NNN \
+  --technology "<technology-name>" \
+  --skills "<skill-name>" \
+  --status installed
+```
+
+3. Re-run `validate_tooling.py` to confirm the binding is recognized.
+
+Do not silently proceed with unregistered skills required for library-specific work.
+
 ### Evidence recording
 
 Record tooling evidence in `plan.md` under `## Library Documentation Evidence` as required by the global policy.
@@ -414,12 +453,8 @@ Do not invent APIs, options, middleware order, driver return shapes, or config s
 Run setup with template refresh. `plan.md` is regenerable; do not patch stale generated prose.
 
 ```bash
-SETUP_JSON="$(python3 .orderspec/framework/scripts/setup.py plan --json --refresh-template)"
-FEATURE_DIR="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_DIR"])' <<< "$SETUP_JSON")"
-FEATURE_SPEC="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["FEATURE_SPEC"])' <<< "$SETUP_JSON")"
-IMPL_PLAN="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["IMPL_PLAN"])' <<< "$SETUP_JSON")"
-REPO_ROOT="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["REPO_ROOT"])' <<< "$SETUP_JSON")"
-FEATURE="$(basename "$FEATURE_DIR")"
+python3 .orderspec/framework/scripts/setup.py plan --json --refresh-template > /dev/null
+eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 ```
 
 If setup fails because `spec.md` is missing, STOP with `PLAN_STOPPED: no spec to plan from`.
@@ -747,7 +782,7 @@ After successful self-checks and before producing the Completion Report, update 
 
 ```bash
 python3 .orderspec/framework/scripts/active_feature.py set \
-  --feature-id "$FEATURE" \
+  --feature-id "$FEATURE_ID" \
   --feature-directory "$FEATURE_DIR" \
   --status planned \
   --last-command order.plan \
@@ -782,7 +817,6 @@ Report to chat:
 - branch;
 - `FEATURE_DIR`;
 - `IMPL_PLAN`;
-- whether `research.md` was generated;
 - constitution status summary;
 - `[NEW]` file count;
 - `[MOD]` file count;
