@@ -464,6 +464,7 @@ Do not create directories, write `spec.md`, update active feature state, or init
    - Conversely, every HTTP status code in an `IF-NNN` `Success` field MUST be covered by at least one `AC-NNN` (M29, HIGH severity).
    - Every HTTP status code in an `IF-NNN` `Failure` field SHOULD be covered by at least one `AC-NNN` (M29, MEDIUM severity).
    - Only use `STACK-NNN`, `ARCH-NNN`, `CONV-NNN` IDs that exist in the loaded project contracts.
+  - Every `EDGE-NNN` must either reference `→ covered by AC-NNN` or be explicitly marked `→ deferred (reason)`.
 8. Author the full `spec.md` content.
 9. Write `spec.md` in one complete mutation. Do not leave placeholder partial specs.
 9. Run traceability projection and validation.
@@ -651,6 +652,16 @@ Entity/structure fields use tables.
 
 ### Interface contracts
 
+Authorization rules:
+- For create interfaces, authorization is about assignment (e.g., `userId` is set from authenticated user, not from request body).
+- For read/mutate interfaces, authorization is about ownership (resource belongs to authenticated user).
+
+Pagination rules:
+If a list interface mentions pagination, it MUST either:
+- define a Pagination Envelope in §9 Shared Structures; or
+- reference a `CONV-NNN` that defines pagination.
+Bare mentions of "per project convention" are insufficient.
+
 Every externally observable boundary gets an `IF-NNN` strict anchor and a structured Field/Value table.
 
 Required fields:
@@ -822,6 +833,7 @@ Before completion, reason through these checks. Do not write a checklist file.
 ### Required semantic checks
 
 - No file paths, library names, class names, plugin names, framework-specific query syntax, or technology versions appear in `spec.md`.
+- IF `Failure` field must not contain template residue: `semicolon-separated`, `[Failure outcomes]`, or `None` as a literal value.
 - §6 references only valid `STACK-NNN`, `ARCH-NNN`, `CONV-NNN` IDs with neutral labels.
 - No unresolved blocking clarification remains.
 - Every REQ has acceptance coverage.

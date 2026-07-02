@@ -737,6 +737,121 @@ if rc == 3:
 else:
     no("C6 documented ref", f"rc={rc} out={out} err={err}")
 
+
+# ── New tests for M13 expansion and M30 ─────────────────────────────────────
+
+# V_M13_1: semicolon-separated in IF Failure → M13
+reset_feature()
+write_spec("""- **REQ-001** user can log in
+- **UJ-001** Login journey
+  Covers: REQ-001
+## 9. Interface Contracts
+- **IF-001**: Get Task
+  | Field | Value |
+  |-------|-------|
+  | Kind | HTTP endpoint |
+  | Operation | Get Task |
+  | Actor | Authenticated user |
+  | Success | 200 OK |
+  | Failure | 404 Not Found; semicolon-separated |
+  | Covers | REQ-001 |
+""")
+rc, out, err = run_trace("validate", "--stage", "spec", F)
+if "M13" in out:
+    ok("validate: semicolon-separated in Failure -> M13")
+else:
+    no("validate M13 semi", f"rc={rc} out={out} err={err}")
+
+# V_M13_2: None (...) in IF Failure → M13
+reset_feature()
+write_spec("""- **REQ-001** user can log in
+- **UJ-001** Login journey
+  Covers: REQ-001
+## 9. Interface Contracts
+- **IF-001**: Get Task
+  | Field | Value |
+  |-------|-------|
+  | Kind | HTTP endpoint |
+  | Operation | Get Task |
+  | Actor | Authenticated user |
+  | Success | 200 OK |
+  | Failure | None (empty array returned) |
+  | Covers | REQ-001 |
+""")
+rc, out, err = run_trace("validate", "--stage", "spec", F)
+if "M13" in out:
+    ok("validate: None (...) in Failure -> M13")
+else:
+    no("validate M13 None", f"rc={rc} out={out} err={err}")
+
+# V_M13_3: [Failure outcomes] placeholder in IF Failure → M13
+reset_feature()
+write_spec("""- **REQ-001** user can log in
+- **UJ-001** Login journey
+  Covers: REQ-001
+## 9. Interface Contracts
+- **IF-001**: Get Task
+  | Field | Value |
+  |-------|-------|
+  | Kind | HTTP endpoint |
+  | Operation | Get Task |
+  | Actor | Authenticated user |
+  | Success | 200 OK |
+  | Failure | [Failure outcomes] |
+  | Covers | REQ-001 |
+""")
+rc, out, err = run_trace("validate", "--stage", "spec", F)
+if "M13" in out:
+    ok("validate: [Failure outcomes] placeholder -> M13")
+else:
+    no("validate M13 placeholder", f"rc={rc} out={out} err={err}")
+
+# V_M30_1: EDGE without AC coverage and not deferred → M30
+reset_feature()
+write_spec("""- **REQ-001** user can log in
+- **UJ-001** Login journey
+  Covers: REQ-001
+## 11. Edge Cases
+- **EDGE-001**: Concurrent update to the same task by the same user
+""")
+rc, out, err = run_trace("validate", "--stage", "spec", F)
+if rc == 0 and "M30" in out:
+    ok("validate: EDGE without AC/deferred -> M30")
+else:
+    no("validate M30 uncovered", f"rc={rc} out={out} err={err}")
+
+# V_M30_2: EDGE with deferred marker → no M30
+reset_feature()
+write_spec("""- **REQ-001** user can log in
+- **UJ-001** Login journey
+  Covers: REQ-001
+## 11. Edge Cases
+- **EDGE-001**: Concurrent update -> deferred (waiting for transaction implementation)
+""")
+rc, out, err = run_trace("validate", "--stage", "spec", F)
+if rc == 0 and "M30" not in out:
+    ok("validate: EDGE with deferred -> no M30")
+else:
+    no("validate M30 deferred", f"rc={rc} out={out} err={err}")
+
+# V_M30_3: EDGE covered by AC → no M30
+reset_feature()
+write_spec("""- **REQ-001** user can log in
+- **UJ-001** Login journey
+  Covers: REQ-001
+## 11. Edge Cases
+- **EDGE-001**: Concurrent update -> covered by AC-001
+## 12. Acceptance Criteria
+- **UJ-002** Journey
+  Covers: REQ-001
+  - **AC-001** [Covers: REQ-001] handles concurrent update
+""")
+rc, out, err = run_trace("validate", "--stage", "spec", F)
+if rc == 0 and "M30" not in out:
+    ok("validate: EDGE covered by AC -> no M30")
+else:
+    no("validate M30 covered", f"rc={rc} out={out} err={err}")
+
 # ── Cleanup ──────────────────────────────────────────────────────────────────
 
 if WORK.exists():

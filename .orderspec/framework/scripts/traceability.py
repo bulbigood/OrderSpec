@@ -1997,7 +1997,7 @@ def cmd_validate(args):
 
     for f in files_for_placeholder_scan:
         for i, line in enumerate(f.read_text(encoding="utf-8").splitlines(), start=1):
-            if re.search(r"TODO|TKTK|\?\?\?|<placeholder>|\[path/to/|NEEDS CLARIFICATION|Optional forced upstream-gate warning|verdict: \.\.\.", line):
+            if re.search(r"TODO|TKTK|\?\?\?|<placeholder>|\[path/to/|NEEDS CLARIFICATION|Optional forced upstream-gate warning|verdict: \.\.\.|semicolon-separated|\[Failure outcomes\]|\[Success outcomes\]|None \(.*\)", line):
                 sev = "MEDIUM" if "<placeholder>" in line or "[path/to/" in line else "LOW"
                 add("M13", sev, f"{f.name}:{i}", f"Placeholder residue: {line.strip()[:100]}")
 
@@ -2166,6 +2166,20 @@ def cmd_validate(args):
             for n in range(min(nums), max(nums) + 1):
                 if n not in seen_nums:
                     add("M7", "MEDIUM", "tasks.md", f"Gap in task numbering: T{n:03d}")
+
+    # M30: EDGE without AC coverage or explicit defer
+    edge_ids = {sid for sid in defined_ids if sid.startswith("EDGE-")}
+    id_texts = _extract_id_texts(spec_text)
+    ac_covers_targets = set()
+    for covers_list in ac_inline_covers.values():
+        ac_covers_targets.update(covers_list)
+
+    for sid in sorted(edge_ids, key=_sort_spec_id):
+        text = id_texts.get(sid, "").lower()
+        is_deferred = "deferred" in text
+        is_covered = (sid in ac_covers_targets) or bool(re.search(r"covered by\s+ac-\d{3}", text))
+        if not is_covered and not is_deferred:
+            add("M30", "MEDIUM", "spec.md:§11", f"{sid} has no AC coverage and is not marked deferred")
 
     # M11 timestamp drift
     if have_plan and spec.stat().st_mtime > plan.stat().st_mtime:

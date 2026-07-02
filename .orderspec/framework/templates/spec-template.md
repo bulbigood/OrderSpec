@@ -204,7 +204,7 @@ Example optional structures:
   | Actor | [Who or what triggers this interface] |
   | Input | [Input structure name or description] |
   | Success | [Outcome on success, including status code if HTTP] |
-  | Failure | [Failure outcomes, semicolon-separated] |
+  | Failure | [Failure outcomes] |
   | Covers | REQ-001 |
 
 <details>
