@@ -2181,6 +2181,40 @@ def cmd_validate(args):
         if not is_covered and not is_deferred:
             add("M30", "MEDIUM", "spec.md:§11", f"{sid} has no AC coverage and is not marked deferred")
 
+    # M31: at most 2 UJs may be P1
+    uj_p1_ids = []
+    for line in spec_text.splitlines():
+        m_uj = re.match(r"^\s*- \*\*(UJ-\d{3})\*\*", line)
+        if not m_uj:
+            continue
+        if re.search(r"Priority:\s*P1", line, re.IGNORECASE):
+            uj_p1_ids.append(m_uj.group(1))
+
+    if len(uj_p1_ids) > 2:
+        add("M31", "MEDIUM", "spec.md:\u00a712", f"More than 2 P1 UJs found ({len(uj_p1_ids)}): {', '.join(uj_p1_ids)}")
+
+    # M32: DEC must have Affects and Rationale sub-items
+    spec_lines = spec_text.splitlines()
+    for i, line in enumerate(spec_lines):
+        m_dec = re.match(r"^\s*- \*\*(DEC-\d{3})\*\*", line)
+        if not m_dec:
+            continue
+        dec_id = m_dec.group(1)
+        has_affects = False
+        has_rationale = False
+        for j in range(i, min(i + 10, len(spec_lines))):
+            sub = spec_lines[j]
+            if j > i and re.match(r"^\s*- \*\*\w+-\d{3}\*\*", sub):
+                break
+            if re.search(r"\*\*Affects\*\*", sub, re.IGNORECASE):
+                has_affects = True
+            if re.search(r"\*\*Rationale\*\*", sub, re.IGNORECASE):
+                has_rationale = True
+        if not has_affects:
+            add("M32", "MEDIUM", "spec.md:\u00a714", f"{dec_id} missing required '**Affects**' sub-item")
+        if not has_rationale:
+            add("M32", "MEDIUM", "spec.md:\u00a714", f"{dec_id} missing required '**Rationale**' sub-item")
+
     # M11 timestamp drift
     if have_plan and spec.stat().st_mtime > plan.stat().st_mtime:
         add("M11", "MEDIUM", "spec.md/plan.md", "spec.md modified after plan.md")

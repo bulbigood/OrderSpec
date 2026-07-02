@@ -109,6 +109,48 @@ python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$F
 
 is a deterministic finding.
 
+Imported mechanical checks include (non-exhaustive):
+
+| Check | Severity | What it verifies |
+|-------|----------|------------------|
+| M1 | HIGH | REQ covered by UJ Covers |
+| M1a | HIGH | AC has inline `[Covers: ...]` with valid IDs |
+| M6 | HIGH | Unresolved Q / `[NEEDS CLARIFICATION]` markers |
+| M11 | MEDIUM | Timestamp drift between spec/plan/tasks |
+| M13 | LOW/MEDIUM | Placeholder residue |
+| M15 | HIGH | Mechanisms.tsv missing or invalid |
+| M18 | HIGH/MEDIUM | IF required fields (Kind, Operation, Actor, Success, Failure, Covers) |
+| M19 | MEDIUM | AC references status code not in IF Success/Failure |
+| M20 | HIGH | IF not covered by any AC |
+| M21 | HIGH | IF Covers references unknown ID |
+| M24 | MEDIUM | INV with absolute quantifier but no contradiction grid row |
+| M28 | HIGH | YAML frontmatter metadata invalid |
+| M29 | HIGH/MEDIUM | IF Success status not covered by AC (HIGH); Failure status not covered (MEDIUM) |
+| M30 | MEDIUM | EDGE without AC coverage and not marked deferred |
+| M31 | MEDIUM | More than 2 P1 UJs |
+| M32 | MEDIUM | DEC missing `**Affects**` or `**Rationale**` sub-item |
+
+Imported mechanical checks include (non-exhaustive):
+
+| Check | Severity | What it verifies |
+|-------|----------|------------------|
+| M1 | HIGH | REQ covered by UJ Covers |
+| M1a | HIGH | AC has inline `[Covers: ...]` with valid IDs |
+| M6 | HIGH | Unresolved Q / `[NEEDS CLARIFICATION]` markers |
+| M11 | MEDIUM | Timestamp drift between spec/plan/tasks |
+| M13 | LOW/MEDIUM | Placeholder residue |
+| M15 | HIGH | Mechanisms.tsv missing or invalid |
+| M18 | HIGH/MEDIUM | IF required fields (Kind, Operation, Actor, Success, Failure, Covers) |
+| M19 | MEDIUM | AC references status code not in IF Success/Failure |
+| M20 | HIGH | IF not covered by any AC |
+| M21 | HIGH | IF Covers references unknown ID |
+| M24 | MEDIUM | INV with absolute quantifier but no contradiction grid row |
+| M28 | HIGH | YAML frontmatter metadata invalid |
+| M29 | HIGH/MEDIUM | IF Success status not covered by AC (HIGH); Failure status not covered (MEDIUM) |
+| M30 | MEDIUM | EDGE without AC coverage and not marked deferred |
+| M31 | MEDIUM | More than 2 P1 UJs |
+| M32 | MEDIUM | DEC missing `**Affects**` or `**Rationale**` sub-item |
+
 You MUST:
 
 - import every spec-stage finding at its stated severity;
@@ -551,11 +593,15 @@ Contradiction → Route (HIGH).
 
 ### C2.5 AC traces
 
-Every AC must include at least one `REQ-NNN` in inline `[Covers: ...]`.
+Every AC must include at least one spec ID (`REQ-NNN`, `IF-NNN`, `INV-NNN`, or `EDGE-NNN`) in inline `[Covers: ...]`.
 
-IF-only coverage is insufficient.
+ACs with no inline coverage at all → Route (MEDIUM).
 
-No REQ coverage → Route (MEDIUM).
+ACs testing cross-cutting HTTP concerns (authentication failures like 401, generic validation errors like 400, malformed input handling) MAY use IF-only coverage without a REQ trace. These are standard HTTP-layer behaviours, not feature-specific contract obligations.
+
+Feature-specific ACs (testing business logic, state transitions, domain rules, feature-specific failure paths) MUST include at least one `REQ-NNN` in `[Covers: ...]`.
+
+Feature-specific AC with no REQ coverage → Route (MEDIUM).
 
 Claimed REQ not directly tested → Route (MEDIUM).
 
@@ -683,7 +729,9 @@ Gap → Route (MEDIUM or HIGH by P1/core impact).
 
 ### C3.6 Failure-path coverage — EDGE
 
-For each EDGE describing failure, verify at least one AC tests that specific failure.
+For each EDGE describing failure, verify at least one AC tests that specific failure — unless the EDGE is explicitly marked `→ deferred (reason)`.
+
+Deferred EDGEs are exempt from AC coverage requirements. The deferral reason must be stated in the EDGE text.
 
 Failure indicators:
 
@@ -691,7 +739,7 @@ Failure indicators:
 4xx, 5xx, fail, failure, error, rollback, reject, denied, conflict, not found, non-existent, unauthorized, unauthenticated, forbidden, invalid, already, cannot
 ```
 
-Missing AC for feature-specific failure path → Route (HIGH).
+Non-deferred EDGE with missing AC for feature-specific failure path → Route (HIGH).
 
 Do not downgrade.
 
@@ -717,7 +765,7 @@ Deduplicate with EDGE findings when same operation, state, and status code are i
 
 ### C3.8 Repo-independence and purity
 
-Outside §6 Project Constraints Applied and §9 interface addresses, `spec.md` must not contain:
+Outside §6 Project Constraints Applied, §9 interface addresses, and Mermaid diagram blocks, `spec.md` must not contain:
 
 - source file paths;
 - class names;
@@ -729,9 +777,11 @@ Outside §6 Project Constraints Applied and §9 interface addresses, `spec.md` m
 Allowed:
 
 - HTTP paths in §9;
-- logical role names;
+- logical role names (Actor, Authentication, Authorization, Validation, Application Service, Persistence, External System, Controller, Routes, Model, Service, etc.) in prose and Mermaid diagrams;
 - project contract IDs: `STACK-NNN`, `ARCH-NNN`, `CONV-NNN`;
 - neutral references to project constraints.
+
+Mermaid diagram node labels and participant declarations are exempt from the purity check, as long as they use logical role names, not implementation-specific class or file names.
 
 Physical mechanism leak outside allowed areas → Route (MEDIUM).
 
