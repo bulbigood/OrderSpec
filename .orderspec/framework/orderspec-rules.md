@@ -214,23 +214,69 @@ If framework script output appears to conflict with framework rules, the agent M
 
 Agents may summarize successful script output, but MUST NOT claim additional validation beyond what the script reported.
 
-## Documentation Evidence Policy
+## Documentation Evidence and Tooling Policy
 
 Library-specific implementation claims require documentation evidence only in commands that load the tooling protocol through command context.
 
 Commands that load `.orderspec/framework/protocols/tooling-protocol.md` MUST follow its documentation source rules, skill rules, and tooling config overrides.
 
-If a documentation source is available and its policy is `required_if_available`, applicable authoring commands MUST use it before making or preserving library-specific implementation claims, unless project governance explicitly denies that documentation lookup.
+This requirement applies to planning, tasking, implementation, and implementation verification workflows when their command context loads the tooling protocol.
+
+This requirement does not apply to `/order.spec`. Feature specs define WHAT behavior and MUST NOT introduce library-specific implementation claims.
+
+### Deterministic Skill Validation
+
+When a command requires tooling evidence, it MUST verify skill availability deterministically using:
+
+```bash
+python3 .orderspec/framework/scripts/validate_tooling.py -C "$PWD" --json
+```
+
+Agents MUST interpret the JSON output according to these invariant rules:
+
+| Field | Meaning | Required Action |
+|-------|---------|-----------------|
+| `installed_and_verified` | Binding declared installed and skill files exist | Use these skills as evidence source |
+| `installed_but_missing` | Binding declared installed but skill files NOT found | Follow `tooling-protocol.md` rule 6: MUST NOT silently continue; ask user to install or proceed without library-specific claims |
+| `discovered_only` | Binding exists but skill is not yet installed | Ask user before installing per `tooling-protocol.md` rule 4 |
+| `pending` | Binding awaiting resolution | Treat as unavailable; do not use as evidence |
+
+Agents MUST NOT manually inspect `.orderspec/skills/` to determine skill availability. Rely on `validate_tooling.py` output only.
+
+### Skill Matching Procedure
+
+For each `STACK-NNN` referenced in a feature spec §6:
+
+1. Look up the technology name in `.orderspec/contracts/stack.md` using the `STACK-NNN` ID.
+2. Search `tooling.json` `skills.bindings` for a binding where `match.stack_id` equals that `STACK-NNN`.
+3. If a binding exists, use `validate_tooling.py` output to check whether the required skills are `installed_and_verified`.
+4. If no binding exists for a `STACK-NNN` that requires library-specific implementation, follow `tooling-protocol.md` rule 6: do not silently proceed.
+
+### Documentation Source Availability
+
+For each source in `tooling.json` `docs_sources`:
+
+1. Check whether the current command is listed in the source's `commands` array.
+2. If yes and `policy` is `required_if_available`, check whether the source is available as a runtime tool in the current agent environment.
+3. If available, consult it before making library-specific implementation claims.
+4. If unavailable, apply `fallback_when_unavailable` from the config (default: block library-specific claims without other evidence).
+
+Agents MUST NOT hardcode tool names (e.g., "Context7") in procedural prompt instructions. Use only the source names and policies from `tooling.json`.
+
+### Evidence Recording
+
+Commands that produce implementation plans or code MUST record tooling evidence in their output artifact under a `## Library Documentation Evidence` section:
+
+- For each library-specific claim, cite the evidence source (skill name, documentation source name, or user-provided reference).
+- If a required source was unavailable, record that fact and the fallback applied.
+
+### General Restrictions
 
 Read-only documentation lookup is allowed only within the scope granted by project governance and tooling configuration. It does not grant package installation, skill installation, project command execution, arbitrary network access, or gate-time network access.
 
 Gate commands MUST follow constitution capability grants literally. A documentation lookup allowed for authoring commands does not automatically allow documentation lookup during gates.
 
 Agents MUST NOT claim documentation source or skill availability unless the current runtime explicitly exposes the tool. If availability cannot be determined deterministically, agents MUST report `unknown`.
-
-This requirement applies to planning, tasking, implementation, and implementation verification workflows when their command context loads the tooling protocol.
-
-This requirement does not apply to `/order.spec`. Feature specs define WHAT behavior and MUST NOT introduce library-specific implementation claims.
 
 ## Unknown Technology Routing
 

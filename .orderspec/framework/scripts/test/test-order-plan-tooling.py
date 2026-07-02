@@ -1,76 +1,80 @@
-"""test-order-plan-tooling.py — verify tooling-related sections in order.plan.md"""
+"""test-order-plan-tooling.py — verify tooling delegation in order.plan.md"""
 
 import unittest
 from pathlib import Path
 
 PROMPT_PATH = Path(".orderspec/framework/prompts/order.plan.md")
+RULES_PATH = Path(".orderspec/framework/orderspec-rules.md")
 
 
 class TestOrderPlanTooling(unittest.TestCase):
     def setUp(self):
         self.assertTrue(PROMPT_PATH.exists(), f"{PROMPT_PATH} not found")
-        self.content = PROMPT_PATH.read_text(encoding="utf-8")
+        self.assertTrue(RULES_PATH.exists(), f"{RULES_PATH} not found")
+        self.prompt = PROMPT_PATH.read_text(encoding="utf-8")
+        self.rules = RULES_PATH.read_text(encoding="utf-8")
 
-    def test_validate_tooling_in_availability_checks(self):
-        """validate_tooling.py must be listed in Script Availability Checks."""
-        self.assertIn("validate_tooling.py", self.content)
+    def test_prompt_delegates_to_global_rules(self):
+        """Prompt must delegate to global Documentation Evidence and Tooling Policy."""
         self.assertIn(
-            "deterministic tooling.json and installed skills validation",
-            self.content,
+            "Documentation Evidence and Tooling Policy",
+            self.prompt,
+        )
+        self.assertIn(
+            "orderspec-rules.md",
+            self.prompt,
         )
 
-    def test_validate_tooling_called_in_outline(self):
-        """validate_tooling.py must be called in Outline step 2."""
+    def test_prompt_does_not_duplicate_skill_table(self):
+        """Prompt must not duplicate the skill interpretation table from global rules."""
+        # This table belongs in global rules, not in the prompt
+        self.assertNotIn(
+            "installed_but_missing | Binding declared installed but skill files NOT found",
+            self.prompt,
+        )
+
+    def test_prompt_still_calls_validate_tooling(self):
+        """Prompt must still call validate_tooling.py as a procedural step."""
         self.assertIn(
             'validate_tooling.py -C "$PWD" --json',
-            self.content,
+            self.prompt,
         )
 
-    def test_no_hardcoded_context7(self):
-        """Context7 must not be hardcoded as a procedural instruction.
-
-        It may appear in example configs or data references, but the prompt
-        must not instruct the agent to use Context7 by name.
-        """
-        # The old hardcoded line should be gone
-        self.assertNotIn(
-            "If Context7 is available and policy is `required_if_available`, query Context7",
-            self.content,
-        )
-
-    def test_tooling_protocol_deference(self):
-        """Prompt must defer to tooling-protocol.md, not duplicate its rules."""
+    def test_global_rules_contain_skill_table(self):
+        """Global rules must contain the skill interpretation table."""
         self.assertIn(
-            "You MUST follow the tooling protocol for all tooling and documentation verification decisions",
-            self.content,
+            "installed_and_verified",
+            self.rules,
         )
-        self.assertIn("Do not hardcode tool names", self.content)
+        self.assertIn(
+            "installed_but_missing",
+            self.rules,
+        )
+        self.assertIn(
+            "MUST NOT silently continue",
+            self.rules,
+        )
 
-    def test_skill_matching_procedure_present(self):
-        """Skill matching procedure must reference STACK-NNN → bindings."""
-        self.assertIn("STACK-NNN", self.content)
-        self.assertIn("match.stack_id", self.content)
-        self.assertIn("skills.bindings", self.content)
+    def test_global_rules_contain_matching_procedure(self):
+        """Global rules must contain the STACK-NNN matching procedure."""
+        self.assertIn("STACK-NNN", self.rules)
+        self.assertIn("match.stack_id", self.rules)
+        self.assertIn("skills.bindings", self.rules)
 
-    def test_installed_but_missing_handling(self):
-        """Prompt must handle installed_but_missing per tooling-protocol.md."""
-        self.assertIn("installed_but_missing", self.content)
-        self.assertIn("MUST NOT silently continue", self.content)
+    def test_global_rules_forbid_hardcoded_tools(self):
+        """Global rules must forbid hardcoding tool names."""
+        self.assertIn("MUST NOT hardcode tool names", self.rules)
 
     def test_done_when_includes_tooling(self):
-        """Done When must include tooling validation items."""
+        """Done When must still include tooling validation items."""
         self.assertIn(
             "`validate_tooling.py --json` was run",
-            self.content,
+            self.prompt,
         )
         self.assertIn(
             "Tooling evidence recorded in `plan.md`",
-            self.content,
+            self.prompt,
         )
-
-    def test_evidence_section_reference(self):
-        """Prompt must reference Library Documentation Evidence section."""
-        self.assertIn("## Library Documentation Evidence", self.content)
 
 
 if __name__ == "__main__":

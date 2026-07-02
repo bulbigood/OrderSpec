@@ -372,11 +372,13 @@ If an implementation file is the primary file, strongly prefer `direct` or `dele
 
 ## Tooling and Skills Verification
 
-Tooling protocol (`.orderspec/framework/protocols/tooling-protocol.md`) and tooling configuration (`.orderspec/config/tooling.json`) are loaded via Command Context Bootstrap.
+Tooling protocol and configuration are loaded via Command Context Bootstrap.
 
-You MUST follow the tooling protocol for all tooling and documentation verification decisions. Do not duplicate or reinterpret its rules in this prompt.
+For all tooling and documentation verification decisions, you MUST follow the **Documentation Evidence and Tooling Policy** in `.orderspec/framework/orderspec-rules.md`.
 
-### Deterministic skill availability check
+Do not duplicate or reinterpret those global rules in this prompt.
+
+### Run deterministic skill validation
 
 Before planning library-specific mechanisms, run:
 
@@ -384,45 +386,11 @@ Before planning library-specific mechanisms, run:
 python3 .orderspec/framework/scripts/validate_tooling.py -C "$PWD" --json
 ```
 
-This script deterministically verifies that bindings with `status: "installed"` in `tooling.json` have corresponding files in `.orderspec/skills/`.
-
-Interpret the JSON output:
-
-| Field | Meaning | Action |
-|-------|---------|--------|
-| `installed_and_verified` | Binding declared installed and skill files exist | Use these skills as evidence source |
-| `installed_but_missing` | Binding declared installed but skill files NOT found | Follow `tooling-protocol.md` rule 6: MUST NOT silently continue; ask user to install or proceed without library-specific claims |
-| `discovered_only` | Binding exists but skill is not yet installed | Ask user before installing per `tooling-protocol.md` rule 4 |
-| `pending` | Binding awaiting resolution | Treat as unavailable; do not use as evidence |
-
-Do not manually inspect `.orderspec/skills/` to determine availability. Rely on `validate_tooling.py` output.
-
-### Skill matching procedure
-
-For each `STACK-NNN` referenced in `spec.md` §6:
-
-1. Look up the technology name in `.orderspec/contracts/stack.md` using the `STACK-NNN` ID.
-2. Search `tooling.json` `skills.bindings` for a binding where `match.stack_id` equals that `STACK-NNN`.
-3. If a binding exists, use `validate_tooling.py` output to check whether the required skills are `installed_and_verified`.
-4. If no binding exists for a `STACK-NNN` that requires library-specific implementation, follow `tooling-protocol.md` rule 6: do not silently proceed.
-
-### Documentation source availability
-
-For each source in `tooling.json` `docs_sources`:
-
-1. Check whether the current command (`order.plan`) is listed in the source's `commands` array.
-2. If yes and `policy` is `required_if_available`, check whether the source is available as a runtime tool in the current agent environment.
-3. If available, consult it before making library-specific implementation claims.
-4. If unavailable, apply `fallback_when_unavailable` from the config (default: block library-specific claims without other evidence).
-
-Do not hardcode tool names. Use only the source names and policies from `tooling.json`.
+Store the JSON output for use during planning. Interpret it strictly according to the global policy.
 
 ### Evidence recording
 
-Record all tooling evidence in `plan.md` under `## Library Documentation Evidence`:
-
-- For each library-specific claim, cite the evidence source (skill name, documentation source name, or user-provided reference).
-- If a required source was unavailable, record that fact and the fallback applied.
+Record tooling evidence in `plan.md` under `## Library Documentation Evidence` as required by the global policy.
 
 Do not invent APIs, options, middleware order, driver return shapes, or config syntax without evidence.
 
