@@ -146,24 +146,36 @@ The machine-readable mechanism matrix is **not authored in this document**.
 Mechanism decisions for `REQ`, `IF`, `AC`, `EDGE`, `INV`, and `NFR` IDs are stored in:
 
 ```text
-.state/mechanisms.tsv
+<FEATURE_DIR>/.state/mechanisms.tsv  # .orderspec/features/<feature>/.state/mechanisms.tsv
 ```
 
 This file is written only by:
 
 ```bash
-python3 .orderspec/framework/scripts/traceability.py put-mechanisms <feature>
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" put-mechanisms
 ```
 
 and checked by:
 
 ```bash
-python3 .orderspec/framework/scripts/traceability.py lint <feature>
-python3 .orderspec/framework/scripts/traceability.py check-mechanisms <feature>
-python3 .orderspec/framework/scripts/traceability.py validate --stage plan <feature>
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" lint
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" check-mechanisms
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" validate --stage plan
 ```
 
 Do not mirror the mechanism matrix as a Markdown table in `plan.md`.
+
+---
+
+## Library Documentation Evidence
+
+<!--
+Required by global policy (orderspec-rules.md: Documentation Evidence and Tooling Policy).
+- For each library-specific claim, cite the evidence source (skill name, documentation source name, or user-provided reference).
+- If no library-specific claims were made, write exactly: "No library-specific claims."
+-->
+
+[For each library-specific claim: cite skill name / docs source name / user reference. Or: "No library-specific claims."]
 
 ---
 

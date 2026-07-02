@@ -2263,6 +2263,25 @@ def cmd_validate(args):
 
     sys.exit(exit_code)
 
+# ── mark-consumed ────────────────────────────────────────────────────────────
+
+def cmd_mark_consumed(args):
+    """Mark a gate report file as CONSUMED_STALE after /order.plan used it."""
+    report_path = Path(args.report)
+    if not report_path.exists():
+        die(f"mark-consumed: report file not found: {report_path}")
+    
+    marker = f"""# CONSUMED_STALE — {report_path.name}
+
+This is not a PASS verdict.
+
+The previous `/order.plan-check` report was consumed by `/order.plan` and is now stale.
+Run `/order.plan-check` for a fresh verdict.
+"""
+    report_path.write_text(marker, encoding="utf-8")
+    print(f"mark-consumed: wrote CONSUMED_STALE marker to {report_path}")
+
+
 # ── diff-summary ─────────────────────────────────────────────────────────────
 
 def _git_show_spec(repo_root, git_ref, spec_rel_path):
@@ -2418,7 +2437,8 @@ def main():
     subparsers.add_parser("extract-spec-ids", help="extract-spec-ids <feature>")
     subparsers.add_parser("extract-trace", help="extract-trace <feature>")
     subparsers.add_parser("render", help="render <feature>")
-    subparsers.add_parser("get", help="get <feature> <mechanisms|spec-ids|trace>")
+    get_parser = subparsers.add_parser("get", help="get [--feature-dir FD] [feature] <mechanisms|spec-ids|trace>")
+    get_parser.add_argument("positional_args", nargs="*")
     subparsers.add_parser("put-mechanisms", help="put-mechanisms <feature>")
     subparsers.add_parser("put-spec-ids", help="put-spec-ids <feature>")
     subparsers.add_parser("put-trace", help="put-trace <feature>")
@@ -2428,6 +2448,9 @@ def main():
     sum_parser = subparsers.add_parser("summarize-mechanisms", help="summarize-mechanisms [--json] <feature>")
     sum_parser.add_argument("--json", action="store_true")
     sum_parser.add_argument("feature", nargs="?")
+
+    mc_parser = subparsers.add_parser("mark-consumed", help="mark-consumed --report <path>")
+    mc_parser.add_argument("--report", required=True, help="Path to the gate report file to mark as consumed")
 
     diff_parser = subparsers.add_parser("diff-summary", help="diff-summary --old <ref> [--new <ref>] [--json] <feature>")
     diff_parser.add_argument("--old", required=True, help="Git ref for old version")
@@ -2478,9 +2501,13 @@ def main():
     elif cmd == "render":
         cmd_render(remaining[0] if remaining else "")
     elif cmd == "get":
-        if len(remaining) < 2:
-            die("usage: traceability.py get <feature> <mechanisms|spec-ids|trace>", 64)
-        cmd_get(remaining[0], remaining[1])
+        if len(args.positional_args) == 1:
+            # Only 'which' provided, feature is empty (relies on --feature-dir)
+            cmd_get("", args.positional_args[0])
+        elif len(args.positional_args) == 2:
+            cmd_get(args.positional_args[0], args.positional_args[1])
+        else:
+            die("usage: traceability.py get [--feature-dir FD] [feature] <mechanisms|spec-ids|trace>", 64)
     elif cmd == "put-mechanisms":
         cmd_put_mechanisms(remaining[0] if remaining else "")
     elif cmd == "put-spec-ids":
@@ -2493,6 +2520,8 @@ def main():
         cmd_check_mechanisms(remaining[0] if remaining else "")
     elif cmd == "summarize-mechanisms":
         cmd_summarize_mechanisms(args.feature, json_out=args.json)
+    elif cmd == "mark-consumed":
+        cmd_mark_consumed(args)
     elif cmd == "diff-summary":
         cmd_diff_summary(args)
     elif cmd == "validate":

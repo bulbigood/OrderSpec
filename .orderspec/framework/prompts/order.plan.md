@@ -70,6 +70,19 @@ Include:
 
 Do not silently compensate for an incomplete or contradictory spec.
 
+## Path Bootstrap and JSON Parsing Rules
+
+Throughout this command, paths are resolved via `setup.py paths --json` / `setup.py plan --json`.
+
+JSON parsing rules:
+
+- You MUST parse JSON output using `python3 -c '...'` inline snippets, as shown in each block.
+- You MUST NOT use `jq`, `grep`, `sed`, or any non-Python tool to parse JSON.
+- You MUST NOT hand-write paths or hardcode feature directory names.
+- Shell variables resolved from JSON (`FEATURE_DIR`, `FEATURE_SPEC`, `IMPL_PLAN`, `REPO_ROOT`, `FEATURE`) are valid only within the same compound shell invocation. Rehydrate them at the start of every new block by re-running `setup.py paths --json` or by using the result of `setup.py plan --json`.
+
+---
+
 ## Command Context Bootstrap
 
 Before starting command-specific logic:
@@ -280,7 +293,7 @@ After successful write and successful self-checks, if a BLOCK/ROUTING REQUIRED r
 Mechanism decisions for this feature live in machine state:
 
 ```text
-<feature-dir>/.state/mechanisms.tsv
+<FEATURE_DIR>/.state/mechanisms.tsv  # .orderspec/features/<feature>/.state/mechanisms.tsv
 ```
 
 They do **not** live as a table inside `plan.md`.
@@ -570,6 +583,17 @@ If `FAIL` is unjustified, STOP. If justified, explain in `Complexity Tracking`.
 
 #### Physical Project Structure
 
+`pathmanifest` semantics (enforced by `traceability.py check-plan` and `validate --stage plan`):
+
+- `[MOD]` — file MUST already exist on disk. If it does not, check fails (M10).
+- `[NEW]` — file MUST NOT exist on disk. If it does, check fails (M10).
+- Directories MUST NOT be listed (only files).
+- Every line MUST have exactly one `[NEW]` or `[MOD]` tag.
+- Paths are repo-relative, forward-slash, no leading `./`.
+- The block is a fenced code block with language `pathmanifest`.
+
+
+
 Emit a flat `pathmanifest` fenced block:
 
 ```pathmanifest
@@ -694,15 +718,22 @@ python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$F
 python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" summarize-mechanisms --json
 ```
 
-Blocking findings:
+Blocking findings are determined by `validate --stage plan --json` in the `findings` array. Any finding with `severity: "HIGH"` or `severity: "CRITICAL"` blocks.
 
-- `M5`: `plan.md` cites an ID not defined by `spec.md`/`spec-ids.tsv`.
-- `M9`: pathmanifest missing or malformed.
-- `M10`: `[NEW]`/`[MOD]` contradicts filesystem.
-- `M15`: missing or invalid mechanism rows.
-- `M16`: mechanism primary file not listed in pathmanifest.
-- `M17`: invalid delegation chain/cycle.
-- `M27`: mechanism row references unknown Spec ID.
+Key checks for stage=plan include (non-exhaustive):
+
+- `M5`: plan.md cites an ID not defined in spec-ids.tsv/spec.md
+- `M6`: unresolved clarification markers in spec
+- `M9`: pathmanifest missing or malformed
+- `M10`: `[NEW]`/`[MOD]` contradicts filesystem (`[MOD]` must exist, `[NEW]` must not exist)
+- `M15`: missing or invalid mechanism rows
+- `M16`: mechanism primary file not listed in pathmanifest
+- `M17`: invalid delegation chain/cycle
+- `M26`: `documented` primary file is neither `plan.md` nor in pathmanifest
+- `M27`: mechanism row references unknown Spec ID
+- `M28`: invalid spec frontmatter
+
+The full list of checks and their severities is in the JSON output of `validate --stage plan --json`. Do not maintain a separate hardcoded list.
 
 Medium/low findings must be fixed if meaning-preserving and local. If fixing requires contract change, STOP and route to `/order.spec`.
 
@@ -710,18 +741,39 @@ Medium/low findings must be fixed if meaning-preserving and local. If fixing req
 
 No operator-defined post-execution extension phases are supported in the current OrderSpec core.
 
+## Update Active Feature State
+
+After successful self-checks and before producing the Completion Report, update the active feature status:
+
+```bash
+python3 .orderspec/framework/scripts/active_feature.py set \
+  --feature-id "$FEATURE" \
+  --feature-directory "$FEATURE_DIR" \
+  --status planned \
+  --last-command order.plan \
+  --json
+```
+
+If `active_feature.py` is unavailable, STOP and report:
+
+```text
+PLAN_STOPPED: active_feature.py unavailable
+Cannot update active feature status to `planned`. Framework script missing.
+```
+
+Do not hand-edit `.orderspec/state/active-feature.json`.
+
+---
+
 ## Consumed Report Marker
 
-If a BLOCK/ROUTING REQUIRED `plan-report.md` was used, replace it after successful self-checks with:
+If a BLOCK/ROUTING REQUIRED `plan-report.md` was used, mark it as consumed after successful self-checks:
 
-```markdown
-# CONSUMED_STALE — plan-report.md
-
-This is not a PASS verdict.
-
-The previous `/order.plan-check` report was consumed by `/order.plan` and is now stale.
-Run `/order.plan-check` for a fresh verdict.
+```bash
+python3 .orderspec/framework/scripts/traceability.py mark-consumed --report "$FEATURE_DIR/plan-report.md"
 ```
+
+Do not hand-write the `CONSUMED_STALE` marker. The script owns this operation.
 
 ## Completion Report
 
@@ -742,6 +794,7 @@ Report to chat:
 - `check-plan` result;
 - `validate --stage plan` result;
 - prior `plan-report.md` findings addressed, if any;
+- active-feature status updated to `planned` via `active_feature.py`;
 - readiness for `/order.tasks`.
 
 ## Done When
@@ -771,3 +824,4 @@ This self-check is for the generator only. Do not copy it into `plan.md`.
 - [ ] `traceability.py summarize-mechanisms --json` was used for row counts.
 - [ ] If a BLOCK/ROUTING `plan-report.md` was used, it was replaced with `CONSUMED_STALE`.
 - [ ] Completion Report provided.
+- [ ] Active feature status updated to `planned` via `active_feature.py` (after successful self-checks).
