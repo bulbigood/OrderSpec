@@ -53,13 +53,8 @@ Granularity:
 [feature-directory]/
 ├── spec.md              # Source of truth: WHAT contract and logical architecture
 ├── plan.md              # This file: physical mapping to current repository state
-├── research.md          # Conditional: generated only if planning research was required
 └── tasks.md             # Generated later by /order.tasks
 ```
-
-[If no research was needed, write exactly:]
-
-`No research.md generated — all planning inputs were resolved from spec.md and repository reconnaissance.`
 
 ---
 

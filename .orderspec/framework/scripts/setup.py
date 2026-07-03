@@ -61,9 +61,6 @@ def collect_available_docs(paths, include_tasks=False):
     """Build a list of available optional documents in the feature directory."""
     docs = []
 
-    if Path(paths["RESEARCH"]).is_file():
-        docs.append("research.md")
-
     if Path(paths["DATA_MODEL"]).is_file():
         docs.append("data-model.md")
 
@@ -103,7 +100,6 @@ def base_paths_payload(paths):
         "FEATURE_SPEC": paths["FEATURE_SPEC"],
         "IMPL_PLAN": paths["IMPL_PLAN"],
         "TASKS": paths["TASKS"],
-        "RESEARCH": paths["RESEARCH"],
         "DATA_MODEL": paths["DATA_MODEL"],
         "QUICKSTART": paths["QUICKSTART"],
         "CONTRACTS_DIR": paths["CONTRACTS_DIR"],

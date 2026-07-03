@@ -277,7 +277,7 @@ def get_feature_paths(persist_active_feature=True):
 
     Returns a dict with keys:
       REPO_ROOT, CURRENT_BRANCH, FEATURE_DIR, FEATURE_SPEC,
-      IMPL_PLAN, TASKS, RESEARCH, DATA_MODEL, QUICKSTART, CONTRACTS_DIR
+      IMPL_PLAN, TASKS, DATA_MODEL, QUICKSTART, CONTRACTS_DIR
 
     Raises RuntimeError if the feature directory cannot be resolved.
     """
@@ -316,7 +316,6 @@ def get_feature_paths(persist_active_feature=True):
         "FEATURE_SPEC": str(feature_dir / "spec.md"),
         "IMPL_PLAN": str(feature_dir / "plan.md"),
         "TASKS": str(feature_dir / "tasks.md"),
-        "RESEARCH": str(feature_dir / "research.md"),
         "DATA_MODEL": str(feature_dir / "data-model.md"),
         "QUICKSTART": str(feature_dir / "quickstart.md"),
         "CONTRACTS_DIR": str(feature_dir / "contracts"),

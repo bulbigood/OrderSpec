@@ -142,7 +142,6 @@ Before deriving tasks:
 2. **Load inputs** from FEATURE_DIR:
    - **Required**: `spec.md` (UJ priorities, AC, REQ, INV, EDGE, data model, contracts),
      `plan.md` (file mapping, stack, NEW/MOD files, test/build commands).
-   - **Optional**: `research.md`; **if exists**: `.orderspec/memory/constitution.md`.
 
 3. **Read the coverage contract from the tool — never from memory.** The IDs you must
    cover live in `mechanisms.tsv`, not in your recollection of the spec:
