@@ -24,7 +24,7 @@ if not TRACE.exists():
 WORK = Path(tempfile.mkdtemp(prefix="orderspec-test-grid-"))
 sys.path.insert(0, str(SCRIPT_DIR.parent))
 
-from traceability import _extract_grid_rows, _extract_section, ID_RE
+from trace_parse import _extract_grid_rows, _extract_section, ID_RE
 
 from common import FEATURES_DIR
 SPECS_ROOT = WORK / FEATURES_DIR

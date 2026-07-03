@@ -36,7 +36,7 @@ WORK = Path(tempfile.mkdtemp(prefix="orderspec-test-status-"))
 sys.path.insert(0, str(SCRIPT_DIR.parent))
 
 # Import _extract_status_codes directly for unit tests
-from traceability import _extract_status_codes
+from trace_parse import _extract_status_codes
 
 # Setup feature dir
 from common import FEATURES_DIR
