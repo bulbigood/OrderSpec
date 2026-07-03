@@ -306,6 +306,95 @@ if rc == 0:
 else:
     bad("validate-frontmatter: rejected", f"rc={rc} out={out[:300]}")
 
+
+# Helper to write plan.md
+def write_plan(content):
+    (SPECS / "plan.md").write_text(content, encoding="utf-8")
+
+# Helper to create a file in the repo
+def create_repo_file(rel_path, content=""):
+    full_path = WORK / rel_path
+    full_path.parent.mkdir(parents=True, exist_ok=True)
+    full_path.write_text(content, encoding="utf-8")
+
+# 13. [DEL] tag supported when file exists
+reset_feature()
+write_spec(MINIMAL_SPEC)
+create_repo_file("src/old-file.py", "# old")
+write_plan("""# Plan
+
+## Physical Project Structure
+
+```pathmanifest
+src/old-file.py    [DEL]
+```
+""")
+rc, out, err = run_trace("check-plan", F)
+if rc == 0 and "OK" in out:
+    ok("[DEL] supported: file exists")
+else:
+    bad("[DEL] supported: file exists", f"rc={rc} err={err}")
+
+# 14. [DEL] tag fails when file missing
+reset_feature()
+write_spec(MINIMAL_SPEC)
+write_plan("""# Plan
+
+## Physical Project Structure
+
+```pathmanifest
+src/missing.py    [DEL]
+```
+""")
+rc, out, err = run_trace("check-plan", F)
+if rc != 0 and "[DEL]" in err:
+    ok("[DEL] fails: file missing")
+else:
+    bad("[DEL] fails: file missing", f"rc={rc} err={err}")
+
+# 15. put-mechanisms --json works
+reset_feature()
+write_spec(MINIMAL_SPEC)
+run_trace("extract-spec-ids", F)
+json_data = json.dumps([
+    {
+        "spec_id": "REQ-001",
+        "coverage_kind": "direct",
+        "mechanism": "Test mechanism",
+        "primary_files": "src/test.py",
+        "test_type": "unit"
+    }
+])
+rc, out, err = run_trace("put-mechanisms", "--json", F, input_text=json_data)
+if rc == 0 and "wrote" in out:
+    ok("put-mechanisms --json: valid input works")
+    mech_file = SDIR / "mechanisms.tsv"
+    content = mech_file.read_text()
+    if "REQ-001" in content and "Test mechanism" in content:
+        ok("put-mechanisms --json: content correct")
+    else:
+        bad("put-mechanisms --json: content incorrect", content)
+else:
+    bad("put-mechanisms --json: valid input failed", f"rc={rc} err={err}")
+
+# 16. put-mechanisms --json fails on missing field
+reset_feature()
+write_spec(MINIMAL_SPEC)
+run_trace("extract-spec-ids", F)
+json_data = json.dumps([
+    {
+        "spec_id": "REQ-001",
+        "coverage_kind": "direct",
+        "mechanism": "Test mechanism",
+        "primary_files": "src/test.py"
+    }
+])
+rc, out, err = run_trace("put-mechanisms", "--json", F, input_text=json_data)
+if rc != 0:
+    ok("put-mechanisms --json: invalid input rejected")
+else:
+    bad("put-mechanisms --json: invalid input accepted", out)
+
 # ── Cleanup ──────────────────────────────────────────────────────────────────
 
 if WORK.exists():

@@ -71,9 +71,10 @@ Flat path manifest — NOT a tree.
 Rules:
 - One FILE per line.
 - Never list directories.
-- Format: <repo-relative-path>  [NEW]|[MOD]
+- Format: <repo-relative-path>  [NEW]|[MOD]|[DEL]
 - [NEW] = file does NOT exist on disk now.
 - [MOD] = file DOES exist on disk now.
+- [DEL] = file DOES exist on disk now and will be deleted.
 - Paths are repo-relative, forward-slash, no leading ./.
 - This block is machine-checked by traceability.py check-plan and validate --stage plan.
 -->
@@ -81,6 +82,7 @@ Rules:
 ```pathmanifest
 src/example/new_file.py      [NEW]
 src/example/existing.py      [MOD]
+src/example/old_file.py      [DEL]
 tests/example/test_new.py    [NEW]
 ```
 

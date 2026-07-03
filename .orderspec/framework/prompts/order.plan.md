@@ -372,6 +372,21 @@ Additional rules:
 
 ### Documented coverage guidance
 
+#### Hard Rule: Executable Behavior MUST NOT Be `documented`
+
+If a Spec ID (REQ, IF, AC, EDGE, INV, NFR) describes behavior that can be triggered or observed via an interface (API, CLI, UI, database query), it MUST NOT be `documented`.
+
+It MUST be `direct` or `delegated:<ID>` with `test_type` of `unit` or `integration`.
+
+**Examples of INVALID `documented` usage:**
+- `INV-004` (audit entries not modifiable) — CAN be tested by attempting to modify/delete an audit entry
+- `NFR-001` (audit integrity) — CAN be tested by verifying immutability after creation
+- `REQ-006` (reject modification of soft-deleted task) — CAN be tested by attempting modification
+
+**Examples of VALID `documented` usage:**
+- `ASM-001` (task status enum values) — pure design decision, no executable behavior
+- `EDGE-001` (concurrent update deferred) — explicitly deferred, no test in current scope
+
 Use `documented` sparingly.
 
 Appropriate:
@@ -414,6 +429,36 @@ python3 .orderspec/framework/scripts/validate_tooling.py -C "$PWD" --json
 ```
 
 Store the JSON output for use during planning. Interpret it strictly according to the global policy.
+
+### Activate Skills and Documentation Tools
+
+**Execution point**: This step runs AFTER `validate_tooling.py` completes successfully and BEFORE repository reconnaissance begins.
+
+You MUST activate skills and documentation tools before studying the codebase, so that repository analysis is informed by library-specific knowledge.
+
+#### Skills activation
+
+For each skill reported as `installed_and_verified` by `validate_tooling.py`:
+
+1. Load the skill content into your working context.
+2. Use the skill knowledge when interpreting repository patterns during reconnaissance.
+3. If a skill covers a technology referenced in `spec.md` §6 (e.g., Mongoose, Express, Joi), you MUST apply that skill's patterns when mapping spec IDs to implementation files.
+
+#### MCP documentation tools
+
+If `validate_tooling.py` or `tooling.json` reports documentation sources (e.g., context7) as available:
+
+1. Verify the tool is actually callable in the current runtime — do not assume it works.
+2. If callable, query it for library-specific patterns relevant to the planned implementation (e.g., Mongoose schema plugins, Express route nesting, Joi custom validators).
+3. Record the actual tool calls made in `## Library Documentation Evidence`.
+4. If a tool is reported as available but cannot be called, record: "Tool reported available but not callable in current runtime".
+5. NEVER claim to have queried a tool without making an actual call.
+
+If no skills are installed and no MCP tools are available, write in `## Library Documentation Evidence`:
+
+```text
+No library-specific claims — all implementation patterns observed from existing repository files.
+```
 
 ### Verify skill bindings registration
 
@@ -706,7 +751,9 @@ Mechanism `test_type` must match the planned test topology.
 
 Rules:
 
-- If any row uses `test_type=unit`, the `pathmanifest` SHOULD include a plausible unit test file for that implementation layer.
+- If any row uses `test_type=unit`, the `pathmanifest` MUST include a specific unit test file for that implementation layer.
+- If any row uses `test_type=integration`, the `pathmanifest` MUST include a specific integration test file.
+- The test file MUST be listed in `pathmanifest` with `[NEW]` or `[MOD]` tag.
 - If a service mechanism is marked `unit`, plan a service unit test unless the repository clearly does not use service unit tests and integration coverage is intentionally chosen instead.
 - If a validation mechanism is marked `unit`, plan a validation unit test or change the mechanism to `integration` if validation is only exercised through HTTP tests.
 - Every externally visible `IF-NNN` should have integration coverage, directly or through delegated `AC-NNN`.
@@ -831,6 +878,16 @@ Report to chat:
 - active-feature status updated to `planned` via `active_feature.py`;
 - readiness for `/order.tasks`.
 
+## Next Steps
+
+After successful completion, it is RECOMMENDED to run the verification gate:
+
+```text
+/order.plan-check
+```
+
+This will verify that the plan is correctly derived from spec + repo + project contracts.
+
 ## Done When
 
 This self-check is for the generator only. Do not copy it into `plan.md`.
@@ -858,4 +915,5 @@ This self-check is for the generator only. Do not copy it into `plan.md`.
 - [ ] `traceability.py summarize-mechanisms --json` was used for row counts.
 - [ ] If a BLOCK/ROUTING `plan-report.md` was used, it was replaced with `CONSUMED_STALE`.
 - [ ] Completion Report provided.
+- [ ] Completion Report includes recommendation to run `/order.plan-check`.
 - [ ] Active feature status updated to `planned` via `active_feature.py` (after successful self-checks).

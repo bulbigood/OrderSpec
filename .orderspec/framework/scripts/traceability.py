@@ -377,6 +377,11 @@ def _parse_pathmanifest(plan_file):
                 findings.append(f"Multiple tags on manifest line: {line}")
                 continue
             tag = "[MOD]"
+        if "[DEL]" in parts:
+            if tag:
+                findings.append(f"Multiple tags on manifest line: {line}")
+                continue
+            tag = "[DEL]"
 
         if path.endswith("/"):
             findings.append(f"Manifest lists directory: {path}")
@@ -1186,8 +1191,21 @@ def _put_via_lint(feature, kind, basename, marker, colnames, rows=None):
     print(f"put-{basename}: wrote {target}")
 
 
-def cmd_put_mechanisms(feature):
-    _put_via_lint(feature, "mechanisms", "mechanisms.tsv", MECH_MARKER, MECH_COLNAMES)
+def cmd_put_mechanisms(feature, json_input=False):
+    if json_input:
+        data = json.loads(sys.stdin.read())
+        rows = []
+        for item in data:
+            rows.append([
+                item["spec_id"],
+                item["coverage_kind"],
+                item["mechanism"],
+                item["primary_files"],
+                item["test_type"],
+            ])
+        _put_via_lint(feature, "mechanisms", "mechanisms.tsv", MECH_MARKER, MECH_COLNAMES, rows=rows)
+    else:
+        _put_via_lint(feature, "mechanisms", "mechanisms.tsv", MECH_MARKER, MECH_COLNAMES)
 
 
 def cmd_put_spec_ids(feature):
@@ -1600,6 +1618,10 @@ def cmd_check_plan(feature):
 
         if tag == "[NEW]" and full_path.exists():
             print(f"check-plan: ERROR — [NEW] path already exists: {path}", file=sys.stderr)
+            rc = 1
+
+        if tag == "[DEL]" and not full_path.exists():
+            print(f"check-plan: ERROR — [DEL] path does not exist: {path}", file=sys.stderr)
             rc = 1
 
     if rc == 0:
@@ -2018,6 +2040,8 @@ def cmd_validate(args):
                 add("M10", "HIGH", "plan.md", f"[MOD] path '{path}' does not exist in repo")
             elif tag == "[NEW]" and full_path.exists():
                 add("M10", "HIGH", "plan.md", f"[NEW] path '{path}' already exists in repo")
+            elif tag == "[DEL]" and not full_path.exists():
+                add("M10", "HIGH", "plan.md", f"[DEL] path '{path}' does not exist in repo")
 
         for check, severity, location, message in check_mechanisms_findings(feature):
             add(check, severity, location, message)
@@ -2439,7 +2463,8 @@ def main():
     subparsers.add_parser("render", help="render <feature>")
     get_parser = subparsers.add_parser("get", help="get [--feature-dir FD] [feature] <mechanisms|spec-ids|trace>")
     get_parser.add_argument("positional_args", nargs="*")
-    subparsers.add_parser("put-mechanisms", help="put-mechanisms <feature>")
+    pm_parser = subparsers.add_parser("put-mechanisms", help="put-mechanisms <feature>")
+    pm_parser.add_argument("--json", action="store_true", help="Read input as JSON array")
     subparsers.add_parser("put-spec-ids", help="put-spec-ids <feature>")
     subparsers.add_parser("put-trace", help="put-trace <feature>")
     subparsers.add_parser("check-plan", help="check-plan <feature>")
@@ -2509,7 +2534,7 @@ def main():
         else:
             die("usage: traceability.py get [--feature-dir FD] [feature] <mechanisms|spec-ids|trace>", 64)
     elif cmd == "put-mechanisms":
-        cmd_put_mechanisms(remaining[0] if remaining else "")
+        cmd_put_mechanisms(remaining[0] if remaining else "", json_input=getattr(args, 'json', False))
     elif cmd == "put-spec-ids":
         cmd_put_spec_ids(remaining[0] if remaining else "")
     elif cmd == "put-trace":
