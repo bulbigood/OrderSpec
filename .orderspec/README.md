@@ -493,7 +493,7 @@ In one line:
 The principles that shape OrderSpec:
 
 - **Weak-model-first.** The workflow is tuned to run reliably on modest models, not only frontier models.
-- **Deterministic scripts own mechanical work.** Resolution, validation, bootstrap generation, agent sync, and state management should not depend on model memory.
+- **Deterministic scripts own mechanical work.** Resolution, validation, bootstrap generation, agent sync, and state management should not depend on model memory. AI agent = semantic glue between deterministic logic parts.
 - **Gates detect and route; owners fix.** A gate is an inspector, not an author.
 - **Quality first.** Generated documents and code are the product. Everything else bends to keep them correct.
 - **Token-efficient, but correctness wins.** Lean prompts are valuable, but not at the cost of ambiguity or broken contracts.
