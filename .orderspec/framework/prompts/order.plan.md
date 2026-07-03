@@ -867,6 +867,7 @@ Report to chat:
 - constitution status summary;
 - `[NEW]` file count;
 - `[MOD]` file count;
+- `[DEL]` file count;
 - mechanism matrix result:
   - `put-mechanisms` exited zero;
   - `lint` exited zero;
