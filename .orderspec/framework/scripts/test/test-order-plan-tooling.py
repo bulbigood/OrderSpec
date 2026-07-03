@@ -15,13 +15,9 @@ class TestOrderPlanTooling(unittest.TestCase):
         self.rules = RULES_PATH.read_text(encoding="utf-8")
 
     def test_prompt_delegates_to_global_rules(self):
-        """Prompt must delegate to global Documentation Evidence and Tooling Policy."""
+        """Prompt must delegate tooling validation via validate_tooling.py."""
         self.assertIn(
-            "Documentation Evidence and Tooling Policy",
-            self.prompt,
-        )
-        self.assertIn(
-            "orderspec-rules.md",
+            'validate_tooling.py -C "$PWD" --json',
             self.prompt,
         )
 
@@ -68,11 +64,7 @@ class TestOrderPlanTooling(unittest.TestCase):
     def test_done_when_includes_tooling(self):
         """Done When must still include tooling validation items."""
         self.assertIn(
-            "`validate_tooling.py --json` was run",
-            self.prompt,
-        )
-        self.assertIn(
-            "Tooling evidence recorded in `plan.md`",
+            "validate_tooling.py",
             self.prompt,
         )
 

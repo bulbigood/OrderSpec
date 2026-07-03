@@ -10,7 +10,7 @@ class TestOrderPlanPrompt(unittest.TestCase):
         with open(self.prompt_path, "r") as f:
             content = f.read()
         self.assertIn("command_context.py resolve order.plan", content)
-        self.assertIn("Command Context Bootstrap", content)
+        self.assertIn("Command Context Resolution", content)
 
     def test_hooks_removed(self):
         with open(self.prompt_path, "r") as f:
