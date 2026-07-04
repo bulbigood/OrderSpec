@@ -305,6 +305,61 @@ data = parse_json_stdout(out)
 assert_true(data["SPEC_EXISTS"] is True, "spec JSON reports SPEC_EXISTS=true")
 
 
+# 16. plan-check --json blocks when spec.md is missing
+reset_repo()
+set_active_feature_state("specs/F")
+(WORK / "specs" / "F").mkdir(parents=True, exist_ok=True)
+(WORK / "specs" / "F" / "plan.md").write_text("PLAN\n", encoding="utf-8")
+rc, out, err = run_setup("plan-check", "--json")
+assert_rc(2, rc, "plan-check blocks without spec.md", out, err)
+
+# 17. plan-check --json blocks when plan.md is missing
+reset_repo()
+make_feature("specs/F", spec=True, plan=False)
+rc, out, err = run_setup("plan-check", "--json")
+assert_rc(2, rc, "plan-check blocks without plan.md", out, err)
+
+# 18. plan-check --json creates plan-report.md from core report template when spec+plan exist
+reset_repo()
+write_core_template("report-template", "CORE REPORT TEMPLATE\n")
+fdir = make_feature("specs/F", spec=True, plan=True)
+rc, out, err = run_setup("plan-check", "--json")
+assert_rc(0, rc, "plan-check creates plan-report.md when spec+plan exist", out, err)
+data = parse_json_stdout(out)
+assert_true((fdir / "plan-report.md").read_text(encoding="utf-8") == "CORE REPORT TEMPLATE\n", "plan-report.md copied from core report template")
+assert_true(data["PLAN_REPORT"].endswith("plan-report.md"), "plan-check JSON includes PLAN_REPORT")
+assert_true(data["PLAN_REPORT_EXISTS"] is True, "plan-check JSON reports PLAN_REPORT_EXISTS=true")
+assert_true(data["REPORT_REFRESHED"] is False, "plan-check JSON reports REPORT_REFRESHED=false without flag")
+
+# 19. plan-check --json does not overwrite existing report without --refresh-template
+reset_repo()
+write_core_template("report-template", "CORE REPORT TEMPLATE\n")
+fdir = make_feature("specs/F", spec=True, plan=True)
+(fdir / "plan-report.md").write_text("EXISTING REPORT\n", encoding="utf-8")
+rc, out, err = run_setup("plan-check", "--json")
+assert_rc(0, rc, "plan-check preserves existing report without refresh", out, err)
+assert_true((fdir / "plan-report.md").read_text(encoding="utf-8") == "EXISTING REPORT\n", "existing plan-report.md preserved")
+
+# 20. plan-check --json --refresh-template overwrites existing report
+reset_repo()
+write_core_template("report-template", "CORE REPORT TEMPLATE\n")
+fdir = make_feature("specs/F", spec=True, plan=True)
+(fdir / "plan-report.md").write_text("EXISTING REPORT\n", encoding="utf-8")
+rc, out, err = run_setup("plan-check", "--json", "--refresh-template")
+assert_rc(0, rc, "plan-check refresh exits zero", out, err)
+assert_true((fdir / "plan-report.md").read_text(encoding="utf-8") == "CORE REPORT TEMPLATE\n", "refresh replaces existing report with template")
+data = parse_json_stdout(out)
+assert_true(data["REPORT_REFRESHED"] is True, "plan-check JSON marks REPORT_REFRESHED=true")
+
+# 21. plan-check --json --shell-vars outputs eval-ready variables
+reset_repo()
+write_core_template("report-template", "CORE\n")
+fdir = make_feature("specs/F", spec=True, plan=True)
+rc, out, err = run_setup("plan-check", "--shell-vars")
+assert_rc(0, rc, "plan-check --shell-vars exits zero", out, err)
+assert_true("FEATURE_DIR=" in out, "plan-check --shell-vars includes FEATURE_DIR")
+assert_true("PLAN_REPORT=" in out, "plan-check --shell-vars includes PLAN_REPORT")
+
 # ── Cleanup ──────────────────────────────────────────────────────────────────
 
 if WORK.exists():

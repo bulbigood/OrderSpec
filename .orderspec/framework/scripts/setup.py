@@ -368,6 +368,76 @@ def cmd_spec_check(args):
     output_result(payload, args)
 
 
+# ── subcommand: plan-check ────────────────────────────────────────────────────
+
+def cmd_plan_check(args):
+    """Setup for /order.plan-check — validate spec+plan, create/refresh report template.
+
+    Safety contract:
+      - Gate reports are overwritten each run (see template comment).
+      - With --refresh-template, plan-report.md is regenerated from the
+        currently resolved report template before the prompt fills it.
+      - Without --refresh-template, an existing plan-report.md is preserved
+        (useful for incremental edits during routing cycles).
+    """
+    try:
+        paths = get_feature_paths()
+    except RuntimeError as e:
+        die(str(e), rc=2)
+
+    feature_dir = Path(paths["FEATURE_DIR"])
+    feature_spec = Path(paths["FEATURE_SPEC"])
+    impl_plan = Path(paths["IMPL_PLAN"])
+    plan_report = feature_dir / "plan-report.md"
+    repo_root = paths["REPO_ROOT"]
+
+    # A plan-check requires spec.md to exist.
+    if not feature_spec.is_file():
+        die(
+            f"spec.md not found: {feature_spec}\n"
+            f"Run /order.spec first to create the feature contract.",
+            rc=2,
+        )
+
+    # A plan-check requires plan.md to exist.
+    if not impl_plan.is_file():
+        die(
+            f"plan.md not found: {impl_plan}\n"
+            f"Run /order.plan first to create the implementation plan.",
+            rc=2,
+        )
+
+    feature_dir.mkdir(parents=True, exist_ok=True)
+
+    template = resolve_template(REPORT_TEMPLATE_NAME, repo_root)
+
+    if plan_report.is_file() and not args.refresh_template:
+        print(
+            f"Report already exists at {plan_report}, skipping template copy "
+            f"(use --refresh-template to regenerate)",
+            file=sys.stderr,
+        )
+    else:
+        if template and Path(template).is_file():
+            shutil.copy2(template, plan_report)
+            if args.refresh_template and plan_report.is_file():
+                print(f"Refreshed report template at {plan_report}", file=sys.stderr)
+            else:
+                print(f"Copied report template to {plan_report}", file=sys.stderr)
+        else:
+            print("Warning: Report template not found; creating empty plan-report.md", file=sys.stderr)
+            plan_report.touch()
+
+    payload = base_paths_payload(paths)
+    payload.update({
+        "REPORT_TEMPLATE": template or "",
+        "PLAN_REPORT": str(plan_report),
+        "PLAN_REPORT_EXISTS": plan_report.is_file(),
+        "REPORT_REFRESHED": bool(args.refresh_template),
+    })
+    output_result(payload, args)
+
+
 # ── subcommand: spec ─────────────────────────────────────────────────────────
 
 def cmd_spec(args):
@@ -498,6 +568,23 @@ def main():
         help="Regenerate spec-report.md from the resolved report template even if it already exists",
     )
 
+    plan_check_parser = subparsers.add_parser("plan-check", help="Setup for /order.plan-check")
+    plan_check_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output in JSON (always on)",
+    )
+    plan_check_parser.add_argument(
+        "--shell-vars",
+        action="store_true",
+        help="Output as eval-ready shell variable assignments",
+    )
+    plan_check_parser.add_argument(
+        "--refresh-template",
+        action="store_true",
+        help="Regenerate plan-report.md from the resolved report template even if it already exists",
+    )
+
     args = parser.parse_args()
 
     if args.cmd == "paths":
@@ -512,6 +599,8 @@ def main():
         cmd_code(args)
     elif args.cmd == "spec-check":
         cmd_spec_check(args)
+    elif args.cmd == "plan-check":
+        cmd_plan_check(args)
     else:
         parser.print_help()
         sys.exit(64)
