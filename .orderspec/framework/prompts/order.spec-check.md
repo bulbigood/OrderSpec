@@ -117,6 +117,12 @@ The report template has already been copied to `$FEATURE_DIR/spec-report.md` by 
 
 You MUST fill this template file in place. Do not invent report sections, table structures, or alter the YAML frontmatter schema. Fill the template variables exactly as specified using the data from `traceability.py` JSON output and your semantic findings.
 
+### CRITICAL: Data Source Rules
+- Do NOT read `spec.md` to fill matrices, categories, or inventory. Use ONLY the JSON fields from `traceability.py`.
+- If a JSON field is missing or empty, render the cell as `(none)` or `—`.
+- Render booleans as text: `true` → `yes`, `false` → `no`.
+- Join arrays with `, ` (comma + space).
+
 ### Template Variable Mapping Guide
 
 Map the JSON output from `traceability.py validate` to the template variables:
@@ -141,13 +147,13 @@ Map the JSON output from `traceability.py validate` to the template variables:
 - `{routing_blocks}`: insert routing blocks for all findings with disposition `Route`
 - `{deferred_rows}`: `(none)` — spec-check defers nothing to plan
 - `{findings_rows}`: combine mechanical findings (from `findings` array) with semantic findings (S1-xxx). Each row: `| ID | Source | Severity | Disposition | Location | Summary |`
-- `{coverage_taxonomy_rows}`: from `categories` object. Each row: `| Category | § | Status | Disposition |`. `missing` MVP/core → Route (HIGH); `empty`/`partial` → Route (MEDIUM)
-- `{contradiction_grid_rows}`: from `contradiction_grid` array. Each row: `| Pair | Verdict | Reason |`
-- `{journey_matrix_rows}`: from `matrices.uj_coverage` array. Each row: `| UJ | Priority | Covers REQs | ACs | ACs trace to REQs | Status |`
-- `{if_matrix_rows}`: from `matrices.if_coverage` array. Each row: `| IF | Kind | Actor | Success | Failure | Covered by ACs | Status |`
+- `{coverage_taxonomy_rows}`: from `categories` object. Each row: `| Category | § | Status | Disposition |`. Use the `categories` value as the Status string. `missing` MVP/core → Route (HIGH); `empty`/`partial` → Route (MEDIUM)
+- `{contradiction_grid_rows}`: from `contradiction_grid` array. Each row: `| Pair | Verdict | Reason |`. If `tension` is non-empty, render Reason as `{tension} — {reason}`. Example row: `| INV-001 × ASM-002 | compatible | ASM-002 narrows the mechanism — REQ-002 is a specific instance |`
+- `{journey_matrix_rows}`: from `matrices.uj_coverage` array. Each row: `| UJ | Priority | Covers REQs | ACs | ACs trace to REQs | Status |`. Example row: `| UJ-001 | P1 | REQ-001, REQ-002 | AC-001, AC-002 | yes | ok |`
+- `{if_matrix_rows}`: from `matrices.if_coverage` array. Each row: `| IF | Kind | Actor | Success | Failure | Covered by ACs | Status |`. Example row: `| IF-001 | HTTP endpoint | Authenticated user | 201 | 400, 401 | AC-001, AC-002 | ok |`
 
 **Metrics Section**:
-- `{inventory_summary}`: formatted string, e.g. `REQ=10 · NFR=2 · SC=3 · INV=5 · EDGE=7 · UJ=4 · AC=21 · Q=0 · ASM=4 · DEC=2 · IF=6 · Total=64`
+- `{inventory_summary}`: formatted string from `inventory` object, e.g. `REQ=10 · NFR=2 · SC=3 · ... · Total=64`
 - `{critical_count}`, `{high_count}`, `{medium_count}`, `{low_count}`: counts from combined findings
 - `{auto_fixed_count}`: `0`
 - `{routing_count}`: count of findings with disposition `Route`

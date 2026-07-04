@@ -405,7 +405,7 @@ if "inventory" in data and data["inventory"].get("REQ") == 1:
 else:
     bad("validate --json: inventory missing or incorrect", str(data.get("inventory")))
 
-if "categories" in data and data["categories"].get("Functional Requirements") == "present":
+if "categories" in data and data["categories"].get("Functional Requirements", "").startswith("present"):
     ok("validate --json: categories present and correct")
 else:
     bad("validate --json: categories missing or incorrect", str(data.get("categories")))

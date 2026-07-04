@@ -339,10 +339,13 @@ def _extract_grid_rows(section_10_text):
                     row_data["left_id"] = f"{ids_in_col[0][0]}-{ids_in_col[0][1]}"
                 
                 if row_data["left_id"]:
+                    row_data["tension"] = ""
                     if len(parts) > 1:
                         row_data["verdict"] = parts[-1]
                     if len(parts) > 2:
                         row_data["reason"] = parts[-2]
+                    if len(parts) > 3:
+                        row_data["tension"] = parts[-3]
                     rows.append(row_data)
         else:
             if in_table and line.strip() and not line.strip().startswith("|"):

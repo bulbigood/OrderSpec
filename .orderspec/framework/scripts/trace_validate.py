@@ -548,7 +548,8 @@ def _compute_journey_matrix(section_12_text, ac_inline_covers):
                 uj_priority = m_prio.group(1)
             m_cov = re.search(r"\*\*Covers\*\*:\s*(.*)", line)
             if m_cov:
-                uj_covers = [f"{m[0]}-{m[1]}" for m in ID_RE.findall(m_cov.group(1))]
+                _all_refs = [f"{m[0]}-{m[1]}" for m in ID_RE.findall(m_cov.group(1))]
+                uj_covers = [r for r in _all_refs if r.startswith("REQ-")]
             
             m_ac = re.match(r"^\s*- \*\*(AC-\d{3})\*\*", line)
             if m_ac:
@@ -575,8 +576,10 @@ def _compute_if_matrix(if_records, if_to_acs):
             "if_id": if_id,
             "kind": fields.get("Kind", ""),
             "actor": fields.get("Actor", ""),
-            "success": fields.get("Success", ""),
-            "failure": fields.get("Failure", ""),
+            "success": ", ".join(sorted(_extract_status_codes(fields.get("Success", "")))) or fields.get("Success", ""),
+            "failure": ", ".join(sorted(_extract_status_codes(fields.get("Failure", "")))) or fields.get("Failure", ""),
+            "success_full": fields.get("Success", ""),
+            "failure_full": fields.get("Failure", ""),
             "covered_by_acs": sorted(list(if_to_acs.get(if_id, set()))),
             "status": "ok" if if_to_acs.get(if_id) else "uncovered"
         })
@@ -744,6 +747,26 @@ def cmd_validate(args):
 
     # compute categories
     cats = _compute_categories(spec_text)
+
+    # enrich categories with inventory counts
+    _CAT_PREFIX_MAP = {
+        "Functional Requirements": ("REQ", "REQs"),
+        "Non-Functional Requirements": ("NFR", "NFRs"),
+        "Interface Contracts": ("IF", "IFs"),
+        "Invariants": ("INV", "INVs"),
+        "Edge Cases": ("EDGE", "EDGEs"),
+        "Decisions": ("DEC", "DECs"),
+        "Assumptions": ("ASM", "ASMs"),
+        "Success Criteria": ("SC", "SCs"),
+        "Open Questions": ("Q", "Qs"),
+    }
+    for _cat, (_pfx, _unit) in _CAT_PREFIX_MAP.items():
+        if cats.get(_cat) == "present":
+            _cnt = inv.get(_pfx, 0)
+            _lbl = _unit if _cnt != 1 else _unit.rstrip("s")
+            cats[_cat] = f"present \u2014 {_cnt} {_lbl}"
+    if cats.get("Acceptance Criteria & User Journeys") == "present":
+        cats["Acceptance Criteria & User Journeys"] = f"present \u2014 {inv.get('UJ', 0)} UJ, {inv.get('AC', 0)} AC"
 
     # compute matrices
     uj_matrix = _compute_journey_matrix(section_12, ac_inline_covers) if section_12 else []
