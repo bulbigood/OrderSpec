@@ -395,6 +395,37 @@ if rc != 0:
 else:
     bad("put-mechanisms --json: invalid input accepted", out)
 
+
+# 17. validate --json output structure: inventory, categories, matrices
+reset_feature()
+write_spec(MINIMAL_SPEC)
+rc, data = run_validate()
+if "inventory" in data and data["inventory"].get("REQ") == 1:
+    ok("validate --json: inventory present and correct")
+else:
+    bad("validate --json: inventory missing or incorrect", str(data.get("inventory")))
+
+if "categories" in data and data["categories"].get("Functional Requirements") == "present":
+    ok("validate --json: categories present and correct")
+else:
+    bad("validate --json: categories missing or incorrect", str(data.get("categories")))
+
+if "matrices" in data and data["matrices"].get("uj_coverage"):
+    ok("validate --json: matrices present")
+else:
+    bad("validate --json: matrices missing", str(data.get("matrices")))
+
+if "contradiction_grid" in data:
+    ok("validate --json: contradiction_grid present")
+else:
+    bad("validate --json: contradiction_grid missing")
+
+if all("disposition" in f for f in data.get("findings", [])):
+    ok("validate --json: findings have disposition")
+else:
+    bad("validate --json: findings missing disposition", str(data.get("findings")))
+
+
 # ── Cleanup ──────────────────────────────────────────────────────────────────
 
 if WORK.exists():

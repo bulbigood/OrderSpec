@@ -8,7 +8,7 @@ from pathlib import Path
 
 from trace_constants import (
     ABSOLUTE_QUANTIFIERS, AC_COVERS_RE,
-    IF_REQUIRED_FIELDS, SPEC_PREFIX_RE, ID_RE, TASK_LINE_RE, COVERS_RE,
+    IF_REQUIRED_FIELDS, SPEC_PREFIX_RE, SPEC_PREFIXES, ID_RE, TASK_LINE_RE, COVERS_RE,
     _SPEC_ID_RE,
 )
 from trace_mechanisms import check_mechanisms_findings
@@ -21,6 +21,13 @@ from trace_parse import (
 from trace_lint import lint_file
 from trace_tsv import _read_table
 
+DISPOSITION_MAP = {
+    "M1": "Route", "M1a": "Route", "M6": "Route", "M11": "Informational",
+    "M13": "Route", "M18": "Route", "M19": "Route", "M20": "Route",
+    "M21": "Route", "M22": "Informational", "M23": "Route", "M24": "Route",
+    "M25": "Route", "M28": "Route", "M29": "Route", "M30": "Route",
+    "M31": "Route", "M32": "Route"
+}
 
 def _load_specids(feature=None):
     from trace_commands import state_dir
@@ -50,6 +57,7 @@ def _make_add(findings):
             "severity": severity,
             "location": location,
             "message": message,
+            "disposition": DISPOSITION_MAP.get(check, "Route")
         })
     return add
 
@@ -240,7 +248,9 @@ def _check_m22(section_12, section_8, add):
 
 
 def _check_m23(grid_rows, anchor_ids, add):
-    for left_id, right_id in grid_rows:
+    for row in grid_rows:
+        left_id = row.get("left_id")
+        right_id = row.get("right_id")
         if left_id and left_id not in anchor_ids:
             add("M23", "MEDIUM", "spec.md:\u00a710", f"Grid left ID {left_id} not defined in spec")
         if right_id and right_id not in anchor_ids:
@@ -248,7 +258,7 @@ def _check_m23(grid_rows, anchor_ids, add):
 
 
 def _check_m24(inv_texts, grid_rows, add):
-    grid_left_ids = {left_id for left_id, _ in grid_rows}
+    grid_left_ids = {row.get("left_id") for row in grid_rows}
     for inv_id, text in inv_texts.items():
         text_lower = text.lower()
         if any(q in text_lower for q in ABSOLUTE_QUANTIFIERS):
@@ -262,8 +272,15 @@ def _check_m24(inv_texts, grid_rows, add):
 
 
 def _check_m25(grid_rows, add):
-    if len(grid_rows) != len(set(grid_rows)):
-        add("M25", "MEDIUM", "spec.md:\u00a710", "Duplicate rows found in Contradiction Grid")
+    seen = set()
+    dupes = 0
+    for row in grid_rows:
+        key = (row.get("left_id"), row.get("right_id"))
+        if key in seen:
+            dupes += 1
+        seen.add(key)
+    if dupes > 0:
+        add("M25", "MEDIUM", "spec.md:\u00a710", f"Duplicate rows found in Contradiction Grid ({dupes})")
 
 
 def _check_m13(files, add):
@@ -449,6 +466,115 @@ def _check_m11(spec, plan, tasks, have_plan, have_tasks, add):
         add("M11", "MEDIUM", "plan.md/tasks.md", "plan.md modified after tasks.md")
 
 
+def _compute_categories(spec_text):
+    res = {}
+    checks = {
+        "Functional Requirements": "## 4.",
+        "Non-Functional Requirements": "## 5.",
+        "Project Constraints Applied": "## 6.",
+        "Architecture & Behaviour": "## 7.",
+        "Information Model": "## 8.",
+        "Interface Contracts": "## 9.",
+        "Invariants": "## 10.",
+        "Edge Cases": "## 11.",
+        "Acceptance Criteria & User Journeys": "## 12.",
+        "Open Questions": "## 13.",
+        "Decisions": "## 14.",
+        "Assumptions": "## 15.",
+    }
+    for name, prefix in checks.items():
+        sec = _extract_section(spec_text, prefix)
+        if not sec:
+            res[name] = "missing"
+        else:
+            lines = [l for l in sec.splitlines() if l.strip() and not l.startswith("#")]
+            lines = [l for l in lines if not re.match(r"^\|[\s\-:|]+\|$", l)]
+            res[name] = "present" if len(lines) > 0 else "empty"
+
+    if _extract_section(spec_text, "### Success Criteria"):
+        res["Success Criteria"] = "present"
+    else:
+        res["Success Criteria"] = "missing"
+
+    if _extract_section(spec_text, "## 16. Glossary") or _extract_section(spec_text, "## 17. Glossary"):
+        res["Glossary"] = "present"
+    else:
+        res["Glossary"] = "missing"
+
+    if _extract_section(spec_text, "## 16. Changelog") or _extract_section(spec_text, "## 17. Changelog"):
+        res["Changelog"] = "present"
+    else:
+        res["Changelog"] = "missing"
+
+    return res
+
+
+def _compute_journey_matrix(section_12_text, ac_inline_covers):
+    matrix = []
+    current_uj = None
+    uj_covers = []
+    uj_priority = ""
+    uj_acs = []
+    
+    for line in section_12_text.splitlines():
+        m_uj = re.match(r"^\s*- \*\*(UJ-\d{3})\*\*:?\s*(.*)", line)
+        if m_uj:
+            if current_uj:
+                traces = any(any(r.startswith("REQ-") for r in covers) for covers in [ac_inline_covers.get(ac, []) for ac in uj_acs])
+                matrix.append({
+                    "uj_id": current_uj,
+                    "priority": uj_priority,
+                    "covers_reqs": uj_covers,
+                    "acs": uj_acs,
+                    "acs_trace_to_reqs": traces,
+                    "status": "ok"
+                })
+            current_uj = m_uj.group(1)
+            uj_covers = []
+            uj_priority = ""
+            uj_acs = []
+            
+        if current_uj:
+            m_prio = re.search(r"Priority:\s*(P\d)", line)
+            if m_prio:
+                uj_priority = m_prio.group(1)
+            m_cov = re.search(r"\*\*Covers\*\*:\s*(.*)", line)
+            if m_cov:
+                uj_covers = [f"{m[0]}-{m[1]}" for m in ID_RE.findall(m_cov.group(1))]
+            
+            m_ac = re.match(r"^\s*- \*\*(AC-\d{3})\*\*", line)
+            if m_ac:
+                uj_acs.append(m_ac.group(1))
+
+    if current_uj:
+        traces = any(any(r.startswith("REQ-") for r in covers) for covers in [ac_inline_covers.get(ac, []) for ac in uj_acs])
+        matrix.append({
+            "uj_id": current_uj,
+            "priority": uj_priority,
+            "covers_reqs": uj_covers,
+            "acs": uj_acs,
+            "acs_trace_to_reqs": traces,
+            "status": "ok"
+        })
+    return matrix
+
+
+def _compute_if_matrix(if_records, if_to_acs):
+    matrix = []
+    for if_id, rec in if_records.items():
+        fields = rec["fields"]
+        matrix.append({
+            "if_id": if_id,
+            "kind": fields.get("Kind", ""),
+            "actor": fields.get("Actor", ""),
+            "success": fields.get("Success", ""),
+            "failure": fields.get("Failure", ""),
+            "covered_by_acs": sorted(list(if_to_acs.get(if_id, set()))),
+            "status": "ok" if if_to_acs.get(if_id) else "uncovered"
+        })
+    return matrix
+
+
 def cmd_validate(args):
     from trace_commands import resolve_feature_dir, die, state_dir
 
@@ -598,6 +724,26 @@ def cmd_validate(args):
     block_required = nc > 0
     verdict_floor = "PASS" if nc == 0 and nh == 0 else ("BLOCK" if nc > 0 else "ROUTING_REQUIRED")
 
+    # compute inventory
+    inv = {}
+    for p in SPEC_PREFIXES:
+        inv[p] = 0
+    for sid in defined_ids:
+        p = sid.split("-")[0]
+        if p in inv:
+            inv[p] += 1
+    inv["Total"] = sum(inv.values())
+
+    # compute categories
+    cats = _compute_categories(spec_text)
+
+    # compute matrices
+    uj_matrix = _compute_journey_matrix(section_12, ac_inline_covers) if section_12 else []
+    if_matrix = _compute_if_matrix(if_records, if_to_acs) if if_records else []
+
+    # extract contradiction grid
+    grid = _extract_grid_rows(section_10) if section_10 else []
+
     if args.json:
         output = {
             "stage": stage,
@@ -613,6 +759,13 @@ def cmd_validate(args):
                 "block_required": block_required,
                 "verdict_floor": verdict_floor,
             },
+            "inventory": inv,
+            "categories": cats,
+            "matrices": {
+                "uj_coverage": uj_matrix,
+                "if_coverage": if_matrix
+            },
+            "contradiction_grid": grid,
             "findings": findings,
         }
         print(json.dumps(output))

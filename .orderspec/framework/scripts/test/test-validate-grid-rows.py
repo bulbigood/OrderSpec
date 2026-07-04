@@ -34,6 +34,15 @@ F = f".test-grid-{os.getpid()}"
 SPECS = SPECS_ROOT / F
 SDIR = SPECS / ".state"
 
+
+def check_rows(rows, expected):
+    if len(rows) != len(expected):
+        return False
+    for r, e in zip(rows, expected):
+        if r.get("left_id") != e[0] or r.get("right_id") != e[1]:
+            return False
+    return True
+
 pass_count = 0
 fail_count = 0
 
@@ -86,7 +95,7 @@ section = """### Contradiction Grid
 | INV-001 × NFR-001 | test | test | compatible |
 """
 rows = _extract_grid_rows(section)
-if rows == [("INV-001", "NFR-001")]:
+if check_rows(rows, [("INV-001", "NFR-001")]):
     ok("standard table: header + separator + 1 data row → 1 pair extracted")
 else:
     no("standard table", f"expected [('INV-001','NFR-001')], got {rows}")
@@ -99,7 +108,7 @@ section = """### Contradiction Grid
 | INV-001 × NFR-001 | test | test | compatible |
 """
 rows = _extract_grid_rows(section)
-if rows == [("INV-001", "NFR-001")]:
+if check_rows(rows, [("INV-001", "NFR-001")]):
     ok("BUG FIX: data row without header → pair extracted (was swallowed before)")
 else:
     no("bug fix no header", f"expected [('INV-001','NFR-001')], got {rows}")
@@ -111,7 +120,7 @@ section = """### Contradiction Grid
 | INV-002 × NFR-002 | test | test | compatible |
 """
 rows = _extract_grid_rows(section)
-if len(rows) == 2 and ("INV-001", "NFR-001") in rows and ("INV-002", "NFR-002") in rows:
+if check_rows(rows, [("INV-001", "NFR-001"), ("INV-002", "NFR-002")]):
     ok("multiple data rows without header → all pairs extracted")
 else:
     no("multi no header", f"expected 2 pairs, got {rows}")
@@ -124,7 +133,7 @@ section = """### Contradiction Grid
 | INV-001 × NFR-001 | test | test | compatible |
 """
 rows = _extract_grid_rows(section)
-if rows == [("INV-001", "NFR-001")]:
+if check_rows(rows, [("INV-001", "NFR-001")]):
     ok("header with 'Invariant' word → header detected, data row extracted")
 else:
     no("header invariant word", f"expected [('INV-001','NFR-001')], got {rows}")
@@ -138,7 +147,7 @@ section = """### Contradiction Grid
 | INV-002 × ASM-001 | test | test | compatible |
 """
 rows = _extract_grid_rows(section)
-if len(rows) == 2:
+if check_rows(rows, [("INV-001", "NFR-001"), ("INV-002", "ASM-001")]):
     ok("header with 'pair' → 2 data rows extracted")
 else:
     no("header pair", f"expected 2 pairs, got {rows}")
@@ -151,7 +160,7 @@ section = """### Contradiction Grid
 | INV-001 | test | test | compatible |
 """
 rows = _extract_grid_rows(section)
-if rows == [("INV-001", None)]:
+if check_rows(rows, [("INV-001", None)]):
     ok("left ID only → pair with right_id=None")
 else:
     no("left only", f"expected [('INV-001',None)], got {rows}")
@@ -162,7 +171,7 @@ section = """### Contradiction Grid
 No absolute INV × weakening NFR/ASM pairs.
 """
 rows = _extract_grid_rows(section)
-if rows == []:
+if check_rows(rows, []):
     ok("empty grid (no table) → 0 rows")
 else:
     no("empty grid", f"expected [], got {rows}")
@@ -177,7 +186,7 @@ No pairs.
 | INV-001 × NFR-001 | test | test | compatible |
 """
 rows = _extract_grid_rows(section)
-if rows == [("INV-001", "NFR-001")]:
+if check_rows(rows, [("INV-001", "NFR-001")]):
     ok("text 'No pairs' followed by table → table parsed")
 else:
     no("no pairs + table", f"expected [('INV-001','NFR-001')], got {rows}")
@@ -190,7 +199,7 @@ section = """### Contradiction Grid
 | REQ-001 × ASM-001 | test | test | compatible |
 """
 rows = _extract_grid_rows(section)
-if rows == [("REQ-001", "ASM-001")]:
+if check_rows(rows, [("REQ-001", "ASM-001")]):
     ok("REQ × ASM pair extracted")
 else:
     no("req x asm", f"expected [('REQ-001','ASM-001')], got {rows}")
@@ -203,7 +212,7 @@ section = """### Contradiction Grid
 |   INV-001 × NFR-001   |   test   |   test   |   compatible   |
 """
 rows = _extract_grid_rows(section)
-if rows == [("INV-001", "NFR-001")]:
+if check_rows(rows, [("INV-001", "NFR-001")]):
     ok("table with extra whitespace → pair extracted")
 else:
     no("extra whitespace", f"expected [('INV-001','NFR-001')], got {rows}")
@@ -216,7 +225,7 @@ section = """### Contradiction Grid
 | some text | test | test | compatible |
 """
 rows = _extract_grid_rows(section)
-if rows == []:
+if check_rows(rows, []):
     ok("data row with no IDs → no pair extracted")
 else:
     no("no ids", f"expected [], got {rows}")

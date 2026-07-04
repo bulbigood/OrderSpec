@@ -269,27 +269,11 @@ def _extract_status_codes(text):
     """
     statuses = set()
     http_keywords = [
-        "status",
-        "response",
-        "returns",
-        "return",
-        "http",
-        "bad request",
-        "not found",
-        "gone",
-        "error",
-        "forbidden",
-        "unauthorized",
-        "unauthenticated",
-        "server error",
-        "success",
-        "created",
-        "no content",
-        "accepted",
-        "conflict",
-        "unprocessable",
-        "ok",
-        "successful",
+        "status", "response", "returns", "return", "http",
+        "bad request", "not found", "gone", "error", "forbidden",
+        "unauthorized", "unauthenticated", "server error", "success",
+        "created", "no content", "accepted", "conflict", "unprocessable",
+        "ok", "successful",
     ]
 
     valid_codes = {
@@ -323,7 +307,7 @@ def _extract_status_codes(text):
 def _extract_grid_rows(section_10_text):
     """Parse S10 Contradiction Grid.
 
-    Returns list of (left_id, right_id) tuples.
+    Returns list of dicts: {"left_id": "...", "right_id": "...", "verdict": "...", "reason": "..."}
     """
     rows = []
     in_table = False
@@ -338,7 +322,7 @@ def _extract_grid_rows(section_10_text):
             if not in_table:
                 joined = " ".join(parts).lower()
                 has_id_ref = bool(ID_RE.search(parts[0])) if parts else False
-                header_keywords = ("invariant", "requirement", "pair", "left", "source", "tension", "verdict")
+                header_keywords = ("invariant", "requirement", "pair", "left", "source", "tension", "verdict", "reason")
                 if not has_id_ref and any(kw in joined for kw in header_keywords):
                     in_table = True
                     continue
@@ -347,14 +331,19 @@ def _extract_grid_rows(section_10_text):
                 in_table = True
                 pair_text = parts[0] if parts else ""
                 ids_in_col = ID_RE.findall(pair_text)
-
+                row_data = {"left_id": None, "right_id": None, "verdict": "", "reason": ""}
                 if len(ids_in_col) >= 2:
-                    left_id = f"{ids_in_col[0][0]}-{ids_in_col[0][1]}"
-                    right_id = f"{ids_in_col[1][0]}-{ids_in_col[1][1]}"
-                    rows.append((left_id, right_id))
+                    row_data["left_id"] = f"{ids_in_col[0][0]}-{ids_in_col[0][1]}"
+                    row_data["right_id"] = f"{ids_in_col[1][0]}-{ids_in_col[1][1]}"
                 elif len(ids_in_col) == 1:
-                    left_id = f"{ids_in_col[0][0]}-{ids_in_col[0][1]}"
-                    rows.append((left_id, None))
+                    row_data["left_id"] = f"{ids_in_col[0][0]}-{ids_in_col[0][1]}"
+                
+                if row_data["left_id"]:
+                    if len(parts) > 1:
+                        row_data["verdict"] = parts[-1]
+                    if len(parts) > 2:
+                        row_data["reason"] = parts[-2]
+                    rows.append(row_data)
         else:
             if in_table and line.strip() and not line.strip().startswith("|"):
                 in_table = False
