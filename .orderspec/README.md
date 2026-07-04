@@ -99,6 +99,24 @@ A gate is a constrained inspector. It does not silently rewrite a spec to resolv
 
 This is what makes OrderSpec safe under a weak model: the model is never trusted to silently "improve" your contract.
 
+## Brownfield projects
+
+If you are applying OrderSpec to an existing codebase (a brownfield project), you don't need to write specs for everything manually. You can use the reverse-engineering command to extract specifications directly from your existing code.
+
+Use `/order.code-to-spec` to scan existing modules and generate a compliant `spec.md`:
+
+```bash
+# Scan an existing directory or module and generate a spec
+/order.code-to-spec "path/to/existing/module"
+```
+
+**How it works:**
+- The command scans the specified code area, extracting interfaces, entities, and observable behaviors.
+- It translates technical implementation details (frameworks, libraries) into logical WHAT-contracts, routing new technologies to `/order.bootstrap` for registration.
+- It generates a standard `spec.md` that seamlessly fits into the downstream pipeline (`/order.plan`, `/order.tasks`).
+
+**Note:** Code extraction requires understanding implicit business logic. It is recommended to use a more capable model for `/order.code-to-spec` than for standard forward-engineering commands.
+
 ## Documentation
 
 - [Getting Started](docs/getting-started.md) — setup, bootstrap phases, pipeline walkthrough
