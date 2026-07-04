@@ -95,7 +95,7 @@ Commands MUST NOT use camelCase stack-id keys. Use `stack_id`.
 2. **Project-local canonical:** Skills required by the project MUST be installed under `.orderspec/skills/<skill-name>/`. Global-only skills are not project-reproducible. If a skill is found globally but relevant to the project, it SHOULD be moved to `.orderspec/skills/`.
 3. **Registration:** Installed skill MUST be registered in `.orderspec/config/tooling.json` `skills.bindings` via `tooling_config.py add-binding`.
 4. **Approval:** Commands MUST ask the user before installing, registering, or modifying skills.
-5. **Matching:** Required skills are matched by `STACK-NNN` from `tooling.json`. The agent looks up the technology from `stack.md` using the `STACK-NNN` ID.
+5. **Matching:** Required skills are matched by `STACK-NNN` (technology), `ARCH-NNN` (architecture), or `CONV-NNN` (convention) from `tooling.json`. The agent looks up the context from the corresponding contract file (`stack.md`, `architecture.md`, `conventions.md`).
 6. **Missing skills:** If a required skill is missing, commands MUST NOT silently continue when the missing skill is required for library-specific work.
 7. **Pre-discovery check:** Before running `npx skills find`, the agent MUST check existing global (`~/.agents/skills/`) and local (`.orderspec/skills/`) skills to avoid redundant installations.
 

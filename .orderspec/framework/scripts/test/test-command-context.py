@@ -98,6 +98,7 @@ def setup_base_files(
     with_tooling_config=False,
 ):
     write(WORK / ".orderspec" / "framework" / "orderspec-rules.md", "# Rules\n")
+    write(WORK / ".orderspec" / "framework" / "orderspec-identifiers.md", "# IDs\n")
     write(WORK / ".orderspec" / "framework" / "schemas" / "command-context.schema.json", "{}\n")
 
     if with_tooling_protocol:
@@ -274,7 +275,7 @@ else:
     bad(f"list wrong :: rc={rc} data={data} err={err!r}")
 
 
-# 5. resolve order.spec includes defaults and project contract, not tooling protocol
+# 5. resolve order.spec includes defaults, identifiers, and project contract
 reset_work()
 setup_base_files()
 put_manifest(base_manifest())
@@ -284,11 +285,12 @@ if (
     rc == 0
     and data.get("ok") is True
     and ".orderspec/framework/orderspec-rules.md" in p
+    and ".orderspec/framework/orderspec-identifiers.md" in p
     and ".orderspec/framework/schemas/command-context.schema.json" in p
     and "constitution.md" in p
     and ".orderspec/framework/protocols/tooling-protocol.md" not in p
 ):
-    ok("resolve order.spec excludes tooling protocol")
+    ok("resolve order.spec excludes tooling protocol, includes identifiers")
 else:
     bad(f"resolve order.spec wrong :: rc={rc} data={data} err={err!r}")
 

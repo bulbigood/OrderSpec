@@ -43,34 +43,6 @@
       "usage": "parse",
       "authority": "framework"
     },
-    "template.spec": {
-      "path": ".orderspec/framework/templates/spec-template.md",
-      "kind": "template",
-      "reason": "feature specification output template",
-      "usage": "apply",
-      "authority": "framework"
-    },
-    "template.plan": {
-      "path": ".orderspec/framework/templates/plan-template.md",
-      "kind": "template",
-      "reason": "technical plan output template",
-      "usage": "apply",
-      "authority": "framework"
-    },
-    "template.tasks": {
-      "path": ".orderspec/framework/templates/tasks-template.md",
-      "kind": "template",
-      "reason": "implementation tasks output template",
-      "usage": "apply",
-      "authority": "framework"
-    },
-    "template.report": {
-      "path": ".orderspec/framework/templates/report-template.md",
-      "kind": "template",
-      "reason": "check report output template",
-      "usage": "apply",
-      "authority": "framework"
-    },
     "project.constitution": {
       "path": ".orderspec/contracts/constitution.md",
       "kind": "project_contract",
@@ -133,6 +105,13 @@
       "reason": "orderspec.json validation schema",
       "usage": "parse",
       "authority": "framework"
+    },
+    "framework.identifiers": {
+      "path": ".orderspec/framework/orderspec-identifiers.md",
+      "kind": "framework_rules",
+      "reason": "stable identifier prefixes and glossary",
+      "usage": "apply",
+      "authority": "framework"
     }
   },
   "groups": {
@@ -179,6 +158,9 @@
     "required": [
       {
         "ref": "framework.rules"
+      },
+      {
+        "ref": "framework.identifiers"
       }
     ]
   },
@@ -195,9 +177,6 @@
     },
     "order.spec": {
       "required": [
-        {
-          "ref": "template.spec"
-        },
         {
           "group": "project.contracts"
         }
@@ -226,9 +205,6 @@
     "order.plan-check": {
       "required": [
         {
-          "ref": "template.report"
-        },
-        {
           "group": "project.contracts"
         }
       ]
@@ -236,18 +212,12 @@
     "order.tasks": {
       "required": [
         {
-          "ref": "template.tasks"
-        },
-        {
           "group": "project.contracts"
         }
       ]
     },
     "order.tasks-check": {
       "required": [
-        {
-          "ref": "template.report"
-        },
         {
           "group": "project.contracts"
         }
@@ -263,18 +233,12 @@
     "order.code-check": {
       "required": [
         {
-          "ref": "template.report"
-        },
-        {
           "group": "project.contracts"
         }
       ]
     },
     "order.sync-check": {
       "required": [
-        {
-          "ref": "template.report"
-        },
         {
           "group": "project.contracts"
         }
