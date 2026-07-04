@@ -496,7 +496,15 @@ def _compute_categories(spec_text):
     else:
         res["Success Criteria"] = "missing"
 
-    if _extract_section(spec_text, "## 16. Glossary") or _extract_section(spec_text, "## 17. Glossary"):
+    # Search for Glossary by heading content, not by fixed section number
+    # This handles specs where Glossary appears in different positions (e.g., §3, §16, §17)
+    glossary_found = False
+    for line in spec_text.splitlines():
+        if re.match(r"^##\s+\d+\.\s+Glossary\s*$", line, re.IGNORECASE):
+            glossary_found = True
+            break
+    
+    if glossary_found or _extract_section(spec_text, "## 3. Glossary") or _extract_section(spec_text, "## 16. Glossary") or _extract_section(spec_text, "## 17. Glossary"):
         res["Glossary"] = "present"
     else:
         res["Glossary"] = "missing"

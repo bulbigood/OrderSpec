@@ -34,17 +34,24 @@ This command acts as **semantic glue** between deterministic scripts. It does no
 
 ## Target Feature Resolution
 
-1. Run:
+1. Initialize feature paths and report template:
+   ```bash
+   python3 .orderspec/framework/scripts/setup.py spec-check --json --refresh-template > /dev/null
+   eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
+   ```
+   This resolves `$FEATURE_DIR`, `$FEATURE_ID`, and other path variables, and copies the report template to `$FEATURE_DIR/spec-report.md` for you to fill.
+
+2. Validate active feature state:
    ```bash
    python3 .orderspec/framework/scripts/active_feature.py get --json
    python3 .orderspec/framework/scripts/active_feature.py validate --json
    ```
-2. If active state validation fails, write BLOCK report with `S0-003 (HIGH): active feature state invalid`, then stop.
-3. If `$ARGUMENTS` contains an explicit feature reference, resolve it read-only using `active_feature.py list --json`.
+3. If active state validation fails, write BLOCK report with `S0-003 (HIGH): active feature state invalid`, then stop.
+4. If `$ARGUMENTS` contains an explicit feature reference, resolve it read-only using `active_feature.py list --json`.
    - If ambiguous: `S0-004 (HIGH): ambiguous feature reference`.
    - If not found: `S0-005 (HIGH): feature not found`.
-4. Do not use `active_feature.py select` in this gate.
-5. If no target is resolved, write BLOCK report with `S0-000 (CRITICAL): no active feature`.
+5. Do not use `active_feature.py select` in this gate.
+6. If no target is resolved, write BLOCK report with `S0-000 (CRITICAL): no active feature`.
 
 ## Mechanical Validation
 
@@ -64,6 +71,14 @@ You MUST NOT downgrade or suppress imported findings.
 
 Read `spec.md`. Perform the following checks that require LLM judgment.
 For any finding, assign disposition `Route` and create a routing block.
+
+**Important**: Semantic findings (S1-xxx) must be integrated into the report's Findings table alongside mechanical findings from traceability.py. Each semantic finding gets its own row with:
+- `ID`: S1-NNN
+- `Source`: "semantic"
+- `Severity`: CRITICAL/HIGH/MEDIUM/LOW
+- `Disposition`: "Route"
+- `Location`: spec section or ID
+- `Summary`: concise description
 
 ### S1-001 REQ Contradictions
 Verify no REQ contradicts another REQ, INV, or project contract constraint.
@@ -98,19 +113,48 @@ Assess cohesion. Oversized but coherent → Route (MEDIUM) recommending `/order.
 
 ## Report Generation
 
-You MUST render the final report strictly using the `report-template.md` loaded via Command Context. 
-Do not invent report sections, table structures, or alter the YAML frontmatter schema. 
-Fill the template variables exactly as specified in the template file using the data from `traceability.py` JSON output and your semantic findings.
+The report template has already been copied to `$FEATURE_DIR/spec-report.md` by `setup.py spec-check --refresh-template` in the Target Feature Resolution step.
 
-Write the Markdown report to `$FEATURE_DIR/spec-report.md`.
+You MUST fill this template file in place. Do not invent report sections, table structures, or alter the YAML frontmatter schema. Fill the template variables exactly as specified using the data from `traceability.py` JSON output and your semantic findings.
+
+### Template Variable Mapping Guide
 
 Map the JSON output from `traceability.py validate` to the template variables:
-- **Inventory & Metrics**: Use the `inventory` object directly.
-- **Coverage Taxonomy**: Use the `categories` object. `missing` MVP/core category → Route (HIGH). `empty`/`partial` → Route (MEDIUM).
-- **Contradiction Grid**: Use the `contradiction_grid` array.
-- **Journey Coverage Matrix**: Use the `matrices.uj_coverage` array.
-- **IF Coverage Matrix**: Use the `matrices.if_coverage` array.
-- **Findings**: Combine imported mechanical findings (from the script's `findings` array) with your semantic findings (S1-xxx). 
+
+**YAML Frontmatter** (replace placeholders at top of file):
+- `{generator_cmd}`: `order.spec-check`
+- `{model_name}`: identifier of the AI model running this command
+- `{DATE}`: current ISO 8601 timestamp
+- `{VERDICT}`: computed from findings (see Verdict table below)
+- `{FEATURE_ID}`: from `$FEATURE_ID` shell variable
+- `{FEATURE_DIR}`: from `$FEATURE_DIR` shell variable
+
+**HTML Comment Header** (second line of body):
+- `{report_name}`: `spec-report.md`
+- All other variables same as frontmatter
+
+**Body Section Variables** — map from `traceability.py validate` JSON:
+- `{gate_title}`: `Spec Check`
+- `{target_doc}`: `spec.md`
+- `{gate_focus}`: `completeness, consistency, testability`
+- `{auto_fixed_rows}`: `(none)` — gates do not auto-fix
+- `{routing_blocks}`: insert routing blocks for all findings with disposition `Route`
+- `{deferred_rows}`: `(none)` — spec-check defers nothing to plan
+- `{findings_rows}`: combine mechanical findings (from `findings` array) with semantic findings (S1-xxx). Each row: `| ID | Source | Severity | Disposition | Location | Summary |`
+- `{coverage_taxonomy_rows}`: from `categories` object. Each row: `| Category | § | Status | Disposition |`. `missing` MVP/core → Route (HIGH); `empty`/`partial` → Route (MEDIUM)
+- `{contradiction_grid_rows}`: from `contradiction_grid` array. Each row: `| Pair | Verdict | Reason |`
+- `{journey_matrix_rows}`: from `matrices.uj_coverage` array. Each row: `| UJ | Priority | Covers REQs | ACs | ACs trace to REQs | Status |`
+- `{if_matrix_rows}`: from `matrices.if_coverage` array. Each row: `| IF | Kind | Actor | Success | Failure | Covered by ACs | Status |`
+
+**Metrics Section**:
+- `{inventory_summary}`: formatted string, e.g. `REQ=10 · NFR=2 · SC=3 · INV=5 · EDGE=7 · UJ=4 · AC=21 · Q=0 · ASM=4 · DEC=2 · IF=6 · Total=64`
+- `{critical_count}`, `{high_count}`, `{medium_count}`, `{low_count}`: counts from combined findings
+- `{auto_fixed_count}`: `0`
+- `{routing_count}`: count of findings with disposition `Route`
+- `{deferred_count}`: `0`
+- `{exit_code}`: from `summary.exit_code`
+- `{floor_status}`: `yes` if `verdict_floor` applied, `no` otherwise
+- `{report_path}`: `$FEATURE_DIR/spec-report.md`
 
 ### Routing Block Format
 ```markdown
