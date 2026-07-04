@@ -150,7 +150,7 @@ eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 
 Perform a focused repository scan to map `spec.md` onto the codebase.
 
-**Read Budget:** Hard cap of ~12 files. Prefer exemplars over exhaustive scans.
+**Read Budget:** Hard cap of ~20 files. Prefer exemplars over exhaustive scans.
 **Verify:**
 -   Language/runtime/framework versions.
 -   Test/lint/build commands.
@@ -304,7 +304,7 @@ Report to chat:
 -   [ ] `plan.md` regenerated from current template
 -   [ ] Prior `plan-report.md` consumed if present
 -   [ ] Scope Lock enforced: no invented requirements
--   [ ] Reconnaissance stayed focused (< 12 files); files listed in `Verified Against`
+-   [ ] Files listed in `Verified Against`
 -   [ ] `pathmanifest` uses `[MOD]` for seen files, `[NEW]` for created
 -   [ ] Mechanism rows emitted via `put-mechanisms` using Templates; **Mechanism Matrix section in plan.md left as template default**
 -   [ ] `traceability.py lint` and `check-mechanisms` pass
