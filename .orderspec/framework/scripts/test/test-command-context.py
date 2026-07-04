@@ -137,6 +137,13 @@ def base_manifest():
                     "authority": "framework",
                     "reason": "command context manifest schema",
                 },
+                {
+                    "path": ".orderspec/framework/orderspec-identifiers.md",
+                    "kind": "framework_rules",
+                    "usage": "apply",
+                    "authority": "framework",
+                    "reason": "stable identifier prefixes and glossary",
+                },
             ]
         },
         "commands": {
