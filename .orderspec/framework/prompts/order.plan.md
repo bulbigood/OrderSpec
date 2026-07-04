@@ -305,7 +305,7 @@ Report to chat:
 -   [ ] Prior `plan-report.md` consumed if present
 -   [ ] Scope Lock enforced: no invented requirements
 -   [ ] Files listed in `Verified Against`
--   [ ] `pathmanifest` uses `[MOD]` for seen files, `[NEW]` for created
+-   [ ] `pathmanifest` uses `[MOD]` for seen files, `[NEW]` for created, `[DEL]` for deleted
 -   [ ] Mechanism rows emitted via `put-mechanisms` using Templates; **Mechanism Matrix section in plan.md left as template default**
 -   [ ] `traceability.py lint` and `check-mechanisms` pass
 -   [ ] `validate --stage plan` has no blocking findings
