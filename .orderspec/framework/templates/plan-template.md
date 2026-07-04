@@ -1,6 +1,5 @@
 # Implementation Plan: [FEATURE]
 
-**Branch**: `[###-feature-name or "not detected"]`  
 **Date**: [DATE]  
 **Spec**: [`spec.md`](spec.md)
 

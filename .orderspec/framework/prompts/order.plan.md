@@ -84,6 +84,14 @@ Determine mode before writing any file. State the mode in chat.
 
 1.  **Regenerate** — active `spec.md` exists, and `plan.md` needs to be recreated.
 2.  **Refine** — active `plan.md` exists, and `$ARGUMENTS` requests specific changes.
+3.  **Refresh** — `plan.md` already exists and `$ARGUMENTS` is empty → STOP:
+
+```text
+PLAN_STOPPED: plan.md already exists
+  - To verify the current plan: /order.plan-check
+  - To regenerate from scratch: /order.plan --force
+  - To apply specific changes: /order.plan "describe the change"
+```
 
 ### Step 4: Upstream Gate Guard
 
@@ -137,6 +145,13 @@ python3 .orderspec/framework/scripts/validate_tooling.py -C "$PWD" --json
 
 Store the JSON output. Use it to determine skill availability. Do not manually inspect `.orderspec/skills/`.
 
+**You MUST use the results from Step 6 in Step 8 (Focused Reconnaissance).**
+For each `STACK-NNN` referenced in `spec.md` §6:
+1.  Look up the technology name in `stack.md` using the `STACK-NNN` ID.
+2.  If `validate_tooling.py` reports `installed_and_verified` for a matching skill — consult that skill's documentation as primary evidence source before recon.
+3.  If `validate_tooling.py` reports `installed_but_missing` — follow `tooling-protocol.md` rule 6: MUST NOT silently continue with library-specific claims; ask the operator to install the skill or proceed without library-specific claims.
+4.  If no binding exists for a `STACK-NNN` — no skill is required for that technology; proceed normally.
+
 ### Step 7: Setup Plan Artifact
 
 Initialize the plan file from the template.
@@ -148,7 +163,13 @@ eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 
 ### Step 8: Focused Reconnaissance
 
-Perform a focused repository scan to map `spec.md` onto the codebase.
+**Before scanning the repository, you MUST consult available skills and MCP documentation sources:**
+
+1.  **Skills:** For each `STACK-NNN` from `spec.md` §6 where `validate_tooling.py` reported `installed_and_verified`, read the skill files under `.orderspec/skills/<skill-name>/` and use them as the primary reference for that technology's conventions, patterns, and API usage.
+2.  **MCP Documentation Sources:** If a documentation source (default: `context7`) is available in your runtime tool list and its `policy` is `required_if_available` for `order.plan`, you MUST consult it before making any library-specific implementation claims about technologies referenced in `spec.md` §6.
+3.  **Evidence Recording:** Record all consulted sources in the `Library Documentation Evidence` section of `plan.md` (Step 9.7).
+
+Only after consulting skills and docs sources, perform a focused repository scan to map `spec.md` onto the codebase.
 
 **Read Budget:** Hard cap of ~20 files. Prefer exemplars over exhaustive scans.
 **Verify:**
@@ -164,6 +185,8 @@ If repository evidence contradicts `spec.md`, STOP and report `PLAN_BLOCKED: rep
 Rewrite `$IMPL_PLAN` (which was initialized from `plan-template.md` in Step 7).
 
 **Instructions per Section:**
+
+**Before filling sections:** Replace `[DATE]` in the template header with today's date in `YYYY-MM-DD` format (run `date +%F` if unsure).
 
 1.  **Summary:** 2–4 sentences of technical approach only. Do not restate `spec.md` Executive Summary.
 2.  **Technical Context & Stack Verification:** Fill the table with verified facts only.
@@ -183,7 +206,9 @@ Rewrite `$IMPL_PLAN` (which was initialized from `plan-template.md` in Step 7).
     *   **Architectural Mapping**: Map logical roles / Spec IDs to physical files.
     *   **Internal Component Diagram**: Draw physical/internal decomposition using quoted Mermaid labels.
 6.  **Mechanism Matrix:** **Leave this section exactly as is in the template.** Do not add or remove text. The explanatory text is already present.
-7.  **Library Documentation Evidence:** Cite skill/docs source for library-specific claims, or write "No library-specific claims."
+7.  **Library Documentation Evidence:** For each library-specific implementation claim made in this plan (e.g., specific API usage, non-obvious configuration, framework-specific patterns), cite the evidence source (skill name, documentation source name, or user-provided reference). If no library-specific claims were made, write exactly: "No library-specific claims."
+
+    Note: Referencing `STACK-NNN` IDs from `spec.md` §6 is not itself a library-specific claim — those IDs map to `stack.md` entries. A library-specific claim is a concrete implementation detail (e.g., "use Mongoose middleware hooks", "configure Joi abortEarly option") that goes beyond simply naming the technology.
 8.  **Complexity Tracking:** Fill the table ONLY if Constitution Check has `FAIL` rows or justified deviations.
 
 **Prohibitions:**
@@ -218,7 +243,17 @@ Write mechanism decisions to machine state. You MUST NOT author a mechanism tabl
 eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" get spec-ids
 ```
-*(If this fails, run `init` then `extract-spec-ids` as per script error instructions).*
+*(If this fails, try to recover by running:)*
+```bash
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" init
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" extract-spec-ids
+```
+*(If recovery also fails — STOP and report:)*
+```text
+PLAN_STOPPED: spec-ids extraction failed
+  The spec.md may be missing or malformed.
+  Run /order.spec to create or fix the feature contract.
+```
 
 **2. Prepare Rows:**
 For each required Spec ID (`REQ`, `IF`, `AC`, `EDGE`, `INV`, `NFR`; conditional `ASM`), construct a row using **only** these templates:
@@ -232,10 +267,10 @@ For each required Spec ID (`REQ`, `IF`, `AC`, `EDGE`, `INV`, `NFR`; conditional 
 ```bash
 eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 
-printf '%s\n' \
-  "REQ-001  direct  validate credentials  src/services/auth.js  unit" \
-  "IF-001 direct  HTTP route  src/routes/auth.js  integration" \
+printf 'REQ-001\tdirect\tvalidate credentials\tsrc/services/auth.js\tunit\nIF-001\tdirect\tHTTP route\tsrc/routes/auth.js\tintegration\n' \\n
   | python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" put-mechanisms
+
+**CRITICAL:** Fields MUST be separated by literal TAB characters (`\\t` in printf), NOT spaces. The `mechanisms.tsv` file is tab-separated. Using spaces will cause `put-mechanisms` to fail or produce corrupt data.
 ```
 If `put-mechanisms` exits non-zero, read stderr, fix rows, and re-run. Do not hand-edit `mechanisms.tsv`.
 
@@ -286,13 +321,13 @@ python3 .orderspec/framework/scripts/traceability.py mark-consumed --report "$FE
 ## Completion Report
 
 Report to chat:
--   Branch
 -   `FEATURE_DIR`
 -   Constitution status summary
 -   `[NEW]` / `[MOD]` / `[DEL]` file counts
 -   Mechanism matrix result (row counts from `summarize-mechanisms --json`)
 -   Validation result (`validate --stage plan`)
--   Readiness for `/order.tasks`
+-   **Recommended next step:** Run `/order.plan-check` to verify the plan before proceeding to `/order.tasks`
+-   Readiness for `/order.tasks` (after plan-check passes)
 
 ## Done When
 
@@ -310,4 +345,6 @@ Report to chat:
 -   [ ] `traceability.py lint` and `check-mechanisms` pass
 -   [ ] `validate --stage plan` has no blocking findings
 -   [ ] Active feature status updated to `planned`
--   [ ] Completion Report provided
+-   [ ] Skills and MCP documentation sources consulted before reconnaissance
+-   [ ] `[DATE]` replaced with today's date in `plan.md` header
+-   [ ] Completion Report provided, including recommendation to run `/order.plan-check`
