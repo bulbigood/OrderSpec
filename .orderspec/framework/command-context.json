@@ -179,9 +179,6 @@
     "required": [
       {
         "ref": "framework.rules"
-      },
-      {
-        "ref": "framework.meta"
       }
     ]
   },
@@ -199,9 +196,6 @@
     "order.spec": {
       "required": [
         {
-          "group": "artifact.schemas"
-        },
-        {
           "ref": "template.spec"
         },
         {
@@ -211,9 +205,6 @@
     },
     "order.spec-check": {
       "required": [
-        {
-          "group": "artifact.schemas"
-        },
         {
           "group": "project.contracts"
         }
@@ -228,125 +219,59 @@
     "order.plan": {
       "required": [
         {
-          "ref": "protocol.tooling"
-        },
-        {
-          "group": "artifact.schemas"
-        },
-        {
-          "ref": "template.plan"
-        },
-        {
           "group": "project.contracts"
-        }
-      ],
-      "read_if_exists": [
-        {
-          "group": "tooling.optional"
         }
       ]
     },
     "order.plan-check": {
       "required": [
         {
-          "ref": "protocol.tooling"
-        },
-        {
-          "group": "artifact.schemas"
-        },
-        {
           "ref": "template.report"
         },
         {
           "group": "project.contracts"
-        }
-      ],
-      "read_if_exists": [
-        {
-          "group": "tooling.optional"
         }
       ]
     },
     "order.tasks": {
       "required": [
         {
-          "ref": "protocol.tooling"
-        },
-        {
-          "group": "artifact.schemas"
-        },
-        {
           "ref": "template.tasks"
         },
         {
           "group": "project.contracts"
-        }
-      ],
-      "read_if_exists": [
-        {
-          "group": "tooling.optional"
         }
       ]
     },
     "order.tasks-check": {
       "required": [
         {
-          "ref": "protocol.tooling"
-        },
-        {
-          "group": "artifact.schemas"
-        },
-        {
           "ref": "template.report"
         },
         {
           "group": "project.contracts"
-        }
-      ],
-      "read_if_exists": [
-        {
-          "group": "tooling.optional"
         }
       ]
     },
     "order.code": {
       "required": [
         {
-          "ref": "protocol.tooling"
-        },
-        {
           "group": "project.contracts"
-        }
-      ],
-      "read_if_exists": [
-        {
-          "group": "tooling.optional"
         }
       ]
     },
     "order.code-check": {
       "required": [
         {
-          "ref": "protocol.tooling"
-        },
-        {
           "ref": "template.report"
         },
         {
           "group": "project.contracts"
         }
-      ],
-      "read_if_exists": [
-        {
-          "group": "tooling.optional"
-        }
       ]
     },
     "order.sync-check": {
       "required": [
-        {
-          "group": "artifact.schemas"
-        },
         {
           "ref": "template.report"
         },

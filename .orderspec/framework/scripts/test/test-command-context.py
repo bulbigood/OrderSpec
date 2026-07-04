@@ -293,14 +293,19 @@ else:
     bad(f"resolve order.spec wrong :: rc={rc} data={data} err={err!r}")
 
 
-# 6. resolve order.plan includes tooling protocol
+# 6. resolve order.plan includes tooling protocol when explicitly required by manifest
 reset_work()
 setup_base_files()
 put_manifest(base_manifest())
 rc, data, err = run_cc_json("resolve", "order.plan", "--json")
 p = paths(data)
-if rc == 0 and ".orderspec/framework/protocols/tooling-protocol.md" in p:
-    ok("resolve order.plan includes tooling protocol")
+if (
+    rc == 0
+    and data.get("ok") is True
+    and ".orderspec/framework/protocols/tooling-protocol.md" in p
+    and "constitution.md" in p
+):
+    ok("resolve order.plan includes tooling protocol when required by manifest")
 else:
     bad(f"resolve order.plan wrong :: rc={rc} data={data} err={err!r}")
 
@@ -768,6 +773,158 @@ else:
     bad(f"bootstrap context wrong :: rc={rc} protocols={protocol_paths} data={data} err={err!r}")
 
 
+
+
+# 29a. real manifest: order.plan excludes schema YAMLs and tooling protocol
+reset_work()
+setup_base_files()
+import shutil as _shutil
+_real_manifest = Path(__file__).resolve().parent.parent / "command-context.json"
+if _real_manifest.exists():
+    _dst = WORK / ".orderspec" / "framework" / "command-context.json"
+    _dst.parent.mkdir(parents=True, exist_ok=True)
+    _shutil.copy2(_real_manifest, _dst)
+    # also create template/schemas that real manifest references
+    for _name in ("plan-template.md", "tasks-template.md", "spec-template.md", "report-template.md"):
+        write(WORK / ".orderspec" / "framework" / "templates" / _name, f"# {_name}\n")
+    for _name in ("frontmatter.yml", "artifacts.yml", "lifecycle.yml", "traceability.yml"):
+        write(WORK / ".orderspec" / "framework" / "schemas" / _name, "kind: schema\n")
+    write(WORK / ".orderspec" / "orderspec.json", '{"framework_version":"0.3.0","schema_versions":{}}\n')
+    rc, data, err = run_cc_json("resolve", "order.plan", "--json")
+    p = paths(data)
+    excluded = [
+        ".orderspec/framework/protocols/tooling-protocol.md",
+        ".orderspec/framework/schemas/frontmatter.yml",
+        ".orderspec/framework/schemas/artifacts.yml",
+        ".orderspec/framework/schemas/lifecycle.yml",
+        ".orderspec/framework/schemas/traceability.yml",
+        ".orderspec/framework/templates/plan-template.md",
+        ".orderspec/config/tooling.json",
+        ".orderspec/orderspec.json",
+    ]
+    included = [
+        ".orderspec/framework/orderspec-rules.md",
+        "constitution.md",
+        "stack.md",
+        "architecture.md",
+        "conventions.md",
+    ]
+    if (
+        rc == 0
+        and data.get("ok") is True
+        and all(x not in p for x in excluded)
+        and all(x in p for x in included)
+    ):
+        ok("real manifest: order.plan excludes schemas/protocol/template/tooling, includes rules+contracts")
+    else:
+        bad(f"real manifest order.plan wrong :: rc={rc} paths={p} err={err!r}")
+else:
+    ok("real manifest test skipped (manifest not found)")
+
+
+# 29b. real manifest: no command returns framework.meta in to_read
+reset_work()
+setup_base_files()
+if _real_manifest.exists():
+    _shutil.copy2(_real_manifest, manifest_path())
+    for _name in ("plan-template.md", "tasks-template.md", "spec-template.md", "report-template.md"):
+        write(WORK / ".orderspec" / "framework" / "templates" / _name, f"# {_name}\n")
+    for _name in ("frontmatter.yml", "artifacts.yml", "lifecycle.yml", "traceability.yml"):
+        write(WORK / ".orderspec" / "framework" / "schemas" / _name, "kind: schema\n")
+    write(WORK / ".orderspec" / "orderspec.json", '{"framework_version":"0.3.0","schema_versions":{}}\n')
+    rc_list, data_list, err_list = run_cc_json("list", "--json")
+    failed = []
+    if rc_list == 0:
+        for cmd_name in data_list.get("commands", []):
+            rc_c, data_c, err_c = run_cc_json("resolve", cmd_name, "--json")
+            p_c = paths(data_c)
+            if ".orderspec/orderspec.json" in p_c:
+                failed.append(cmd_name)
+    if not failed:
+        ok("real manifest: no command returns framework.meta in to_read")
+    else:
+        bad(f"framework.meta leaked for commands: {failed}")
+else:
+    ok("real manifest framework.meta test skipped")
+
+
+# 29c. real manifest: order.plan preload contains project.contracts group
+reset_work()
+setup_base_files()
+if _real_manifest.exists():
+    _shutil.copy2(_real_manifest, manifest_path())
+    for _name in ("plan-template.md", "tasks-template.md", "spec-template.md", "report-template.md"):
+        write(WORK / ".orderspec" / "framework" / "templates" / _name, f"# {_name}\n")
+    for _name in ("frontmatter.yml", "artifacts.yml", "lifecycle.yml", "traceability.yml"):
+        write(WORK / ".orderspec" / "framework" / "schemas" / _name, "kind: schema\n")
+    write(WORK / ".orderspec" / "orderspec.json", '{"framework_version":"0.3.0","schema_versions":{}}\n')
+    rc, data, err = run_cc_json("resolve", "order.plan", "--json")
+    p = paths(data)
+    expected_contracts = ["constitution.md", "stack.md", "architecture.md", "conventions.md"]
+    if rc == 0 and all(c in p for c in expected_contracts):
+        ok("real manifest: order.plan includes all project contracts")
+    else:
+        bad(f"order.plan contracts wrong :: rc={rc} paths={p} err={err!r}")
+else:
+    ok("real manifest contracts test skipped")
+
+
+# 29d. real manifest: order.tasks excludes tooling protocol and schemas
+reset_work()
+setup_base_files()
+if _real_manifest.exists():
+    _shutil.copy2(_real_manifest, manifest_path())
+    for _name in ("plan-template.md", "tasks-template.md", "spec-template.md", "report-template.md"):
+        write(WORK / ".orderspec" / "framework" / "templates" / _name, f"# {_name}\n")
+    for _name in ("frontmatter.yml", "artifacts.yml", "lifecycle.yml", "traceability.yml"):
+        write(WORK / ".orderspec" / "framework" / "schemas" / _name, "kind: schema\n")
+    write(WORK / ".orderspec" / "orderspec.json", '{"framework_version":"0.3.0","schema_versions":{}}\n')
+    rc, data, err = run_cc_json("resolve", "order.tasks", "--json")
+    p = paths(data)
+    excluded = [
+        ".orderspec/framework/protocols/tooling-protocol.md",
+        ".orderspec/framework/schemas/frontmatter.yml",
+        ".orderspec/framework/schemas/artifacts.yml",
+        ".orderspec/framework/schemas/lifecycle.yml",
+        ".orderspec/framework/schemas/traceability.yml",
+        ".orderspec/config/tooling.json",
+        ".orderspec/orderspec.json",
+    ]
+    if rc == 0 and all(x not in p for x in excluded):
+        ok("real manifest: order.tasks excludes tooling protocol + schemas + tooling.json + meta")
+    else:
+        bad(f"order.tasks exclusions wrong :: rc={rc} paths={p} err={err!r}")
+else:
+    ok("real manifest order.tasks test skipped")
+
+
+# 29e. real manifest: order.code excludes tooling protocol and schemas
+reset_work()
+setup_base_files()
+if _real_manifest.exists():
+    _shutil.copy2(_real_manifest, manifest_path())
+    for _name in ("plan-template.md", "tasks-template.md", "spec-template.md", "report-template.md"):
+        write(WORK / ".orderspec" / "framework" / "templates" / _name, f"# {_name}\n")
+    for _name in ("frontmatter.yml", "artifacts.yml", "lifecycle.yml", "traceability.yml"):
+        write(WORK / ".orderspec" / "framework" / "schemas" / _name, "kind: schema\n")
+    write(WORK / ".orderspec" / "orderspec.json", '{"framework_version":"0.3.0","schema_versions":{}}\n')
+    rc, data, err = run_cc_json("resolve", "order.code", "--json")
+    p = paths(data)
+    excluded = [
+        ".orderspec/framework/protocols/tooling-protocol.md",
+        ".orderspec/framework/schemas/frontmatter.yml",
+        ".orderspec/framework/schemas/artifacts.yml",
+        ".orderspec/framework/schemas/lifecycle.yml",
+        ".orderspec/framework/schemas/traceability.yml",
+        ".orderspec/config/tooling.json",
+        ".orderspec/orderspec.json",
+    ]
+    if rc == 0 and all(x not in p for x in excluded):
+        ok("real manifest: order.code excludes tooling protocol + schemas + tooling.json + meta")
+    else:
+        bad(f"order.code exclusions wrong :: rc={rc} paths={p} err={err!r}")
+else:
+    ok("real manifest order.code test skipped")
 
 
 # 30. v2 ref and group entries expand in order

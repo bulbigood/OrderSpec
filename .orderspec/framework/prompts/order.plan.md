@@ -149,7 +149,7 @@ Store the JSON output. Use it to determine skill availability. Do not manually i
 For each `STACK-NNN` referenced in `spec.md` §6:
 1.  Look up the technology name in `stack.md` using the `STACK-NNN` ID.
 2.  If `validate_tooling.py` reports `installed_and_verified` for a matching skill — consult that skill's documentation as primary evidence source before recon.
-3.  If `validate_tooling.py` reports `installed_but_missing` — follow `tooling-protocol.md` rule 6: MUST NOT silently continue with library-specific claims; ask the operator to install the skill or proceed without library-specific claims.
+3.  If `validate_tooling.py` reports `installed_but_missing` — follow `orderspec-rules.md` (Documentation Evidence and Tooling Policy): MUST NOT silently continue with library-specific claims; ask the operator to install the skill or proceed without library-specific claims.
 4.  If no binding exists for a `STACK-NNN` — no skill is required for that technology; proceed normally.
 
 ### Step 7: Setup Plan Artifact
