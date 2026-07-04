@@ -213,7 +213,7 @@ Map the JSON output from `traceability.py validate --stage plan` to the template
 - `{routing_blocks}`: insert routing blocks for all findings with disposition `Route`
 - `{deferred_rows}`: `(none)` — plan-check defers nothing
 - `{findings_rows}`: combine mechanical findings (from `findings` array) with semantic findings (P1-xxx). Each row: `| ID | Source | Severity | Disposition | Location | Summary |`
-- `{coverage_taxonomy_rows}`: from `categories` object. Each row: `| Category | § | Status | Disposition |`. `missing` MVP/core → Route (HIGH); `empty`/`partial` → Route (MEDIUM)
+- `{coverage_taxonomy_rows}`: from `categories` object. Each row: `| Category | § | Status | Disposition |`. Example row: `| Functional Requirements | §4 | present — 10 REQs | — |`. `missing` MVP/core → Route (HIGH); `empty`/`partial` → Route (MEDIUM)
 - `{contradiction_grid_rows}`: from `contradiction_grid` array. Each row: `| Pair | Verdict | Reason |`. If `tension` is non-empty, render Reason as `{tension} — {reason}`.
 - `{journey_matrix_rows}`: from `matrices.uj_coverage` array. Each row: `| UJ | Priority | Covers REQs | ACs | ACs trace to REQs | Status |`.
 - `{if_matrix_rows}`: from `matrices.if_coverage` array. Each row: `| IF | Kind | Actor | Success | Failure | Covered by ACs | Status |`.
