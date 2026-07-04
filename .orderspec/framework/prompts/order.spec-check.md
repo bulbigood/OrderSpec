@@ -98,15 +98,19 @@ Assess cohesion. Oversized but coherent → Route (MEDIUM) recommending `/order.
 
 ## Report Generation
 
-Write Markdown report to `$FEATURE_DIR/spec-report.md`.
+You MUST render the final report strictly using the `report-template.md` loaded via Command Context. 
+Do not invent report sections, table structures, or alter the YAML frontmatter schema. 
+Fill the template variables exactly as specified in the template file using the data from `traceability.py` JSON output and your semantic findings.
 
-Use the JSON output from `traceability.py validate` to populate:
-- **Inventory**: Use `inventory` object directly.
-- **Coverage Taxonomy**: Use `categories` object. `missing` MVP/core category → Route (HIGH). `empty`/`partial` → Route (MEDIUM).
-- **Contradiction Grid**: Use `contradiction_grid` array.
-- **Journey Coverage Matrix**: Use `matrices.uj_coverage`.
-- **IF Coverage Matrix**: Use `matrices.if_coverage`.
-- **Findings**: Combine imported mechanical findings with your semantic findings (S1-xxx).
+Write the Markdown report to `$FEATURE_DIR/spec-report.md`.
+
+Map the JSON output from `traceability.py validate` to the template variables:
+- **Inventory & Metrics**: Use the `inventory` object directly.
+- **Coverage Taxonomy**: Use the `categories` object. `missing` MVP/core category → Route (HIGH). `empty`/`partial` → Route (MEDIUM).
+- **Contradiction Grid**: Use the `contradiction_grid` array.
+- **Journey Coverage Matrix**: Use the `matrices.uj_coverage` array.
+- **IF Coverage Matrix**: Use the `matrices.if_coverage` array.
+- **Findings**: Combine imported mechanical findings (from the script's `findings` array) with your semantic findings (S1-xxx). 
 
 ### Routing Block Format
 ```markdown
