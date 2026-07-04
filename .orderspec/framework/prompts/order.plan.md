@@ -186,7 +186,7 @@ Rewrite `$IMPL_PLAN` (which was initialized from `plan-template.md` in Step 7).
 
 **Instructions per Section:**
 
-**Before filling sections:** Replace `[DATE]` in the template header with today's date in `YYYY-MM-DD` format (run `date +%F` if unsure).
+**Before filling sections:** Replace `[DATE]` in the template header with today's date in `YYYY-MM-DD` format (use the current date from system context).
 
 1.  **Summary:** 2–4 sentences of technical approach only. Do not restate `spec.md` Executive Summary.
 2.  **Technical Context & Stack Verification:** Fill the table with verified facts only.
@@ -256,7 +256,9 @@ PLAN_STOPPED: spec-ids extraction failed
 ```
 
 **2. Prepare Rows:**
-For each required Spec ID (`REQ`, `IF`, `AC`, `EDGE`, `INV`, `NFR`; conditional `ASM`), construct a row using **only** these templates:
+For each required Spec ID (`REQ`, `IF`, `AC`, `EDGE`, `INV`, `NFR`; conditional `ASM`), construct a row using **only** these templates.
+
+**Do NOT** emit rows for `UJ`, `DEC`, or `SC` IDs. They are not testable mechanisms and will be rejected by `put-mechanisms`.
 
 -   **TEMPLATE 1 (Testable logic):** `SPEC_ID<TAB>direct<TAB>mechanism<TAB>file<TAB>unit`
 -   **TEMPLATE 2 (Testable via API):** `SPEC_ID<TAB>direct<TAB>mechanism<TAB>file<TAB>integration`
@@ -301,7 +303,7 @@ eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 
 python3 .orderspec/framework/scripts/active_feature.py set \
   --feature-id "$FEATURE_ID" \
-  --feature-directory "$FEATURE_DIR" \
+  --feature-directory "$FEATURE_DIR_REL" \
   --status planned \
   --last-command order.plan \
   --json

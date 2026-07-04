@@ -84,18 +84,27 @@ def collect_available_docs(paths, include_tasks=False):
 def base_paths_payload(paths):
     """Return the common JSON payload for resolved feature paths.
 
-    `FEATURE_DIR` is the canonical key.
+    `FEATURE_DIR` is the canonical key (absolute path).
+    `FEATURE_DIR_REL` is the repo-relative variant for commands that require
+    safe relative paths (e.g. `active_feature.py set --feature-directory`).
     `SPECS_DIR` is retained as a deprecated compatibility alias for older prompts.
     """
     feature_dir_name = Path(paths["FEATURE_DIR"]).name
     feature_id = f"FEAT-{feature_dir_name}" if not feature_dir_name.startswith("FEAT-") else feature_dir_name
-    
+
+    # Compute repo-relative path for callers that require it (e.g. active_feature.py)
+    try:
+        feature_dir_rel = str(Path(paths["FEATURE_DIR"]).relative_to(paths["REPO_ROOT"]))
+    except ValueError:
+        feature_dir_rel = paths["FEATURE_DIR"]
+
     return {
         "REPO_ROOT": paths["REPO_ROOT"],
         "CURRENT_BRANCH": paths["CURRENT_BRANCH"],
         "BRANCH": paths["CURRENT_BRANCH"],
         "FEATURE_ID": feature_id,
         "FEATURE_DIR": paths["FEATURE_DIR"],
+        "FEATURE_DIR_REL": feature_dir_rel,
         "SPECS_DIR": paths["FEATURE_DIR"],  # deprecated alias
         "FEATURE_SPEC": paths["FEATURE_SPEC"],
         "IMPL_PLAN": paths["IMPL_PLAN"],
