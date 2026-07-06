@@ -379,7 +379,7 @@ try:
 except json.JSONDecodeError:
     no("validate JSON", f"rc={rc} out={out} err={err}")
 
-# V8: task gap → M7 (MEDIUM severity, rc=0)
+# V8: task gap → no M7 (gaps are allowed)
 reset_feature()
 write_spec("""- **REQ-001** user can log in
 - **UJ-001** Login journey
@@ -396,8 +396,8 @@ put_mechanisms(
 - [ ] T003 [US1] | src/models/user.py | REQ-001 | another task
 """)
 rc, out, err = run_trace("validate", "--stage", "tasks", F)
-if rc == 0 and "M7" in out:
-    ok("validate: task gap → M7")
+if rc == 0 and "M7" not in out:
+    ok("validate: task gap allowed (no M7)")
 else:
     no("validate M7 gap", f"rc={rc} out={out} err={err}")
 
@@ -585,71 +585,6 @@ else:
     no("validate M25", f"rc={rc} out={out} err={err}")
 
 # ── extract-trace / render round-trip ────────────────────────────────────────
-
-# V11: extract-trace + render round-trip
-reset_feature()
-write_spec("""- **REQ-001** user can log in
-- **UJ-001** Login journey
-  Covers: REQ-001
-""")
-(SPECS / "plan.md").write_text("""```pathmanifest
-src/models/user.py  [NEW]
-```
-""")
-mech_data = f"REQ-001{TAB}direct{TAB}validate email{TAB}src/models/user.py{TAB}unit"
-run_trace("put-mechanisms", F, input_text=mech_data + "\n")
-(SPECS / "tasks.md").write_text("""- [ ] T001 [US1] | src/models/user.py | REQ-001 | validate email
-""")
-rc, out, err = run_trace("extract-trace", F)
-if rc == 0:
-    ok("extract-trace: basic round-trip → rc=0")
-else:
-    no("extract-trace basic", f"rc={rc} out={out} err={err}")
-
-rc, out, err = run_trace("render", F)
-if rc == 0:
-    ok("render: basic round-trip → rc=0")
-else:
-    no("render basic", f"rc={rc} out={out} err={err}")
-
-if (SDIR / "traceability.md").exists():
-    md = (SDIR / "traceability.md").read_text()
-    if "DO NOT EDIT" in md and "REQ-001" in md:
-        ok("render: output contains banner and REQ-001")
-    else:
-        no("render content", f"md={md[:200]}")
-else:
-    no("render content", "traceability.md not found")
-
-# V12: stale guard
-reset_feature()
-mech_data = f"REQ-001{TAB}direct{TAB}x{TAB}src/models/user.py{TAB}unit"
-run_trace("put-mechanisms", F, input_text=mech_data + "\n")
-(SPECS / "tasks.md").write_text("""- [ ] T001 [US1] | src/models/user.py | REQ-001 | x
-""")
-run_trace("extract-trace", F)
-run_trace("render", F)
-
-(SPECS / "tasks.md").touch()
-rc, out, err = run_trace("render", F)
-if rc == 2 and "stale" in err:
-    ok("render: stale tasks.md → rc=2")
-else:
-    no("render stale", f"rc={rc} out={out} err={err}")
-
-rc, out, err = run_trace("get", F, "trace")
-if rc != 0 and "stale" in err:
-    ok("get trace: stale → nonzero")
-else:
-    no("get trace stale", f"rc={rc} out={out} err={err}")
-
-run_trace("extract-trace", F)
-rc, out, err = run_trace("render", F)
-rc2, out2, err2 = run_trace("get", F, "trace")
-if rc == 0 and rc2 == 0:
-    ok("re-extract → fresh, render+get ok")
-else:
-    no("reproject", f"rc={rc} rc2={rc2}")
 
 # ── Variant C: ref subset / empty-ref contract ──────────────────────────────
 

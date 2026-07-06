@@ -714,6 +714,259 @@ if m8_findings:
 else:
     bad("M8 neg: command-as-path not rejected", str(m8_findings))
 
+# 23. M7 positive: gaps in task numbering are ALLOWED (no finding)
+reset_feature()
+write_spec(MINIMAL_SPEC)
+write_plan("""# Plan
+
+## Physical Project Structure
+
+```pathmanifest
+src/service.py    [NEW]
+tests/test_service.py    [NEW]
+```
+""")
+# Tasks with gaps: T001, T005, T010 — should NOT trigger M7
+(SPECS / "tasks.md").write_text("""# Tasks
+
+## Phase 1
+
+- [ ] T001 [US1] | src/service.py | REQ-001 | first task
+
+## Phase 2
+
+- [ ] T005 [US1] | tests/test_service.py | AC-001 | test task
+- [ ] T010 [US1] | src/service.py |  | infra task
+""", encoding="utf-8")
+run_trace("extract-spec-ids", F)
+json_data = json.dumps([
+    {"spec_id": "REQ-001", "coverage_kind": "direct", "mechanism": "Test", "primary_files": "src/service.py", "test_type": "unit"},
+    {"spec_id": "AC-001", "coverage_kind": "direct", "mechanism": "Test AC", "primary_files": "tests/test_service.py", "test_type": "integration"}
+])
+run_trace("put-mechanisms", "--json", F, input_text=json_data)
+rc, data = run_validate("tasks")
+m7_gap_findings = [f for f in data.get("findings", []) if f["check"] == "M7" and "Gap" in f.get("message", "")]
+if not m7_gap_findings:
+    ok("M7 pos: gaps in task numbering allowed (no gap finding)")
+else:
+    bad("M7 pos: gap in numbering falsely flagged", str(m7_gap_findings))
+
+# 24. M7 negative: duplicate task ID IS rejected
+reset_feature()
+write_spec(MINIMAL_SPEC)
+write_plan("""# Plan
+
+## Physical Project Structure
+
+```pathmanifest
+src/service.py    [NEW]
+tests/test_service.py    [NEW]
+```
+""")
+(SPECS / "tasks.md").write_text("""# Tasks
+
+## Phase 1
+
+- [ ] T001 [US1] | src/service.py | REQ-001 | first task
+- [ ] T001 [US1] | tests/test_service.py | AC-001 | duplicate ID
+""", encoding="utf-8")
+run_trace("extract-spec-ids", F)
+json_data = json.dumps([
+    {"spec_id": "REQ-001", "coverage_kind": "direct", "mechanism": "Test", "primary_files": "src/service.py", "test_type": "unit"},
+    {"spec_id": "AC-001", "coverage_kind": "direct", "mechanism": "Test AC", "primary_files": "tests/test_service.py", "test_type": "integration"}
+])
+run_trace("put-mechanisms", "--json", F, input_text=json_data)
+rc, data = run_validate("tasks")
+m7_dupe_findings = [f for f in data.get("findings", []) if f["check"] == "M7" and "Duplicate" in f.get("message", "")]
+if m7_dupe_findings:
+    ok("M7 neg: duplicate task ID detected")
+else:
+    bad("M7 neg: duplicate ID not detected", f"findings={[f['check'] for f in data.get('findings',[])]}")
+
+# 25. M8 positive: GATE task with test file path from manifest passes
+reset_feature()
+write_spec(MINIMAL_SPEC)
+write_plan("""# Plan
+
+## Physical Project Structure
+
+```pathmanifest
+src/service.py    [NEW]
+tests/integration/task.test.js    [NEW]
+```
+""")
+(SPECS / "tasks.md").write_text("""# Tasks
+
+## Final Phase
+
+- [ ] T099 [US1] | src/service.py | REQ-001 | implementation
+- [ ] T100 | tests/integration/task.test.js |  | GATE: run npm test — verify all AC-* pass, INV-* hold; STOP on failure
+""", encoding="utf-8")
+run_trace("extract-spec-ids", F)
+json_data = json.dumps([
+    {"spec_id": "REQ-001", "coverage_kind": "direct", "mechanism": "Test", "primary_files": "src/service.py", "test_type": "unit"},
+    {"spec_id": "AC-001", "coverage_kind": "direct", "mechanism": "Test AC", "primary_files": "tests/integration/task.test.js", "test_type": "integration"}
+])
+run_trace("put-mechanisms", "--json", F, input_text=json_data)
+rc, data = run_validate("tasks")
+m8_findings = [f for f in data.get("findings", []) if f["check"] == "M8"]
+if not m8_findings:
+    ok("M8 pos: GATE task with test file path from manifest passes")
+else:
+    bad("M8 pos: GATE task with valid path falsely flagged", str(m8_findings))
+
+# 26. M8 negative: GATE task with command as path (npm test) is rejected
+reset_feature()
+write_spec(MINIMAL_SPEC)
+write_plan("""# Plan
+
+## Physical Project Structure
+
+```pathmanifest
+src/service.py    [NEW]
+tests/integration/task.test.js    [NEW]
+```
+""")
+(SPECS / "tasks.md").write_text("""# Tasks
+
+## Final Phase
+
+- [ ] T099 [US1] | src/service.py | REQ-001 | implementation
+- [ ] T100 | npm test |  | GATE: verify all AC-* pass; STOP on failure
+""", encoding="utf-8")
+run_trace("extract-spec-ids", F)
+json_data = json.dumps([
+    {"spec_id": "REQ-001", "coverage_kind": "direct", "mechanism": "Test", "primary_files": "src/service.py", "test_type": "unit"},
+    {"spec_id": "AC-001", "coverage_kind": "direct", "mechanism": "Test AC", "primary_files": "tests/integration/task.test.js", "test_type": "integration"}
+])
+run_trace("put-mechanisms", "--json", F, input_text=json_data)
+rc, data = run_validate("tasks")
+m8_findings = [f for f in data.get("findings", []) if f["check"] == "M8"]
+if m8_findings:
+    ok("M8 neg: GATE task with command-as-path rejected")
+else:
+    bad("M8 neg: command-as-path not rejected", str(m8_findings))
+
+# 27. render command removed — calling it should fail
+reset_feature()
+write_spec(MINIMAL_SPEC)
+rc, out, err = run_trace("render", F)
+if rc != 0:
+    ok("render removed: command fails with non-zero exit")
+else:
+    bad("render removed: command still succeeds", f"rc={rc} out={out[:200]}")
+
+# 28. suggest-tasks: basic output with direct mechanisms
+reset_feature()
+write_spec(MINIMAL_SPEC)
+write_plan("""# Plan
+
+## Physical Project Structure
+
+```pathmanifest
+src/service.py    [NEW]
+tests/test_service.py    [NEW]
+src/models/index.js    [MOD]
+```
+""")
+run_trace("extract-spec-ids", F)
+json_data = json.dumps([
+    {"spec_id": "REQ-001", "coverage_kind": "direct", "mechanism": "create user", "primary_files": "src/service.py", "test_type": "unit"},
+    {"spec_id": "AC-001", "coverage_kind": "direct", "mechanism": "test create", "primary_files": "tests/test_service.py", "test_type": "integration"}
+])
+run_trace("put-mechanisms", "--json", F, input_text=json_data)
+rc, out, err = run_trace("suggest-tasks", "--json", F)
+if rc == 0:
+    try:
+        data = json.loads(out)
+        suggestions = data.get("suggestions", [])
+        paths = [s["path"] for s in suggestions]
+        if "src/service.py" in paths and "tests/test_service.py" in paths:
+            ok("suggest-tasks: returns suggestions for direct mechanism paths")
+        else:
+            bad("suggest-tasks: missing expected paths", str(paths))
+        # Check infra task for index.js
+        if any(s["path"] == "src/models/index.js" and s["refs"] == [] for s in suggestions):
+            ok("suggest-tasks: suggests infra task for barrel/index file")
+        else:
+            bad("suggest-tasks: missing infra task for index.js", str(suggestions))
+    except json.JSONDecodeError:
+        bad("suggest-tasks: invalid JSON output", out[:300])
+else:
+    bad("suggest-tasks: command failed", f"rc={rc} err={err[:300]}")
+
+# 29. suggest-tasks: god-file split (>3 mechanisms on same path)
+reset_feature()
+write_spec(MINIMAL_SPEC)
+write_plan("""# Plan
+
+## Physical Project Structure
+
+```pathmanifest
+src/service.py    [NEW]
+```
+""")
+run_trace("extract-spec-ids", F)
+# Add 5 direct mechanisms all on src/service.py — should produce 2 suggestions (3+2)
+json_data = json.dumps([
+    {"spec_id": "REQ-001", "coverage_kind": "direct", "mechanism": "create", "primary_files": "src/service.py", "test_type": "unit"},
+    {"spec_id": "REQ-002", "coverage_kind": "direct", "mechanism": "read", "primary_files": "src/service.py", "test_type": "unit"},
+    {"spec_id": "REQ-003", "coverage_kind": "direct", "mechanism": "update", "primary_files": "src/service.py", "test_type": "unit"},
+    {"spec_id": "REQ-004", "coverage_kind": "direct", "mechanism": "delete", "primary_files": "src/service.py", "test_type": "unit"},
+    {"spec_id": "REQ-005", "coverage_kind": "direct", "mechanism": "list", "primary_files": "src/service.py", "test_type": "unit"},
+])
+run_trace("put-mechanisms", "--json", F, input_text=json_data)
+rc, out, err = run_trace("suggest-tasks", "--json", F)
+if rc == 0:
+    data = json.loads(out)
+    suggestions = data.get("suggestions", [])
+    service_suggestions = [s for s in suggestions if s["path"] == "src/service.py"]
+    if len(service_suggestions) == 2:
+        ok(f"suggest-tasks: god-file split into {len(service_suggestions)} tasks (expected 2)")
+    else:
+        bad(f"suggest-tasks: god-file split wrong (got {len(service_suggestions)}, expected 2)", str(service_suggestions))
+    # All suggestions should have needs_split=True
+    if all(s["needs_split"] for s in service_suggestions):
+        ok("suggest-tasks: all god-file suggestions have needs_split=True")
+    else:
+        bad("suggest-tasks: needs_split not set on all god-file suggestions", str(service_suggestions))
+    # Check refs caps
+    if all(len(s["refs"]) <= 3 for s in service_suggestions):
+        ok("suggest-tasks: all suggestions respect 3-ref cap")
+    else:
+        bad("suggest-tasks: ref cap violated", str([len(s["refs"]) for s in service_suggestions]))
+else:
+    bad("suggest-tasks: god-file test failed", f"rc={rc} err={err[:300]}")
+
+# 30. suggest-tasks: documented mechanisms are excluded
+reset_feature()
+write_spec(MINIMAL_SPEC)
+write_plan("""# Plan
+
+## Physical Project Structure
+
+```pathmanifest
+src/service.py    [NEW]
+```
+""")
+run_trace("extract-spec-ids", F)
+json_data = json.dumps([
+    {"spec_id": "REQ-001", "coverage_kind": "direct", "mechanism": "create", "primary_files": "src/service.py", "test_type": "unit"},
+    {"spec_id": "NFR-001", "coverage_kind": "documented", "mechanism": "perf constraint", "primary_files": "plan.md", "test_type": "documented"},
+])
+run_trace("put-mechanisms", "--json", F, input_text=json_data)
+rc, out, err = run_trace("suggest-tasks", "--json", F)
+if rc == 0:
+    data = json.loads(out)
+    suggestions = data.get("suggestions", [])
+    all_refs = [r for s in suggestions for r in s["refs"]]
+    if "NFR-001" not in all_refs:
+        ok("suggest-tasks: documented mechanisms excluded from suggestions")
+    else:
+        bad("suggest-tasks: documented mechanism leaked into suggestions", str(all_refs))
+else:
+    bad("suggest-tasks: documented exclusion test failed", f"rc={rc} err={err[:300]}")
+
 # ── Cleanup ──────────────────────────────────────────────────────────────────
 
 if WORK.exists():

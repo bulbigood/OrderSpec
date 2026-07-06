@@ -195,6 +195,28 @@ Each mechanism BINDS the task that FIRST creates the affected function — fold 
 
 **A direct ref means "this mechanism is realized OR exercised in THIS task's `path`" — not "this ID needed a home to satisfy coverage".** A direct mechanism whose `primary_files` is an implementation file (model/service/controller/route) belongs on the IMPLEMENTATION task that writes that file — NOT on a verification/GATE/test task. Do NOT move a direct ID onto an unrelated task merely to clear an "uncovered" rejection: that is ID-parking, and it makes `traceability.md` lie about where the behavior lives. If a direct ID has nowhere to go within the 3-ref cap, that is the signal to add a task for its primary_files, not to park it elsewhere (see Granularity: god-file split). This is now MACHINE-ENFORCED: `extract-trace` rejects (rc=3) any ref whose mechanism's `primary_files` does not contain that task's path, so ID-parking fails the build rather than silently corrupting `traceability.md`.
 
+### Step 7.5: Get Task Suggestions (Deterministic Pre-flight)
+
+Get deterministic task line skeletons from the tool. This reduces iterations in Step 10 by pre-grouping direct mechanisms by `primary_files` and pre-splitting god-files (>3 mechanisms per path).
+
+```bash
+eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" suggest-tasks --json
+```
+
+The JSON output contains `suggestions` — each with:
+- `path` — a file from `plan.md` pathmanifest
+- `refs` — ≤3 direct spec IDs whose `primary_files` equals this `path`
+- `gloss_hint` — mechanism summaries for gloss inspiration
+- `needs_split` — `true` if the path has >3 direct mechanisms (god-file); multiple sequential tasks on the same path are expected
+
+Use these as building blocks for Step 9 (Write `tasks.md`):
+1. Sort suggestions into phases (Expand → Migrate → Contract).
+2. Add `[P]` and `[USn]` markers based on file-disjointness and user story mapping.
+3. Refine `gloss_hint` into a ≤15-word gloss.
+4. Add a GATE task at the end (path = test file from manifest, refs = empty, gloss = "GATE: run [test command]...").
+5. Add any missing infra tasks (barrels, fixtures) that the tool didn't suggest.
+
 ### Step 8: Build Sequencing Inventory
 
 This is ordering, not coverage bookkeeping — coverage is the tool's job in Step 10.
@@ -223,6 +245,7 @@ Rewrite `$TASKS_FILE` (which was initialized from `tasks-template.md` in Step 6)
   Omit test tasks only if the user or constitution explicitly opts out.
 - **Final Phase — Contract**: start with a GATE task (run the test command verbatim; verify all `AC-*` pass, `INV-*` hold, `NFR-*` met; STOP on failure — contraction is irreversible). Then remove flags, delete deprecated code/routes, drop obsolete columns, lint/format, update docs.
   **Greenfield rule**: if nothing pre-exists to deprecate, Contract only removes scaffolding/flags.
+  **GATE task path**: the GATE task's `path` field MUST be a test file path listed in `plan.md` pathmanifest (e.g. `tests/integration/task.test.js`). The test command (e.g. `npm test`) goes in the gloss. This keeps `path` machine-valid against the manifest (check M8) without special-casing commands as paths.
 
 **Task format (STRICT — pipe-delimited, machine-parsed).** `extract-trace` splits each task line on " | " (space-pipe-space). A line with fewer than 2 " | " separators is treated as a non-task line (infra prose) and contributes NO coverage. Emit EXACTLY:
 
@@ -238,7 +261,8 @@ Rewrite `$TASKS_FILE` (which was initialized from `tasks-template.md` in Step 6)
 
 **Constraints the tool ENFORCES** (any violation fails `extract-trace` with rc=3, file untouched):
 
-- Subset binding (Variant C): a DECLARED ref MUST be a direct mechanism whose `primary_files` (in `mechanisms.tsv`) CONTAINS this task's exact path. A ref attached to a path that does not realize/exercise it (e.g. `REQ-001` on `src/models/index.js` when `REQ-001`'s `primary_files` is `task.model.js`) is a filler/mis-attribution and is REJECTED. This makes ID-parking structurally impossible — you cannot satisfy coverage by relocating a ref onto a barrel/verify/GATE line.
+- `primary_files` in `mechanisms.tsv` is a single path per row (TSV, same format as `spec-ids.tsv`). A declared ref is valid iff the ref's `primary_files` equals this task's exact `path`.
+- Subset binding: a DECLARED ref MUST be a direct mechanism whose `primary_files` (in `mechanisms.tsv`) CONTAINS this task's exact path. A ref attached to a path that does not realize/exercise it (e.g. `REQ-001` on `src/models/index.js` when `REQ-001`'s `primary_files` is `task.model.js`) is a filler/mis-attribution and is REJECTED. This makes ID-parking structurally impossible — you cannot satisfy coverage by relocating a ref onto a barrel/verify/GATE line.
 - `documented` IDs MUST NOT appear as refs (`plan.md` row only). Tasking one → rejected.
 - `delegated:<ID>` IDs MUST NOT appear as refs — task `<ID>` (the delegate) instead → rejected.
 - Atomicity cap: at most 3 spec IDs in field 3. 4+ refs = kitchen-sink defect, REJECTED. No GATE exemption — assert extra IDs in the gloss or split lines.
@@ -268,7 +292,8 @@ For endpoint tasks, fold non-2xx semantics from Spec § API Contracts into the g
 - **God-file split (resolves cap-vs-coverage pressure)**: when one `primary_files` carries MORE than 3 direct mechanisms (a "god file" like a central service), do NOT cram them into one task and do NOT park the overflow on verify/GATE tasks. Split into several IMPLEMENTATION tasks on the SAME path, each grouping ≤3 cohesive mechanisms by behavior (e.g. one task for create+list+get, another for update+soft-delete, another for atomic-audit+error-wrapping). These same-file tasks are sequential (NOT `[P]` — they share a file) and each carries the direct IDs it actually implements. This keeps every direct ID on the task that realizes it AND stays under the cap.
 - **Test-file split (mirror of god-file split, for test files)**: when one test `primary_files` carries MORE than 3 direct ACs, do NOT cram them into one task. Split into several TEST-WRITING tasks on the SAME test path, each carrying ≤3 ACs grouped by behavior (e.g. one task for create+list tests, another for update tests, another for soft-delete tests). These same-file test tasks are sequential (NOT `[P]` — they share a file) and each carries the AC IDs it actually exercises.
 - **Barrel/index exception**: registering multiple same-phase entities into barrel/index files is ONE task listing all of them — not one per file.
-- **Cross-cutting test tasks**: tests spanning multiple UJs (e.g. shared unauthenticated-access tests) omit the `[USn]` marker. Place them in the phase of their primary UJ or in the Final Phase before GATE. They carry AC refs normally (≤3 per line).
+- **Cross-cutting test tasks**: tests spanning multiple UJs (e.g. shared unauthenticated-access tests) omit the `[USn]` marker. Place them in the phase of their primary UJ or in the Final Phase before GATE. They carry AC refs normally (≤3 per line). A cross-cutting AC (e.g. AC-018 covering both GET and PATCH 404) is covered by placing its ref on ONE test-writing task whose path equals the AC's `primary_files` — no duplication needed; double coverage is not penalized.
+- Task IDs MAY have gaps (e.g. T005, T010, T015) — gaps are legal and reduce churn when inserting tasks. Only duplicate IDs are rejected.
 - Soft limit 3–15 tasks per story phase. If a story exceeds 15, do NOT silently continue — flag the UJ as too large in the Completion Report and recommend splitting it in `spec.md`.
 
 ### Step 10: Prove Coverage
@@ -281,11 +306,7 @@ eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" extract-trace
 ```
 
-- **exit 0** → coverage is closed deterministically (every direct covered, no documented tasked, every delegated satisfied, no cap/duplicate violation). `traceability.tsv` written atomically. Then render the human mirror:
-
-```bash
-python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" render
-```
+- **exit 0** → coverage is closed deterministically (every direct covered, no documented tasked, every delegated satisfied, no cap/duplicate violation). `traceability.tsv` written atomically.
 
 - **exit ≠ 0** → read the tool's stderr; it names the exact defect, e.g.:
   - `coverage: direct INV-001 uncovered` → add `INV-001` to the task whose `path` equals its `primary_files` (the task that realizes/exercises it) — NOT to a convenient verify/GATE task just to silence the rejection. If that implementation task is already at the 3-ref cap, split it (see god-file rule) rather than parking the ID on an unrelated line.
@@ -350,7 +371,6 @@ Report to chat:
 - Total task count; per phase and per user story.
 - Parallelism: number of `[P]` tasks and largest adjacent `[P]` group (0 is fine and expected for strictly sequential features).
 - **`extract-trace` result**: final exit code (MUST be 0) and, if iterations were needed, a one-line note of what was fixed. Cite the tool's success — do not paste a coverage matrix.
-- **`render` result**: confirm `traceability.md` was written.
 - **`validate --stage tasks` result**: no blocking findings.
 - Oversized stories flagged (any UJ over the 15-task soft limit).
 - Suggested MVP scope (US1) and the STOP & VALIDATE checkpoint.
@@ -369,7 +389,6 @@ Report to chat:
 - [ ] Refs are OPTIONAL (infra tasks carry empty refs), comma-joined with NO spaces when present, each declared ref's mechanism lists this task's path in `primary_files` (no filler/parked refs)
 - [ ] Path field is a raw `plan.md` path with NO backticks
 - [ ] Coverage proven by tool: `extract-trace` exited 0 (no uncovered direct, no tasked documented, no dangling delegated, no cap/duplicate violation)
-- [ ] Human mirror rendered: `render` wrote `traceability.md`
 - [ ] No hand-built matrix: no Traceability Matrix or Files Touched table authored by hand in `tasks.md`
 - [ ] Sequential backbone correct with all `[P]` marks stripped; `[P]` only on provably file-disjoint, independent, adjacent tasks; no stub-then-implement
 - [ ] No per-story verification tasks (Checkpoint is prose, not a task); final GATE task has empty refs

@@ -30,9 +30,9 @@
   mechanism whose primary_files contains that task's path (else rc=3). Never invent a ref to home a task. Coverage is proven by `traceability.py extract-trace`, NOT by any hand-written table.
 
   DO NOT author a Traceability Matrix or a Files Touched table in the generated
-  tasks.md. Those are derived: extract-trace writes traceability.tsv and render
-  writes traceability.md. A hand-built matrix is exactly the drift this system
-  removes. If this template ever grows such a section, delete it.
+  tasks.md. Coverage is derived by extract-trace into .state/traceability.tsv.
+  A hand-built matrix is exactly the drift this system removes. If this template
+  ever grows such a section, delete it.
 
   Do NOT copy these explanatory notes into the generated tasks.md.
 -->
@@ -113,7 +113,7 @@ Phase 1 (Setup & Expand) → Phase 2 (US1 / MVP) → **STOP & VALIDATE** → Pha
 
 ## Notes
 
-- Coverage is proven by the tool, never hand-built: `extract-trace` writes `.orderspec/traceability.tsv`, `render` writes `.orderspec/traceability.md`. Do NOT author a coverage matrix or a files-touched table here.
+- Coverage is proven by the tool, never hand-built: `extract-trace` writes `.state/traceability.tsv`. Do NOT author a coverage matrix or a files-touched table here.
 - The `[P]` marker means file-disjoint and independent of adjacent marked tasks; safe to run concurrently OR sequentially. Absence of the marker = run sequentially. No "waves".
 - The `[USn]` marker traces a task to its user story.
 - Each task is self-contained: raw path + spec IDs + ≤15-word gloss, so the implementer need not re-open spec.md.

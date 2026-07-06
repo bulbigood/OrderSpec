@@ -627,6 +627,101 @@ def cmd_render(feature):
     print(f"render: wrote {target}")
 
 
+
+def cmd_suggest_tasks(feature, json_out=False):
+    """Suggest task line skeletons by grouping direct mechanisms by primary_files.
+
+    For each primary_files path that has direct mechanisms:
+    - If ≤3 mechanisms: one suggestion with all refs
+    - If >3 mechanisms (god-file): multiple suggestions, each ≤3 refs (sequential split)
+
+    Also suggests infra tasks for barrel/index files in pathmanifest that have no
+    direct mechanisms.
+
+    Output: JSON or plain text with path | refs | gloss_hint per suggestion.
+    """
+    from collections import defaultdict
+
+    sdir = state_dir(feature)
+    mtsv = sdir / "mechanisms.tsv"
+
+    if not mtsv.exists():
+        die(f"suggest-tasks: mechanisms.tsv not found: {mtsv} (run put-mechanisms first)")
+
+    plan = plan_path(feature)
+    if not plan.exists():
+        die(f"suggest-tasks: plan.md not found: {plan}")
+
+    manifest_paths, manifest_errors = _parse_pathmanifest(plan)
+    if manifest_errors:
+        die(f"suggest-tasks: pathmanifest errors: {manifest_errors}")
+
+    mech_rows = _read_table(mtsv, "mechanisms")
+
+    # Group direct mechanisms by primary_files
+    groups = defaultdict(list)
+    for row in mech_rows:
+        ck = row["coverage_kind"]
+        if ck != "direct":
+            continue
+        pf = row["primary_files"].lstrip("./")
+        if pf not in manifest_paths:
+            continue
+        groups[pf].append({
+            "spec_id": row["spec_id"],
+            "mechanism": row["mechanism"],
+            "test_type": row["test_type"],
+        })
+
+    # Build suggestions
+    suggestions = []
+    for path in sorted(groups.keys()):
+        mechs = sorted(groups[path], key=lambda x: _sort_spec_id(x["spec_id"]))
+        needs_split = len(mechs) > 3
+
+        # Split into chunks of 3
+        for i in range(0, len(mechs), 3):
+            chunk = mechs[i:i+3]
+            refs = [m["spec_id"] for m in chunk]
+            mech_summaries = [m["mechanism"] for m in chunk]
+            gloss_hint = "; ".join(mech_summaries)
+            if len(gloss_hint) > 80:
+                gloss_hint = gloss_hint[:77] + "..."
+
+            suggestions.append({
+                "path": path,
+                "refs": refs,
+                "gloss_hint": gloss_hint,
+                "needs_split": needs_split,
+            })
+
+    # Suggest infra tasks for barrel/index files without direct mechanisms
+    for path in sorted(manifest_paths.keys()):
+        if path in groups:
+            continue
+        tag = manifest_paths[path]
+        if tag not in ("[MOD]", "[NEW]"):
+            continue
+        lower = path.lower()
+        if "index" in lower or "barrel" in lower:
+            suggestions.append({
+                "path": path,
+                "refs": [],
+                "gloss_hint": "register in barrel/index (infra, no refs)",
+                "needs_split": False,
+            })
+
+    if json_out:
+        print(json.dumps({"suggestions": suggestions}, indent=2))
+    else:
+        print("# Suggested task skeletons (path | refs | gloss_hint):")
+        for s in suggestions:
+            refs_str = ",".join(s["refs"]) if s["refs"] else ""
+            split_marker = " [SPLIT]" if s["needs_split"] else ""
+            print(f"{s['path']} | {refs_str} | {s['gloss_hint']}{split_marker}")
+
+
+
 def cmd_check_plan(feature):
     fdir = resolve_feature_dir(feature)
     plan = fdir / "plan.md"

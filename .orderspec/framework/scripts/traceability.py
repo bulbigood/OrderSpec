@@ -42,7 +42,8 @@ from trace_commands import (
     cmd_init, cmd_lint, cmd_get,
     cmd_put_mechanisms, cmd_put_spec_ids, cmd_put_trace,
     cmd_extract_spec_ids, cmd_extract_trace,
-    cmd_render, cmd_check_plan, cmd_check_mechanisms,
+    cmd_check_plan, cmd_check_mechanisms,
+    cmd_suggest_tasks,
     cmd_summarize_mechanisms, cmd_mark_consumed, cmd_diff_summary,
 )
 from trace_validate import cmd_validate as _cmd_validate
@@ -61,13 +62,16 @@ def main():
     subparsers.add_parser("lint", help="lint <feature>")
     subparsers.add_parser("extract-spec-ids", help="extract-spec-ids <feature>")
     subparsers.add_parser("extract-trace", help="extract-trace <feature>")
-    subparsers.add_parser("render", help="render <feature>")
     get_parser = subparsers.add_parser("get", help="get [--feature-dir FD] [feature] <mechanisms|spec-ids|trace>")
     get_parser.add_argument("positional_args", nargs="*")
     pm_parser = subparsers.add_parser("put-mechanisms", help="put-mechanisms <feature>")
     pm_parser.add_argument("--json", action="store_true", help="Read input as JSON array")
     subparsers.add_parser("put-spec-ids", help="put-spec-ids <feature>")
     subparsers.add_parser("put-trace", help="put-trace <feature>")
+    st_parser = subparsers.add_parser("suggest-tasks", help="suggest-tasks [--json] <feature>")
+    st_parser.add_argument("--json", action="store_true")
+    st_parser.add_argument("feature", nargs="?")
+
     subparsers.add_parser("check-plan", help="check-plan <feature>")
     subparsers.add_parser("check-mechanisms", help="check-mechanisms <feature>")
 
@@ -120,8 +124,8 @@ def main():
         cmd_extract_spec_ids(remaining[0] if remaining else "")
     elif cmd == "extract-trace":
         cmd_extract_trace(remaining[0] if remaining else "")
-    elif cmd == "render":
-        cmd_render(remaining[0] if remaining else "")
+    elif cmd == "suggest-tasks":
+        cmd_suggest_tasks(getattr(args, 'feature', None) or (remaining[0] if remaining else ""), json_out=getattr(args, 'json', False))
     elif cmd == "get":
         if len(args.positional_args) == 1:
             cmd_get("", args.positional_args[0])
