@@ -426,6 +426,159 @@ else:
     bad("validate --json: findings missing disposition", str(data.get("findings")))
 
 
+# 18. M4 negative: story task with [US] marker and no refs → finding
+reset_feature()
+write_spec(MINIMAL_SPEC)
+write_plan("""# Plan
+
+## Physical Project Structure
+
+```pathmanifest
+src/service.py    [NEW]
+tests/test_service.py    [NEW]
+```
+""")
+# Write tasks.md with a [US1] task that has empty refs
+(SPECS / "tasks.md").write_text("""# Tasks
+
+## Phase 2: US1
+
+- [ ] T001 [US1] | src/service.py |  | infra task with no refs
+""", encoding="utf-8")
+# Put mechanisms for REQ-001
+run_trace("extract-spec-ids", F)
+json_data = json.dumps([
+    {"spec_id": "REQ-001", "coverage_kind": "direct", "mechanism": "Test", "primary_files": "src/service.py", "test_type": "unit"}
+])
+run_trace("put-mechanisms", "--json", F, input_text=json_data)
+rc, data = run_validate("tasks")
+if has_finding(data, "M4"):
+    ok("M4 neg: [US] task with no refs detected")
+else:
+    bad("M4 neg: [US] task with no refs not detected", f"findings={[f['check'] for f in data.get('findings',[])]}")
+
+# 19. M4 positive: story task with [US] marker and refs → no M4 finding
+reset_feature()
+write_spec(MINIMAL_SPEC)
+write_plan("""# Plan
+
+## Physical Project Structure
+
+```pathmanifest
+src/service.py    [NEW]
+tests/test_service.py    [NEW]
+```
+""")
+(SPECS / "tasks.md").write_text("""# Tasks
+
+## Phase 2: US1
+
+- [ ] T001 [US1] | src/service.py | REQ-001 | service with ref
+""", encoding="utf-8")
+run_trace("extract-spec-ids", F)
+json_data = json.dumps([
+    {"spec_id": "REQ-001", "coverage_kind": "direct", "mechanism": "Test", "primary_files": "src/service.py", "test_type": "unit"}
+])
+run_trace("put-mechanisms", "--json", F, input_text=json_data)
+rc, data = run_validate("tasks")
+if not has_finding(data, "M4"):
+    ok("M4 pos: [US] task with refs passes")
+else:
+    bad("M4 pos: [US] task with refs false positive", finding_msg(data, "M4"))
+
+# 20. M4 positive: non-story task (no [US]) with no refs → no M4 finding
+reset_feature()
+write_spec(MINIMAL_SPEC)
+write_plan("""# Plan
+
+## Physical Project Structure
+
+```pathmanifest
+src/models/index.js    [NEW]
+src/service.py    [NEW]
+```
+""")
+(SPECS / "tasks.md").write_text("""# Tasks
+
+## Phase 1: Setup
+
+- [ ] T001 | src/models/index.js |  | barrel registration (infra, no refs)
+""", encoding="utf-8")
+run_trace("extract-spec-ids", F)
+json_data = json.dumps([
+    {"spec_id": "REQ-001", "coverage_kind": "direct", "mechanism": "Test", "primary_files": "src/service.py", "test_type": "unit"}
+])
+run_trace("put-mechanisms", "--json", F, input_text=json_data)
+rc, data = run_validate("tasks")
+if not has_finding(data, "M4"):
+    ok("M4 pos: non-story task with no refs passes (no [US] marker)")
+else:
+    bad("M4 pos: non-story task false positive", finding_msg(data, "M4"))
+
+# 21. M4 positive: cross-cutting test task (no [US]) with AC refs → no M4 finding
+reset_feature()
+write_spec(MINIMAL_SPEC)
+write_plan("""# Plan
+
+## Physical Project Structure
+
+```pathmanifest
+tests/test_service.py    [NEW]
+src/service.py    [NEW]
+```
+""")
+(SPECS / "tasks.md").write_text("""# Tasks
+
+## Final Phase
+
+- [ ] T010 | tests/test_service.py | AC-001 | cross-cutting test without [US] marker
+""", encoding="utf-8")
+run_trace("extract-spec-ids", F)
+json_data = json.dumps([
+    {"spec_id": "REQ-001", "coverage_kind": "direct", "mechanism": "Test", "primary_files": "src/service.py", "test_type": "unit"},
+    {"spec_id": "AC-001", "coverage_kind": "direct", "mechanism": "Test AC", "primary_files": "tests/test_service.py", "test_type": "integration"}
+])
+run_trace("put-mechanisms", "--json", F, input_text=json_data)
+rc, data = run_validate("tasks")
+if not has_finding(data, "M4"):
+    ok("M4 pos: cross-cutting test task without [US] and with AC refs passes")
+else:
+    bad("M4 pos: cross-cutting test task false positive", finding_msg(data, "M4"))
+
+# 22. Double coverage not penalized: same AC ref on two tasks
+reset_feature()
+write_spec(MINIMAL_SPEC)
+write_plan("""# Plan
+
+## Physical Project Structure
+
+```pathmanifest
+tests/test_service.py    [NEW]
+src/service.py    [NEW]
+```
+""")
+(SPECS / "tasks.md").write_text("""# Tasks
+
+## Phase 2: US1
+
+- [ ] T001 [US1] | src/service.py | REQ-001 | implementation
+- [ ] T002 [US1] | tests/test_service.py | AC-001 | test for AC-001
+- [ ] T003 [US1] | tests/test_service.py | AC-001 | additional test for AC-001
+""", encoding="utf-8")
+run_trace("extract-spec-ids", F)
+json_data = json.dumps([
+    {"spec_id": "REQ-001", "coverage_kind": "direct", "mechanism": "Test", "primary_files": "src/service.py", "test_type": "unit"},
+    {"spec_id": "AC-001", "coverage_kind": "direct", "mechanism": "Test AC", "primary_files": "tests/test_service.py", "test_type": "integration"}
+])
+run_trace("put-mechanisms", "--json", F, input_text=json_data)
+rc, data = run_validate("tasks")
+# AC-001 appears on both T002 and T003 — should NOT be a finding
+ac_dupes = [f for f in data.get("findings", []) if "duplicate" in f.get("message", "").lower() and "AC-001" in f.get("message", "")]
+if not ac_dupes:
+    ok("Double coverage: same AC ref on two tasks not penalized")
+else:
+    bad("Double coverage: falsely penalized", str(ac_dupes))
+
 # ── Cleanup ──────────────────────────────────────────────────────────────────
 
 if WORK.exists():

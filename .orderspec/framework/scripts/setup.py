@@ -235,6 +235,12 @@ def cmd_tasks(args):
             rc=2,
         )
 
+    feature_dir = Path(paths["FEATURE_DIR"])
+    tasks_file = Path(paths["TASKS"])
+
+    # Ensure feature directory exists (should already exist since plan.md is required)
+    feature_dir.mkdir(parents=True, exist_ok=True)
+
     # Build available docs list
     docs = collect_available_docs(paths, include_tasks=False)
 
@@ -254,11 +260,31 @@ def cmd_tasks(args):
             rc=2,
         )
 
-    output_json({
-        "FEATURE_DIR": paths["FEATURE_DIR"],
+    # Copy template to tasks file (mirror cmd_plan behavior)
+    if tasks_file.is_file() and not args.refresh_template:
+        print(
+            f"Tasks already exists at {tasks_file}, skipping template copy "
+            f"(use --refresh-template to regenerate)",
+            file=sys.stderr,
+        )
+    else:
+        if tasks_template and Path(tasks_template).is_file():
+            shutil.copy2(tasks_template, tasks_file)
+            if args.refresh_template and tasks_file.is_file():
+                print(f"Refreshed tasks template at {tasks_file}", file=sys.stderr)
+            else:
+                print(f"Copied tasks template to {tasks_file}", file=sys.stderr)
+        else:
+            print("Warning: Tasks template not found; creating empty tasks.md", file=sys.stderr)
+            tasks_file.touch()
+
+    payload = base_paths_payload(paths)
+    payload.update({
         "AVAILABLE_DOCS": docs,
         "TASKS_TEMPLATE": tasks_template,
+        "TASKS_REFRESHED": bool(args.refresh_template),
     })
+    output_result(payload, args)
 
 
 # ── subcommand: code ─────────────────────────────────────────────────────────
@@ -537,6 +563,11 @@ def main():
         "--shell-vars",
         action="store_true",
         help="Output as eval-ready shell variable assignments",
+    )
+    tasks_parser.add_argument(
+        "--refresh-template",
+        action="store_true",
+        help="Regenerate tasks.md from the resolved tasks template even if it already exists",
     )
 
     code_parser = subparsers.add_parser("code", help="Setup for /order.code")

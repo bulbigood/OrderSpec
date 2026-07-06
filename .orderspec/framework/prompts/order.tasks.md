@@ -216,11 +216,10 @@ Rewrite `$TASKS_FILE` (which was initialized from `tasks-template.md` in Step 6)
   - passive model entities; feature flags only if `plan.md` defines them.
 - **Phase 2+ — Migrate**: US1 (P1, MVP) first, then one phase per remaining UJ in priority order.
   Within each story phase:
-  1. Test tasks first (assert that story's `AC-NNN`; MUST fail before implementation).
+  1. Test-writing tasks first (carry that story's `AC-NNN` refs; MUST fail before implementation). Split into multiple sequential test tasks on the same file if ACs exceed the 3-ref cap (see test-file split rule).
   2. Data layer → service logic → wiring to contracts.
   3. `EDGE-NNN` for this story.
-  4. Verification task: run the test command; assert the story's AC pass, `INV-NNN` hold, no regressions.
-  End with a **Checkpoint** line: story independently functional and backwards-compatible.
+  4. End with a **Checkpoint** prose line: story independently functional and backwards-compatible. This is NOT a task — mechanical proof comes from the story's test-writing tasks (AC refs) and the final GATE.
   Omit test tasks only if the user or constitution explicitly opts out.
 - **Final Phase — Contract**: start with a GATE task (run the test command verbatim; verify all `AC-*` pass, `INV-*` hold, `NFR-*` met; STOP on failure — contraction is irreversible). Then remove flags, delete deprecated code/routes, drop obsolete columns, lint/format, update docs.
   **Greenfield rule**: if nothing pre-exists to deprecate, Contract only removes scaffolding/flags.
@@ -234,6 +233,7 @@ Rewrite `$TASKS_FILE` (which was initialized from `tasks-template.md` in Step 6)
 1. "- [ ] T012 [P] [US1]" — checkbox + sequential ID + optional [P] + optional [USn].
 2. file path — one exact path from `plan.md`. No spaces. Raw path only — do NOT wrap it in backticks or any markdown. `extract-trace` matches the literal path; backticks make the field not match `plan.md` and silently drop the line's coverage.
 3. refs — OPTIONAL. Comma-separated spec IDs, NO SPACES (`REQ-001,AC-002`, never `REQ-001, AC-002`). An infrastructure task (barrel/index registration, route wiring, test fixtures, GATE/verification scaffolding) carries NO refs — write `... | path |  | gloss` (empty field 3) or omit field 3. This is LEGAL and contributes no coverage by design. The contract is "every DIRECT mechanism is covered by ≥1 task" — it is NOT "every task has a ref". NEVER invent a ref to give a task a home.
+  **AC refs belong on test-WRITING tasks** (the task that writes the test code exercising that AC), NOT on verification/GATE tasks. Verification/GATE tasks carry EMPTY refs and list asserted AC/INV IDs in the gloss. Coverage of an AC is proven by the test-writing task that creates its test, not by the verification task that runs the suite.
 4. gloss — ≤15-word paraphrase. Free text, never grepped (so prose like "see AC-999" is safe).
 
 **Constraints the tool ENFORCES** (any violation fails `extract-trace` with rc=3, file untouched):
@@ -266,7 +266,9 @@ For endpoint tasks, fold non-2xx semantics from Spec § API Contracts into the g
 - **One task = one file** (or one atomic, independently verifiable change). More than one file → split.
 - **No stub-then-implement**: never create a file with empty/stub methods early to fill later; its FIRST task carries real implementation. (Exception: contract boundaries `plan.md` explicitly marks as stubs.) A file appearing in two phases where the earlier says "stub"/"skeleton" is a defect.
 - **God-file split (resolves cap-vs-coverage pressure)**: when one `primary_files` carries MORE than 3 direct mechanisms (a "god file" like a central service), do NOT cram them into one task and do NOT park the overflow on verify/GATE tasks. Split into several IMPLEMENTATION tasks on the SAME path, each grouping ≤3 cohesive mechanisms by behavior (e.g. one task for create+list+get, another for update+soft-delete, another for atomic-audit+error-wrapping). These same-file tasks are sequential (NOT `[P]` — they share a file) and each carries the direct IDs it actually implements. This keeps every direct ID on the task that realizes it AND stays under the cap.
+- **Test-file split (mirror of god-file split, for test files)**: when one test `primary_files` carries MORE than 3 direct ACs, do NOT cram them into one task. Split into several TEST-WRITING tasks on the SAME test path, each carrying ≤3 ACs grouped by behavior (e.g. one task for create+list tests, another for update tests, another for soft-delete tests). These same-file test tasks are sequential (NOT `[P]` — they share a file) and each carries the AC IDs it actually exercises.
 - **Barrel/index exception**: registering multiple same-phase entities into barrel/index files is ONE task listing all of them — not one per file.
+- **Cross-cutting test tasks**: tests spanning multiple UJs (e.g. shared unauthenticated-access tests) omit the `[USn]` marker. Place them in the phase of their primary UJ or in the Final Phase before GATE. They carry AC refs normally (≤3 per line).
 - Soft limit 3–15 tasks per story phase. If a story exceeds 15, do NOT silently continue — flag the UJ as too large in the Completion Report and recommend splitting it in `spec.md`.
 
 ### Step 10: Prove Coverage
@@ -370,6 +372,8 @@ Report to chat:
 - [ ] Human mirror rendered: `render` wrote `traceability.md`
 - [ ] No hand-built matrix: no Traceability Matrix or Files Touched table authored by hand in `tasks.md`
 - [ ] Sequential backbone correct with all `[P]` marks stripped; `[P]` only on provably file-disjoint, independent, adjacent tasks; no stub-then-implement
+- [ ] No per-story verification tasks (Checkpoint is prose, not a task); final GATE task has empty refs
+- [ ] AC refs on test-writing tasks only (not on verification/GATE); cross-cutting test tasks omit `[USn]`
 - [ ] Placement validated: all `plan.md` files touched, no path outside `plan.md`, no same-file conflict within an adjacent `[P]` group
 - [ ] `validate --stage tasks` has no blocking findings
 - [ ] Active feature status updated to `tasks`

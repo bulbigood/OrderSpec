@@ -27,7 +27,7 @@
 
   FORMAT RULE: every task line is pipe-delimited — `T### [markers] | path | refs? | gloss`.
   The path is a RAW plan.md path with NO backticks. refs is OPTIONAL — infra tasks (barrel/wiring/fixture/GATE) carry EMPTY refs. A declared ref MUST be a direct
-  mechanism whose primary_files contains that task's path (else rc=3). Never invent a ref to home a task. Coverage is proven by `traceability.sh extract-trace`, NOT by any hand-written table.
+  mechanism whose primary_files contains that task's path (else rc=3). Never invent a ref to home a task. Coverage is proven by `traceability.py extract-trace`, NOT by any hand-written table.
 
   DO NOT author a Traceability Matrix or a Files Touched table in the generated
   tasks.md. Those are derived: extract-trace writes traceability.tsv and render
@@ -73,7 +73,6 @@ Phase 1 (Setup & Expand) → Phase 2 (US1 / MVP) → **STOP & VALIDATE** → Pha
 - [ ] T006 [US1] | src/controllers/[entity].ext | REQ-003,NFR-003 | controller handlers with catchAsync; 404 only if never existed
 - [ ] T007 [US1] | src/routes/[entity].ext | REQ-003 | routes with auth and validate middleware
 - [ ] T008 [US1] | src/services/[entity].ext | EDGE-001 | handle US1 edge case in service
-- [ ] T009 [US1] | tests/[file].ext | INV-001 | verification: run [test command] — assert US1 ACs pass, INV holds, no regressions
 
 **Checkpoint**: User Story 1 (MVP) is fully functional, backwards-compatible, and independently testable.
 
@@ -92,7 +91,6 @@ Phase 1 (Setup & Expand) → Phase 2 (US1 / MVP) → **STOP & VALIDATE** → Pha
 
 - [ ] T011 [US2] | src/services/[entity].ext | REQ-004 | extend service logic for US2
 - [ ] T012 [US2] | src/routes/[entity].ext | REQ-004,EDGE-002 | wire US2 endpoint and handle edge case
-- [ ] T013 [US2] | tests/[file].ext | AC-003 | verification: run [test command] — assert AC-003 passes, no US1 regressions
 
 **Checkpoint**: User Stories 1 and 2 both functional and backwards-compatible.
 

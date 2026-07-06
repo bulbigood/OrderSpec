@@ -360,6 +360,75 @@ assert_rc(0, rc, "plan-check --shell-vars exits zero", out, err)
 assert_true("FEATURE_DIR=" in out, "plan-check --shell-vars includes FEATURE_DIR")
 assert_true("PLAN_REPORT=" in out, "plan-check --shell-vars includes PLAN_REPORT")
 
+# 22. tasks --json creates tasks.md from core template when spec+plan exist
+reset_repo()
+fdir = make_feature("specs/F", spec=True, plan=True, tasks=False)
+rc, out, err = run_setup("tasks", "--json")
+assert_rc(0, rc, "tasks creates tasks.md when spec+plan exist", out, err)
+assert_true((fdir / "tasks.md").read_text(encoding="utf-8") == "CORE TASKS TEMPLATE\n", "tasks.md copied from core template")
+data = parse_json_stdout(out)
+assert_true(data["TASKS_REFRESHED"] is False, "tasks JSON marks TASKS_REFRESHED=false without flag")
+
+# 23. tasks --json does not overwrite existing tasks without --refresh-template
+reset_repo()
+fdir = make_feature("specs/F", spec=True, plan=True, tasks=True)
+# Overwrite tasks.md with custom content to verify preservation
+(fdir / "tasks.md").write_text("EXISTING TASKS\n", encoding="utf-8")
+rc, out, err = run_setup("tasks", "--json")
+assert_rc(0, rc, "tasks preserves existing tasks without refresh", out, err)
+assert_true((fdir / "tasks.md").read_text(encoding="utf-8") == "EXISTING TASKS\n", "existing tasks content preserved")
+
+# 24. tasks --json --refresh-template overwrites existing tasks
+reset_repo()
+fdir = make_feature("specs/F", spec=True, plan=True, tasks=True)
+# tasks.md already created by make_feature with "# Tasks\n"
+rc, out, err = run_setup("tasks", "--json", "--refresh-template")
+assert_rc(0, rc, "tasks refresh exits zero", out, err)
+assert_true((fdir / "tasks.md").read_text(encoding="utf-8") == "CORE TASKS TEMPLATE\n", "refresh replaces existing tasks with template")
+data = parse_json_stdout(out)
+assert_true(data["TASKS_REFRESHED"] is True, "tasks JSON marks TASKS_REFRESHED=true")
+
+# 25. tasks --json --shell-vars outputs eval-ready variables
+reset_repo()
+fdir = make_feature("specs/F", spec=True, plan=True, tasks=False)
+rc, out, err = run_setup("tasks", "--shell-vars")
+assert_rc(0, rc, "tasks --shell-vars exits zero", out, err)
+assert_true("FEATURE_DIR=" in out, "tasks --shell-vars includes FEATURE_DIR")
+
+# 26. tasks --json blocks when spec.md is missing (but plan.md exists)
+reset_repo()
+fdir = WORK / "specs" / "F"
+fdir.mkdir(parents=True, exist_ok=True)
+(fdir / "plan.md").write_text("PLAN\n", encoding="utf-8")
+set_active_feature_state("specs/F")
+rc, out, err = run_setup("tasks", "--json")
+assert_rc(2, rc, "tasks blocks without spec.md", out, err)
+
+# 27. tasks --json blocks when both spec.md and plan.md are missing
+reset_repo()
+set_active_feature_state("specs/F")
+rc, out, err = run_setup("tasks", "--json")
+assert_rc(2, rc, "tasks blocks without spec and plan", out, err)
+
+# 28. tasks --json --refresh-template creates feature dir if missing
+reset_repo()
+# Create spec.md and plan.md but not the feature dir itself
+WORK.joinpath("specs", "F").mkdir(parents=True, exist_ok=True)
+WORK.joinpath("specs", "F", "spec.md").write_text("# Spec\n", encoding="utf-8")
+WORK.joinpath("specs", "F", "plan.md").write_text("PLAN\n", encoding="utf-8")
+set_active_feature_state("specs/F")
+rc, out, err = run_setup("tasks", "--json", "--refresh-template")
+assert_rc(0, rc, "tasks creates tasks.md even if feature dir was partial", out, err)
+assert_true((WORK / "specs" / "F" / "tasks.md").exists(), "tasks.md created in feature dir")
+
+# 29. tasks override template wins over core template
+reset_repo()
+write_override_template("tasks-template", "OVERRIDE TASKS TEMPLATE\n")
+fdir = make_feature("specs/F", spec=True, plan=True, tasks=False)
+rc, out, err = run_setup("tasks", "--json", "--refresh-template")
+assert_rc(0, rc, "tasks with override exits zero", out, err)
+assert_true((fdir / "tasks.md").read_text(encoding="utf-8") == "OVERRIDE TASKS TEMPLATE\n", "override tasks-template wins")
+
 # ── Cleanup ──────────────────────────────────────────────────────────────────
 
 if WORK.exists():
