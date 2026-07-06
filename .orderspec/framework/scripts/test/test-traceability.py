@@ -579,6 +579,141 @@ if not ac_dupes:
 else:
     bad("Double coverage: falsely penalized", str(ac_dupes))
 
+# 23. M7 positive: gaps in task numbering are ALLOWED (no finding)
+reset_feature()
+write_spec(MINIMAL_SPEC)
+write_plan("""# Plan
+
+## Physical Project Structure
+
+```pathmanifest
+src/service.py    [NEW]
+tests/test_service.py    [NEW]
+```
+""")
+# Tasks with gaps: T001, T005, T010 — should NOT trigger M7
+(SPECS / "tasks.md").write_text("""# Tasks
+
+## Phase 1
+
+- [ ] T001 [US1] | src/service.py | REQ-001 | first task
+
+## Phase 2
+
+- [ ] T005 [US1] | tests/test_service.py | AC-001 | test task
+- [ ] T010 [US1] | src/service.py |  | infra task
+""", encoding="utf-8")
+run_trace("extract-spec-ids", F)
+json_data = json.dumps([
+    {"spec_id": "REQ-001", "coverage_kind": "direct", "mechanism": "Test", "primary_files": "src/service.py", "test_type": "unit"},
+    {"spec_id": "AC-001", "coverage_kind": "direct", "mechanism": "Test AC", "primary_files": "tests/test_service.py", "test_type": "integration"}
+])
+run_trace("put-mechanisms", "--json", F, input_text=json_data)
+rc, data = run_validate("tasks")
+m7_gap_findings = [f for f in data.get("findings", []) if f["check"] == "M7" and "Gap" in f.get("message", "")]
+if not m7_gap_findings:
+    ok("M7 pos: gaps in task numbering allowed (no gap finding)")
+else:
+    bad("M7 pos: gap in numbering falsely flagged", str(m7_gap_findings))
+
+# 24. M7 negative: duplicate task ID IS rejected
+reset_feature()
+write_spec(MINIMAL_SPEC)
+write_plan("""# Plan
+
+## Physical Project Structure
+
+```pathmanifest
+src/service.py    [NEW]
+tests/test_service.py    [NEW]
+```
+""")
+(SPECS / "tasks.md").write_text("""# Tasks
+
+## Phase 1
+
+- [ ] T001 [US1] | src/service.py | REQ-001 | first task
+- [ ] T001 [US1] | tests/test_service.py | AC-001 | duplicate ID
+""", encoding="utf-8")
+run_trace("extract-spec-ids", F)
+json_data = json.dumps([
+    {"spec_id": "REQ-001", "coverage_kind": "direct", "mechanism": "Test", "primary_files": "src/service.py", "test_type": "unit"},
+    {"spec_id": "AC-001", "coverage_kind": "direct", "mechanism": "Test AC", "primary_files": "tests/test_service.py", "test_type": "integration"}
+])
+run_trace("put-mechanisms", "--json", F, input_text=json_data)
+rc, data = run_validate("tasks")
+m7_dupe_findings = [f for f in data.get("findings", []) if f["check"] == "M7" and "Duplicate" in f.get("message", "")]
+if m7_dupe_findings:
+    ok("M7 neg: duplicate task ID detected")
+else:
+    bad("M7 neg: duplicate ID not detected", f"findings={[f['check'] for f in data.get('findings',[])]}")
+
+# 25. M8 positive: GATE task with test file path from manifest passes (no npm test as path)
+reset_feature()
+write_spec(MINIMAL_SPEC)
+write_plan("""# Plan
+
+## Physical Project Structure
+
+```pathmanifest
+src/service.py    [NEW]
+tests/integration/task.test.js    [NEW]
+```
+""")
+# GATE task uses test FILE path (not command), command in gloss — should pass M8
+(SPECS / "tasks.md").write_text("""# Tasks
+
+## Final Phase
+
+- [ ] T099 [US1] | src/service.py | REQ-001 | implementation
+- [ ] T100 | tests/integration/task.test.js |  | GATE: run npm test — verify all AC-* pass, INV-* hold; STOP on failure
+""", encoding="utf-8")
+run_trace("extract-spec-ids", F)
+json_data = json.dumps([
+    {"spec_id": "REQ-001", "coverage_kind": "direct", "mechanism": "Test", "primary_files": "src/service.py", "test_type": "unit"},
+    {"spec_id": "AC-001", "coverage_kind": "direct", "mechanism": "Test AC", "primary_files": "tests/integration/task.test.js", "test_type": "integration"}
+])
+run_trace("put-mechanisms", "--json", F, input_text=json_data)
+rc, data = run_validate("tasks")
+m8_findings = [f for f in data.get("findings", []) if f["check"] == "M8"]
+if not m8_findings:
+    ok("M8 pos: GATE task with test file path from manifest passes")
+else:
+    bad("M8 pos: GATE task with valid path falsely flagged", str(m8_findings))
+
+# 26. M8 negative: GATE task with command as path (npm test) is rejected
+reset_feature()
+write_spec(MINIMAL_SPEC)
+write_plan("""# Plan
+
+## Physical Project Structure
+
+```pathmanifest
+src/service.py    [NEW]
+tests/integration/task.test.js    [NEW]
+```
+""")
+# GATE task uses command as path — should FAIL M8 (command not in manifest)
+(SPECS / "tasks.md").write_text("""# Tasks
+
+## Final Phase
+
+- [ ] T099 [US1] | src/service.py | REQ-001 | implementation
+- [ ] T100 | npm test |  | GATE: verify all AC-* pass; STOP on failure
+""", encoding="utf-8")
+run_trace("extract-spec-ids", F)
+json_data = json.dumps([
+    {"spec_id": "REQ-001", "coverage_kind": "direct", "mechanism": "Test", "primary_files": "src/service.py", "test_type": "unit"},
+    {"spec_id": "AC-001", "coverage_kind": "direct", "mechanism": "Test AC", "primary_files": "tests/integration/task.test.js", "test_type": "integration"}
+])
+run_trace("put-mechanisms", "--json", F, input_text=json_data)
+rc, data = run_validate("tasks")
+m8_findings = [f for f in data.get("findings", []) if f["check"] == "M8"]
+if m8_findings:
+    ok("M8 neg: GATE task with command-as-path rejected")
+else:
+    bad("M8 neg: command-as-path not rejected", str(m8_findings))
+
 # ── Cleanup ──────────────────────────────────────────────────────────────────
 
 if WORK.exists():

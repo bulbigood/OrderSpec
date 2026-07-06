@@ -104,7 +104,7 @@ Phase 1 (Setup & Expand) → Phase 2 (US1 / MVP) → **STOP & VALIDATE** → Pha
 
 **Purpose**: Verify everything, then perform irreversible cleanup. **Greenfield rule**: if nothing pre-exists to deprecate, this phase only removes scaffolding/flags and polishes — do NOT invent legacy code to delete.
 
-- [ ] T0XX | [test command target / verification scope] |  | GATE: run [test command from plan.md] — verify all AC-* pass, INV-* hold, NFR-* met; STOP on failure (contraction is irreversible). Empty refs — verification asserts, does not realize.
+- [ ] T0XX | [test file path from plan.md pathmanifest] |  | GATE: run [test command from plan.md] — verify all AC-* pass, INV-* hold, NFR-* met; STOP on failure (contraction is irreversible). Empty refs — verification asserts, does not realize. Path MUST be a real test file from pathmanifest (not a command) so M8 passes.
 - [ ] T0XX Remove feature flags / scaffolding; delete deprecated code/routes; drop obsolete columns/tables (only if a legacy mechanism is being replaced)
 - [ ] T0XX Run linters and formatters (commands from plan.md); fix violations
 - [ ] T0XX Update technical docs / inline docstrings to match final state

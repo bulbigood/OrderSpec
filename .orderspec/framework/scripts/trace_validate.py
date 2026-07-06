@@ -390,6 +390,8 @@ def _check_m14(task_lines, uj_ids, add):
 
 
 def _check_m7(task_lines, add):
+    """M7: duplicate task IDs are rejected. Gaps in numbering are ALLOWED
+    (e.g. T005, T010, T015) to reduce churn when inserting tasks mid-pipeline."""
     nums = []
     for _, line in task_lines:
         m = re.search(r"T(\d{3})", line)
@@ -403,10 +405,6 @@ def _check_m7(task_lines, add):
         seen_nums.add(n)
     for n in sorted(dupes):
         add("M7", "MEDIUM", "tasks.md", f"Duplicate task ID T{n:03d}")
-    if nums:
-        for n in range(min(nums), max(nums) + 1):
-            if n not in seen_nums:
-                add("M7", "MEDIUM", "tasks.md", f"Gap in task numbering: T{n:03d}")
 
 
 def _check_m30(spec_text, defined_ids, ac_inline_covers, add):
