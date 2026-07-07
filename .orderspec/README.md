@@ -172,6 +172,7 @@ python3 .orderspec/framework/scripts/run_all_tests.py
 Future work:
 
 - 🔜 Adapters for more agents (OpenCode, Cursor, Windsurf, ...).
+- 🔜 Automation/orchestration hooks.
 - 🔜 Better cross-platform support.
 - 🔜 MDA-like spec structure in addition to existing feature-specs.
 - 🔜 System-level spec graph: cross-spec validation and traceability.
