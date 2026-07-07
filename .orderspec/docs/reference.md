@@ -67,32 +67,15 @@ Use this to verify framework scripts after making changes to adapters, bootstrap
 
 ## Status and roadmap
 
-Current status:
-
-- ✅ Multi-agent support: Kilo Code + Claude Code.
-- ✅ Adapter pattern for adding new agents.
-- ✅ Manual setup.
-- ✅ `/order.bootstrap` with agents discovery & sync phase.
-- ✅ Project contracts: `constitution.md`, `stack.md`, `architecture.md`, `conventions.md`.
-- ✅ Constitution includes external rules integration policy.
-- ✅ Command context resolver.
-- ✅ Deterministic bootstrap scripts.
-- ✅ Tooling configuration and runtime detection state.
-- ✅ Core feature pipeline: `/order.spec`, `/order.plan`, `/order.tasks`, `/order.code`.
-- ✅ Optional verification gates.
-- ✅ Active feature state support.
-- ✅ Agent sync orchestrator (`agents_sync.py`).
-- ✅ Multi-agent regression tests.
-
 Future work:
 
-- 🔜 Installer.
 - 🔜 Adapters for more agents (OpenCode, Cursor, Windsurf, ...).
-- 🔜 `/order.sync-agents` command for re-syncing without full bootstrap.
-- 🔜 Stronger semantic validation for generated contracts.
-- 🔜 Optional namespaced contract layout or configurable contract paths.
-- 🔜 Better cross-platform script parity verification.
-- 🔜 Lifecycle extension system, if it can be made deterministic and constitution-gated.
+- 🔜 Better cross-platform support.
+- 🔜 MDA-like spec structure in addition to existing feature-specs.
+- 🔜 System-level spec graph: cross-spec validation and traceability.
+- 🔜 Explicit interface contracts between subsystems — to keep code changes localized and their blast radius predictable.
+- 🔜 Machine-readable specs: YAML "islands" with schema validation and auto-generated views, to detect and reduce spec drift.
+- 🔜 BDD/Gherkin tests.
 
 ## Current limitations
 
