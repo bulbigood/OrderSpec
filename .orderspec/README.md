@@ -11,12 +11,29 @@
 
 ## Design principles
 
-- **Weak-model-first.** Tuned for modest models, not only frontier models.
-- **Platform-agnostic.** You can switch technologies or even programming languages without rewriting the specs.
-- **Agent-agnostic core.** Framework core is independent of any specific AI agent.
-- **Default-deny capabilities.** Commands and gates only do what project governance permits.
-- **Deterministic scripts own mechanical work.** AI agent = semantic glue between deterministic logic parts.
-- **Gates detect and route; owners fix.** A gate is an inspector, not an author.
+- **Specs are the single source of truth.** Code, plans, and generated
+  views are derived from specs — never the other way around.
+- **Weak-model-first.** Every design choice must survive the question:
+  "how does this behave when the model is not very smart?"
+- **Deterministic core.** Mechanical work belongs to scripts; the AI
+  agent is semantic glue between deterministic parts.
+- **Gates detect and route; owners fix.** A gate is an inspector,
+  not an author.
+- **Default-deny capabilities.** Commands and gates only do what
+  project governance permits.
+- **Stable truth, disposable derivatives.** Specs are stable; plans,
+  tasks, and generated views are regenerated, never hand-patched.
+- **No orphans.** Every file traces back to a spec element; every
+  requirement traces forward to code and tests.
+- **Drift is a defect.** Divergence between specs and code is caught
+  mechanically, not by human vigilance.
+- **Platform-agnostic specs.** Switch technologies or even languages
+  without rewriting the specs.
+- **Agent-agnostic core.** Agent-specific logic lives in adapters,
+  not in the core.
+- **Readable by humans and machines.** Prose for people, structured
+  data for tools — one document serves both, with no lossy conversion
+  between them.
 
 ## The pipeline
 
