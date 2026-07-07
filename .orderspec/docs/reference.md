@@ -64,27 +64,3 @@ python3 .orderspec/framework/scripts/run_all_tests.py
 The script automatically discovers test files matching patterns: `test-*.py`, `test_*.py`, `*_test.py`. Output shows progress per test file with pass/fail status and elapsed time.
 
 Use this to verify framework scripts after making changes to adapters, bootstrap logic, or command context resolution.
-
-## Status and roadmap
-
-Future work:
-
-- 🔜 Adapters for more agents (OpenCode, Cursor, Windsurf, ...).
-- 🔜 Better cross-platform support.
-- 🔜 MDA-like spec structure in addition to existing feature-specs.
-- 🔜 System-level spec graph: cross-spec validation and traceability.
-- 🔜 Explicit interface contracts between subsystems — to keep code changes localized and their blast radius predictable.
-- 🔜 Machine-readable specs: YAML "islands" with schema validation and auto-generated views, to detect and reduce spec drift.
-- 🔜 BDD/Gherkin tests.
-
-## Current limitations
-
-- Setup is manual (no installer yet).
-- Python 3 is required for current framework scripts.
-- Project contract files live under `.orderspec/contracts/`; names there may still overlap with other frameworks if paths are made configurable in the future.
-- Operator-defined procedural extensions are not supported yet.
-- Some project facts cannot be inferred safely during bootstrap and are marked unresolved instead of guessed.
-- Not all AI agents are supported yet — only Kilo Code and Claude Code.
-- Claude Code skills registration uses a symlink, which may not work on all platforms (Windows without developer mode).
-
-This is intentional: OrderSpec prefers an explicit unresolved marker over a hallucinated contract.

@@ -9,32 +9,14 @@
 >
 > There is **no installer yet**. Setup is manual: copy the OrderSpec `.orderspec/` directory into your project.
 
-## Requirements
+## Design principles
 
-- **Python 3** — framework scripts are written in Python
-- **Shell access** — to run framework utilities
-- **At least one supported AI agent**
-
-No package manager, no `uv`, no installer, no framework daemon required.
-
-## Quick Start
-
-First, copy .orderspec/ to the root of your project.
-Then sync OrderSpec with your AI agent and start your first feature:
-
-```bash
-# Sync OrderSpec with installed AI agents
-python3 .orderspec/framework/scripts/agents_sync.py sync
-
-# Run bootstrap
-/order.bootstrap
-
-# Run the feature pipeline
-/order.spec "describe the feature you want"
-/order.plan
-/order.tasks
-/order.code
-```
+- **Weak-model-first.** Tuned for modest models, not only frontier models.
+- **Platform-agnostic.** You can switch technologies or even programming languages without rewriting the specs.
+- **Agent-agnostic core.** Framework core is independent of any specific AI agent.
+- **Default-deny capabilities.** Commands and gates only do what project governance permits.
+- **Deterministic scripts own mechanical work.** AI agent = semantic glue between deterministic logic parts.
+- **Gates detect and route; owners fix.** A gate is an inspector, not an author.
 
 ## The pipeline
 
@@ -99,6 +81,33 @@ A gate is a constrained inspector. It does not silently rewrite a spec to resolv
 
 This is what makes OrderSpec safe under a weak model: the model is never trusted to silently "improve" your contract.
 
+## Requirements
+
+- **Python 3** — framework scripts are written in Python
+- **Shell access** — to run framework utilities
+- **At least one supported AI agent**
+
+No package manager, no `uv`, no installer, no framework daemon required.
+
+## Quick Start
+
+First, copy .orderspec/ to the root of your project.
+Then sync OrderSpec with your AI agent and start your first feature:
+
+```bash
+# Sync OrderSpec with installed AI agents
+python3 .orderspec/framework/scripts/agents_sync.py sync
+
+# Run bootstrap
+/order.bootstrap
+
+# Run the feature pipeline
+/order.spec "describe the feature you want"
+/order.plan
+/order.tasks
+/order.code
+```
+
 ## Brownfield projects
 
 If you are applying OrderSpec to an existing codebase (a brownfield project), you don't need to write specs for everything manually. You can use the reverse-engineering command to extract specifications directly from your existing code.
@@ -117,6 +126,42 @@ Use `/order.code-to-spec` to scan existing modules and generate a compliant `spe
 
 **Note:** Code extraction requires understanding implicit business logic. It is recommended to use a more capable model for `/order.code-to-spec` than for standard forward-engineering commands.
 
+## Current limitations
+
+- Setup is manual (no installer yet).
+- Python 3 is required for current framework scripts.
+- Project contract files live under `.orderspec/contracts/`; names there may still overlap with other frameworks if paths are made configurable in the future.
+- Operator-defined procedural extensions are not supported yet.
+- Some project facts cannot be inferred safely during bootstrap and are marked unresolved instead of guessed.
+- Not all AI agents are supported yet — only Kilo Code and Claude Code.
+- Claude Code skills registration uses a symlink, which may not work on all platforms (Windows without developer mode).
+
+This is intentional: OrderSpec prefers an explicit unresolved marker over a hallucinated contract.
+
+## Regression tests
+
+### Script tests
+
+Python scripts are stored in `.orderspec/framework/scripts/test`
+
+Run all script tests:
+
+```bash
+python3 .orderspec/framework/scripts/run_all_tests.py
+```
+
+## Status and roadmap
+
+Future work:
+
+- 🔜 Adapters for more agents (OpenCode, Cursor, Windsurf, ...).
+- 🔜 Better cross-platform support.
+- 🔜 MDA-like spec structure in addition to existing feature-specs.
+- 🔜 System-level spec graph: cross-spec validation and traceability.
+- 🔜 Explicit interface contracts between subsystems — to keep code changes localized and their blast radius predictable.
+- 🔜 Machine-readable specs: YAML "islands" with schema validation and auto-generated views, to detect and reduce spec drift.
+- 🔜 BDD/Gherkin tests.
+
 ## Documentation
 
 - [Getting Started](docs/getting-started.md) — setup, bootstrap phases, pipeline walkthrough
@@ -124,11 +169,3 @@ Use `/order.code-to-spec` to scan existing modules and generate a compliant `spe
 - [Multi-Agent Support](docs/multi-agent.md) — adapter pattern, external rules, adding new agents
 - [Philosophy](docs/philosophy.md) — why OrderSpec exists, design principles, comparison with spec-kit and OpenSpec
 - [Reference](docs/reference.md) — customization, useful checks, roadmap, limitations
-
-## Design principles
-
-- **Weak-model-first.** Tuned for modest models, not only frontier models.
-- **Deterministic scripts own mechanical work.** AI agent = semantic glue between deterministic logic parts.
-- **Gates detect and route; owners fix.** A gate is an inspector, not an author.
-- **Default-deny capabilities.** Commands and gates only do what project governance permits.
-- **Agent-agnostic core.** Framework core is independent of any specific AI agent; agent-specific logic lives in adapters.
