@@ -337,20 +337,20 @@ Report to chat:
 
 ## Done When
 
--   [ ] Command context resolved via `command_context.py`
--   [ ] Every `to_read` file was read and interpreted by `usage`
--   [ ] Mode detected and stated
--   [ ] Feature paths resolved; `eval` used for shell vars
--   [ ] Upstream gate respected: exit 64 reported as STOP; advisory distinguished from ok
--   [ ] `plan.md` regenerated from current template
--   [ ] Prior `plan-report.md` consumed if present
--   [ ] Scope Lock enforced: no invented requirements
--   [ ] Files listed in `Verified Against`
--   [ ] `pathmanifest` uses `[MOD]` for seen files, `[NEW]` for created, `[DEL]` for deleted
--   [ ] Mechanism rows emitted via `put-mechanisms` using Templates; **Mechanism Matrix section in plan.md left as template default**
--   [ ] `traceability.py lint` and `check-mechanisms` pass
--   [ ] `validate --stage plan` has no blocking findings
--   [ ] Active feature status updated to `planned`
--   [ ] Skills and MCP documentation sources consulted before reconnaissance
--   [ ] `[DATE]` replaced with today's date in `plan.md` header
--   [ ] Completion Report provided, including recommendation to run `/order.plan-check`
+- [ ] Command context resolved via `command_context.py`
+- [ ] Every `to_read` file was read and interpreted by `usage`
+- [ ] Mode detected and stated
+- [ ] Feature paths resolved; `eval` used for shell vars
+- [ ] Upstream gate respected: exit 64 reported as STOP; advisory distinguished from ok
+- [ ] `plan.md` regenerated from current template
+- [ ] Prior `plan-report.md` consumed if present
+- [ ] Scope Lock enforced: no invented requirements
+- [ ] Files listed in `Verified Against`
+- [ ] `pathmanifest` uses `[MOD]` for seen files, `[NEW]` for created, `[DEL]` for deleted
+- [ ] Mechanism rows emitted via `put-mechanisms` using Templates; **Mechanism Matrix section in plan.md left as template default**
+- [ ] `traceability.py lint` and `check-mechanisms` pass
+- [ ] `validate --stage plan` has no blocking findings
+- [ ] Active feature status updated to `planned`
+- [ ] Skills and MCP documentation sources consulted before reconnaissance
+- [ ] `[DATE]` replaced with today's date in `plan.md` header
+- [ ] Completion Report provided, including recommendation to run `/order.plan-check`
