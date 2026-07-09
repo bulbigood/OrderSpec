@@ -121,9 +121,11 @@ python3 .orderspec/framework/scripts/upstream_gate.py \
 ```
 
 -   **exit 2 (stop)** or **exit 1 (halt)** → STOP. Do not produce tasks.
+-   **exit 64 (error)** → STOP. Report: `TASKS_STOPPED: upstream gate invocation error (empty shell variables — re-run setup.py paths)`. Do not produce tasks.
 -   **exit 0 (forced)** → Proceed, but insert this warning at the top of `tasks.md`:
     `> ⚠ Built over non-PASS plan gate (verdict: {verdict}) via --force`
--   **exit 0 (advisory/ok)** → Proceed.
+-   **exit 0 (advisory)** → Proceed, but warn the user in chat: "Upstream plan gate report is stale or absent. It is recommended to re-run `/order.plan-check` before relying on these tasks."
+-   **exit 0 (ok)** → Proceed.
 
 **STOP message (exit 2):**
 
@@ -383,7 +385,7 @@ Report to chat:
 - [ ] Every `to_read` file was read and interpreted by `usage`
 - [ ] Mode detected and stated
 - [ ] Feature paths resolved; `eval` used for shell vars
-- [ ] Upstream gate respected: guard returned `ok`/`advisory`/`forced` (not `halt`/`stop`); on `forced`, a `--force` warning was stamped atop the artifact
+- [ ] Upstream gate respected: guard returned `ok`/`advisory`/`forced` (not `halt`/`stop`/`error`); on `forced`, a `--force` warning was stamped atop the artifact; on `advisory`, user was warned in chat
 - [ ] Prior gate report consumed (if present): a ⛔/🔀 `tasks-report.md` had every `/order.tasks`-owned finding addressed and listed; upstream-owned findings were routed/STOPped, not silently patched. ✅ PASS or absent → N/A
 - [ ] `tasks.md` generated from current template in E-M-C order with sequential IDs and pipe-delimited task lines (`T### [P] [US] | path | refs? | gloss`)
 - [ ] Refs are OPTIONAL (infra tasks carry empty refs), comma-joined with NO spaces when present, each declared ref's mechanism lists this task's path in `primary_files` (no filler/parked refs)

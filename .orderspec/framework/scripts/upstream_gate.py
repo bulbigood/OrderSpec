@@ -52,12 +52,16 @@ def parse_verdict(report_path):
 
     Looks for a line starting with `**Verdict**:`.
     Returns the verdict string or empty string if not found.
+    Uses .strip() before startswith to tolerate leading
+    whitespace in Markdown output.
     """
+    marker = "**Verdict**:"
     try:
         with open(report_path, "r", encoding="utf-8") as f:
             for line in f:
-                if line.startswith("**Verdict**:"):
-                    return line[len("**Verdict**:"):].strip()
+                stripped = line.strip()
+                if stripped.startswith(marker):
+                    return stripped[len(marker):].strip()
     except OSError:
         pass
     return ""
@@ -68,12 +72,15 @@ def parse_date(report_path):
 
     Looks for an HTML comment line `<!-- ... · YYYY-MM-DD · ... -->`.
     Returns the date string or 'unknown' if not found.
+    Uses .strip() before startswith to tolerate leading
+    whitespace in Markdown output.
     """
     try:
         with open(report_path, "r", encoding="utf-8") as f:
             for line in f:
-                if line.startswith("<!-- "):
-                    m = re.search(r"· ([0-9-]*) ·", line)
+                stripped = line.strip()
+                if stripped.startswith("<!-- "):
+                    m = re.search(r"· ([0-9\-]*) ·", stripped)
                     if m:
                         return m.group(1)
                     break

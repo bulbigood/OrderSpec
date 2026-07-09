@@ -107,7 +107,7 @@ esac
 
 python3 .orderspec/framework/scripts/upstream_gate.py \
   --report        "$FEATURE_DIR/spec-report.md" \
-  --artifact      "$FEATURE_SPEC" \
+  --artifact      "$FEATURE_DIR/spec.md" \
   --upstream-name "spec.md" \
   --this          "/order.plan" \
   --build         "/order.spec" \
@@ -116,10 +116,14 @@ python3 .orderspec/framework/scripts/upstream_gate.py \
   $FORCE_FLAG
 ```
 
+Interpret the JSON `status` field and exit code:
+
 -   **exit 2 (stop)** or **exit 1 (halt)** → STOP. Do not produce a plan.
+-   **exit 64 (error)** → STOP. Report: `PLAN_STOPPED: upstream gate invocation error (empty shell variables — re-run setup.py paths)`. Do not produce a plan.
 -   **exit 0 (forced)** → Proceed, but insert this warning at the top of `plan.md`:
     `> ⚠ Built over non-PASS spec gate (verdict: {verdict}) via --force`
--   **exit 0 (advisory/ok)** → Proceed.
+-   **exit 0 (advisory)** → Proceed, but warn the user in chat: "Upstream spec gate report is stale or absent. It is recommended to re-run `/order.spec-check` before relying on this plan."
+-   **exit 0 (ok)** → Proceed.
 
 ### Step 5: Self Gate Report Intake
 
@@ -337,7 +341,7 @@ Report to chat:
 -   [ ] Every `to_read` file was read and interpreted by `usage`
 -   [ ] Mode detected and stated
 -   [ ] Feature paths resolved; `eval` used for shell vars
--   [ ] Upstream gate respected
+-   [ ] Upstream gate respected: exit 64 reported as STOP; advisory distinguished from ok
 -   [ ] `plan.md` regenerated from current template
 -   [ ] Prior `plan-report.md` consumed if present
 -   [ ] Scope Lock enforced: no invented requirements
