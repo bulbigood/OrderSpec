@@ -464,6 +464,85 @@ def cmd_plan_check(args):
     output_result(payload, args)
 
 
+# ── subcommand: tasks-check ───────────────────────────────────────────────────
+
+def cmd_tasks_check(args):
+    """Setup for /order.tasks-check — validate spec+plan+tasks, create/refresh report template.
+
+    Safety contract:
+      - Gate reports are overwritten each run (see template comment).
+      - With --refresh-template, tasks-report.md is regenerated from the
+        currently resolved report template before the prompt fills it.
+      - Without --refresh-template, an existing tasks-report.md is preserved
+        (useful for incremental edits during routing cycles).
+    """
+    try:
+        paths = get_feature_paths()
+    except RuntimeError as e:
+        die(str(e), rc=2)
+
+    feature_dir = Path(paths["FEATURE_DIR"])
+    feature_spec = Path(paths["FEATURE_SPEC"])
+    impl_plan = Path(paths["IMPL_PLAN"])
+    tasks_file = Path(paths["TASKS"])
+    tasks_report = feature_dir / "tasks-report.md"
+    repo_root = paths["REPO_ROOT"]
+
+    # A tasks-check requires spec.md to exist.
+    if not feature_spec.is_file():
+        die(
+            f"spec.md not found: {feature_spec}\n"
+            f"Run /order.spec first to create the feature contract.",
+            rc=2,
+        )
+
+    # A tasks-check requires plan.md to exist.
+    if not impl_plan.is_file():
+        die(
+            f"plan.md not found: {impl_plan}\n"
+            f"Run /order.plan first to create the implementation plan.",
+            rc=2,
+        )
+
+    # A tasks-check requires tasks.md to exist.
+    if not tasks_file.is_file():
+        die(
+            f"tasks.md not found: {tasks_file}\n"
+            f"Run /order.tasks first to create the task list.",
+            rc=2,
+        )
+
+    feature_dir.mkdir(parents=True, exist_ok=True)
+
+    template = resolve_template(REPORT_TEMPLATE_NAME, repo_root)
+
+    if tasks_report.is_file() and not args.refresh_template:
+        print(
+            f"Report already exists at {tasks_report}, skipping template copy "
+            f"(use --refresh-template to regenerate)",
+            file=sys.stderr,
+        )
+    else:
+        if template and Path(template).is_file():
+            shutil.copy2(template, tasks_report)
+            if args.refresh_template and tasks_report.is_file():
+                print(f"Refreshed report template at {tasks_report}", file=sys.stderr)
+            else:
+                print(f"Copied report template to {tasks_report}", file=sys.stderr)
+        else:
+            print("Warning: Report template not found; creating empty tasks-report.md", file=sys.stderr)
+            tasks_report.touch()
+
+    payload = base_paths_payload(paths)
+    payload.update({
+        "REPORT_TEMPLATE": template or "",
+        "TASKS_REPORT": str(tasks_report),
+        "TASKS_REPORT_EXISTS": tasks_report.is_file(),
+        "REPORT_REFRESHED": bool(args.refresh_template),
+    })
+    output_result(payload, args)
+
+
 # ── subcommand: spec ─────────────────────────────────────────────────────────
 
 def cmd_spec(args):
@@ -616,6 +695,23 @@ def main():
         help="Regenerate plan-report.md from the resolved report template even if it already exists",
     )
 
+    tasks_check_parser = subparsers.add_parser("tasks-check", help="Setup for /order.tasks-check")
+    tasks_check_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output in JSON (always on)",
+    )
+    tasks_check_parser.add_argument(
+        "--shell-vars",
+        action="store_true",
+        help="Output as eval-ready shell variable assignments",
+    )
+    tasks_check_parser.add_argument(
+        "--refresh-template",
+        action="store_true",
+        help="Regenerate tasks-report.md from the resolved report template even if it already exists",
+    )
+
     args = parser.parse_args()
 
     if args.cmd == "paths":
@@ -632,6 +728,8 @@ def main():
         cmd_spec_check(args)
     elif args.cmd == "plan-check":
         cmd_plan_check(args)
+    elif args.cmd == "tasks-check":
+        cmd_tasks_check(args)
     else:
         parser.print_help()
         sys.exit(64)

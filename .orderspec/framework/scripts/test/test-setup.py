@@ -429,6 +429,69 @@ rc, out, err = run_setup("tasks", "--json", "--refresh-template")
 assert_rc(0, rc, "tasks with override exits zero", out, err)
 assert_true((fdir / "tasks.md").read_text(encoding="utf-8") == "OVERRIDE TASKS TEMPLATE\n", "override tasks-template wins")
 
+# 30. tasks-check --json blocks when spec.md is missing
+reset_repo()
+set_active_feature_state("specs/F")
+(WORK / "specs" / "F").mkdir(parents=True, exist_ok=True)
+(WORK / "specs" / "F" / "plan.md").write_text("PLAN\n", encoding="utf-8")
+(WORK / "specs" / "F" / "tasks.md").write_text("# Tasks\n", encoding="utf-8")
+rc, out, err = run_setup("tasks-check", "--json")
+assert_rc(2, rc, "tasks-check blocks without spec.md", out, err)
+
+# 31. tasks-check --json blocks when plan.md is missing
+reset_repo()
+make_feature("specs/F", spec=True, plan=False)
+(WORK / "specs" / "F" / "tasks.md").write_text("# Tasks\n", encoding="utf-8")
+rc, out, err = run_setup("tasks-check", "--json")
+assert_rc(2, rc, "tasks-check blocks without plan.md", out, err)
+
+# 32. tasks-check --json blocks when tasks.md is missing
+reset_repo()
+make_feature("specs/F", spec=True, plan=True, tasks=False)
+rc, out, err = run_setup("tasks-check", "--json")
+assert_rc(2, rc, "tasks-check blocks without tasks.md", out, err)
+
+# 33. tasks-check --json creates tasks-report.md from core report template when spec+plan+tasks exist
+reset_repo()
+write_core_template("report-template", "CORE REPORT TEMPLATE\n")
+fdir = make_feature("specs/F", spec=True, plan=True, tasks=True)
+rc, out, err = run_setup("tasks-check", "--json")
+assert_rc(0, rc, "tasks-check creates tasks-report.md when spec+plan+tasks exist", out, err)
+data = parse_json_stdout(out)
+assert_true((fdir / "tasks-report.md").read_text(encoding="utf-8") == "CORE REPORT TEMPLATE\n", "tasks-report.md copied from core report template")
+assert_true(data["TASKS_REPORT"].endswith("tasks-report.md"), "tasks-check JSON includes TASKS_REPORT")
+assert_true(data["TASKS_REPORT_EXISTS"] is True, "tasks-check JSON reports TASKS_REPORT_EXISTS=true")
+assert_true(data["REPORT_REFRESHED"] is False, "tasks-check JSON reports REPORT_REFRESHED=false without flag")
+
+# 34. tasks-check --json does not overwrite existing report without --refresh-template
+reset_repo()
+write_core_template("report-template", "CORE REPORT TEMPLATE\n")
+fdir = make_feature("specs/F", spec=True, plan=True, tasks=True)
+(fdir / "tasks-report.md").write_text("EXISTING REPORT\n", encoding="utf-8")
+rc, out, err = run_setup("tasks-check", "--json")
+assert_rc(0, rc, "tasks-check preserves existing report without refresh", out, err)
+assert_true((fdir / "tasks-report.md").read_text(encoding="utf-8") == "EXISTING REPORT\n", "existing tasks-report.md preserved")
+
+# 35. tasks-check --json --refresh-template overwrites existing report
+reset_repo()
+write_core_template("report-template", "CORE REPORT TEMPLATE\n")
+fdir = make_feature("specs/F", spec=True, plan=True, tasks=True)
+(fdir / "tasks-report.md").write_text("EXISTING REPORT\n", encoding="utf-8")
+rc, out, err = run_setup("tasks-check", "--json", "--refresh-template")
+assert_rc(0, rc, "tasks-check refresh exits zero", out, err)
+assert_true((fdir / "tasks-report.md").read_text(encoding="utf-8") == "CORE REPORT TEMPLATE\n", "refresh replaces existing report with template")
+data = parse_json_stdout(out)
+assert_true(data["REPORT_REFRESHED"] is True, "tasks-check JSON marks REPORT_REFRESHED=true")
+
+# 36. tasks-check --json --shell-vars outputs eval-ready variables
+reset_repo()
+write_core_template("report-template", "CORE\n")
+fdir = make_feature("specs/F", spec=True, plan=True, tasks=True)
+rc, out, err = run_setup("tasks-check", "--shell-vars")
+assert_rc(0, rc, "tasks-check --shell-vars exits zero", out, err)
+assert_true("FEATURE_DIR=" in out, "tasks-check --shell-vars includes FEATURE_DIR")
+assert_true("TASKS_REPORT=" in out, "tasks-check --shell-vars includes TASKS_REPORT")
+
 # ── Cleanup ──────────────────────────────────────────────────────────────────
 
 if WORK.exists():
