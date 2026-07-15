@@ -2,9 +2,9 @@
 """test-agents-sync.py — regression tests for agents_sync.py and adapters
 
 Tests:
-- Detection of Kilo Code and Claude Code
+- Detection of Kilo Code, Claude Code, and Codex
 - Prompt synchronization (copy, hash-skip, stale detection)
-- Skills directory registration (kilo.jsonc for Kilo, symlink for Claude)
+- Skills directory registration (kilo.jsonc for Kilo, symlink for Claude/Codex)
 - External rules reading (AGENTS.md, CLAUDE.md)
 - State management (agents.json)
 - Idempotency (re-sync)
@@ -176,6 +176,11 @@ def setup_claude():
     mkdirp(WORK / ".claude")
 
 
+def setup_codex():
+    """Create a repository-local Codex marker."""
+    mkdirp(WORK / ".agents" / "skills")
+
+
 def setup_kilo_jsonc(skills_paths=None):
     """Create kilo.jsonc with optional existing skills.paths.
 
@@ -297,7 +302,22 @@ else:
     bad(f"detect Claude Code (CLAUDE.md only) :: rc={rc} err={err!r}")
 
 
-# 5. detect both agents
+# 5. detect Codex (.agents/skills)
+reset_work()
+setup_prompts_source()
+setup_codex()
+rc, data, err = run_sync_json("detect", "--json")
+if rc == 0:
+    codex = next((a for a in data if a["agent_id"] == "codex"), None)
+    if codex and codex["detected"] and codex["prompts_dir"] == ".agents/skills":
+        ok("detect Codex (.agents/skills) — prompts_dir=.agents/skills")
+    else:
+        bad(f"detect Codex :: {codex}")
+else:
+    bad(f"detect Codex :: rc={rc} err={err!r}")
+
+
+# 6. detect both Kilo Code and Claude Code
 reset_work()
 setup_prompts_source()
 setup_kilo()
@@ -314,7 +334,7 @@ else:
     bad(f"detect both :: rc={rc} err={err!r}")
 
 
-# 6. detect Kilo Code legacy (.kilocode/)
+# 7. detect Kilo Code legacy (.kilocode/)
 reset_work()
 setup_prompts_source()
 setup_kilo_legacy()
@@ -331,7 +351,7 @@ else:
 
 # === SYNC PROMPTS TESTS ===
 
-# 7. sync prompts to Kilo Code — files copied
+# 8. sync prompts to Kilo Code — files copied
 reset_work()
 setup_prompts_source()
 setup_kilo()
@@ -350,7 +370,7 @@ assert_exists(".kilo/commands/order.plan.md", "Kilo Code: order.plan.md copied")
 assert_exists(".kilo/commands/order.code.md", "Kilo Code: order.code.md copied")
 
 
-# 8. re-sync prompts to Kilo Code — all skipped (hash match)
+# 9. re-sync prompts to Kilo Code — all skipped (hash match)
 rc, data, err = run_sync_json("sync", "--agents", "kilocode", "--json")
 if rc == 0:
     result = data["sync_results"][0]
@@ -362,7 +382,7 @@ else:
     bad(f"re-sync prompts to Kilo Code :: rc={rc} err={err!r}")
 
 
-# 9. sync prompts to Claude Code — files copied
+# 10. sync prompts to Claude Code — files copied
 reset_work()
 setup_prompts_source()
 setup_claude()
@@ -381,7 +401,7 @@ assert_exists(".claude/commands/order.plan.md", "Claude Code: order.plan.md copi
 assert_exists(".claude/commands/order.code.md", "Claude Code: order.code.md copied")
 
 
-# 10. re-sync prompts to Claude Code — all skipped
+# 11. re-sync prompts to Claude Code — all skipped
 rc, data, err = run_sync_json("sync", "--agents", "claude_code", "--json")
 if rc == 0:
     result = data["sync_results"][0]
@@ -393,7 +413,7 @@ else:
     bad(f"re-sync prompts to Claude Code :: rc={rc} err={err!r}")
 
 
-# 11. modified source prompts — re-copied
+# 12. modified source prompts — re-copied
 reset_work()
 setup_prompts_source()
 setup_kilo()
@@ -412,7 +432,7 @@ else:
     bad(f"modified source prompt :: rc={rc} err={err!r}")
 
 
-# 12. stale files in target — reported in missing_in_source
+# 13. stale files in target — reported in missing_in_source
 reset_work()
 setup_prompts_source()
 setup_kilo()
@@ -431,7 +451,7 @@ else:
 
 # === SYNC SKILLS TESTS ===
 
-# 13. sync skills to Kilo Code — kilo.jsonc created with skills.paths
+# 14. sync skills to Kilo Code — kilo.jsonc created with skills.paths
 reset_work()
 setup_prompts_source()
 setup_kilo()
@@ -453,7 +473,7 @@ else:
     bad(f"Kilo Code: skills.paths = {kilo_config.get('skills', {}).get('paths', [])}")
 
 
-# 14. re-sync skills to Kilo Code — already configured
+# 15. re-sync skills to Kilo Code — already configured
 rc, data, err = run_sync_json("sync", "--agents", "kilocode", "--json")
 if rc == 0:
     skills_res = data["sync_results"][0]["skills_sync"]
@@ -465,7 +485,7 @@ else:
     bad(f"re-sync skills to Kilo Code :: rc={rc} err={err!r}")
 
 
-# 15. sync skills to Kilo Code with pre-existing kilo.jsonc — path appended
+# 16. sync skills to Kilo Code with pre-existing kilo.jsonc — path appended
 reset_work()
 setup_prompts_source()
 setup_kilo()
@@ -482,7 +502,7 @@ else:
     bad(f"sync skills pre-existing :: rc={rc} err={err!r}")
 
 
-# 16. sync skills to Claude Code — symlink created
+# 17. sync skills to Claude Code — symlink created
 reset_work()
 setup_prompts_source()
 setup_claude()
@@ -499,7 +519,7 @@ else:
 assert_is_symlink(".claude/skills", ".orderspec/skills", "Claude Code: .claude/skills -> .orderspec/skills")
 
 
-# 17. re-sync skills to Claude Code — already configured (symlink exists)
+# 18. re-sync skills to Claude Code — already configured (symlink exists)
 rc, data, err = run_sync_json("sync", "--agents", "claude_code", "--json")
 if rc == 0:
     skills_res = data["sync_results"][0]["skills_sync"]
@@ -511,7 +531,7 @@ else:
     bad(f"re-sync skills to Claude Code :: rc={rc} err={err!r}")
 
 
-# 18. sync skills to Claude Code — existing real directory → skip + warn
+# 19. sync skills to Claude Code — existing real directory → skip + warn
 reset_work()
 setup_prompts_source()
 setup_claude()
@@ -530,9 +550,50 @@ else:
 assert_not_symlink(".claude/skills", "Claude Code: .claude/skills is NOT a symlink (real dir preserved)")
 
 
+# 20. sync prompts to Codex — command prompts become skills
+reset_work()
+setup_prompts_source()
+rc, data, err = run_sync_json("sync", "--agents", "codex", "--json")
+if rc == 0:
+    result = data["sync_results"][0]
+    copied = result["prompts_sync"]["copied"]
+    if sorted(copied) == ["order-code", "order-plan", "order-spec"]:
+        ok("sync prompts to Codex — command prompts become skills")
+    else:
+        bad(f"sync prompts to Codex :: copied={copied}")
+else:
+    bad(f"sync prompts to Codex :: rc={rc} err={err!r}")
+
+assert_exists(".agents/skills/order-spec/SKILL.md", "Codex: order.spec converted to SKILL.md")
+codex_skill = read(WORK / ".agents" / "skills" / "order-spec" / "SKILL.md")
+if "name: order-spec" in codex_skill and "command_prompt" not in codex_skill and "$ARGUMENTS" in codex_skill:
+    ok("Codex skill contains valid name and argument handoff")
+else:
+    bad("Codex skill rendering lost metadata or argument handoff")
+
+
+# 21. re-sync prompts to Codex — all skipped
+rc, data, err = run_sync_json("sync", "--agents", "codex", "--json")
+if rc == 0:
+    result = data["sync_results"][0]
+    if result["prompts_sync"]["copied"] == [] and sorted(result["prompts_sync"]["skipped"]) == ["order-code", "order-plan", "order-spec"]:
+        ok("re-sync prompts to Codex — all skipped")
+    else:
+        bad(f"re-sync prompts to Codex :: {result['prompts_sync']}")
+else:
+    bad(f"re-sync prompts to Codex :: rc={rc} err={err!r}")
+
+
+# 22. Codex canonical skills are exposed through .agents/skills symlink
+if (WORK / ".agents" / "skills").is_symlink() and os.readlink(str(WORK / ".agents" / "skills")) == "../.orderspec/skills":
+    ok("Codex: .agents/skills -> .orderspec/skills")
+else:
+    bad("Codex: canonical skills symlink missing or incorrect")
+
+
 # === READ RULES TESTS ===
 
-# 19. read-rules from Kilo Code (AGENTS.md)
+# 23. read-rules from Kilo Code (AGENTS.md)
 reset_work()
 setup_prompts_source()
 setup_kilo()
@@ -548,7 +609,7 @@ else:
     bad(f"read-rules Kilo Code :: rc={rc} err={err!r}")
 
 
-# 20. read-rules from Claude Code (CLAUDE.md)
+# 24. read-rules from Claude Code (CLAUDE.md)
 reset_work()
 setup_prompts_source()
 setup_claude()
@@ -564,7 +625,7 @@ else:
     bad(f"read-rules Claude Code :: rc={rc} err={err!r}")
 
 
-# 21. read-rules with no rule files
+# 25. read-rules with no rule files
 reset_work()
 setup_prompts_source()
 setup_kilo()
@@ -579,7 +640,7 @@ else:
     bad(f"read-rules no files :: rc={rc} err={err!r}")
 
 
-# 22. read-rules from both agents — combined
+# 26. read-rules from both agents — combined
 reset_work()
 setup_prompts_source()
 setup_kilo()
@@ -600,7 +661,7 @@ else:
 
 # === STATE MANAGEMENT TESTS ===
 
-# 23. agents.json created after sync
+# 27. agents.json created after sync
 reset_work()
 setup_prompts_source()
 setup_kilo()
@@ -613,7 +674,7 @@ else:
     bad(f"agents.json content :: {state}")
 
 
-# 24. agents.json updated when adding agent
+# 28. agents.json updated when adding agent
 setup_claude()
 run_sync_json("sync", "--agents", "kilocode", "claude_code", "--json")
 state = read_json(WORK / ".orderspec" / "state" / "agents.json")
@@ -623,7 +684,7 @@ else:
     bad(f"agents.json after add :: enabled_agents={state.get('enabled_agents', [])}")
 
 
-# 25. agents.json — agent removed from enabled but kept in agents dict
+# 29. agents.json — agent removed from enabled but kept in agents dict
 run_sync_json("sync", "--agents", "kilocode", "--json")
 state = read_json(WORK / ".orderspec" / "state" / "agents.json")
 if state.get("enabled_agents") == ["kilocode"]:
@@ -639,7 +700,7 @@ else:
     bad(f"agents.json after remove :: enabled_agents={state.get('enabled_agents', [])}")
 
 
-# 26. state command output
+# 30. state command output
 rc, out, err = run_sync("state")
 if rc == 0 and "kilocode" in out:
     ok("state command — text output contains kilocode")
@@ -649,7 +710,7 @@ else:
 
 # === MULTI-AGENT SYNC TESTS ===
 
-# 27. sync both agents simultaneously — prompts copied to both
+# 31. sync both agents simultaneously — prompts copied to both
 reset_work()
 setup_prompts_source()
 setup_kilo()
@@ -674,7 +735,7 @@ assert_exists(".kilo/commands/order.spec.md", "Both sync: Kilo has order.spec.md
 assert_exists(".claude/commands/order.spec.md", "Both sync: Claude has order.spec.md")
 
 
-# 28. sync both agents — skills registered in both
+# 32. sync both agents — skills registered in both
 state = read_json(WORK / ".orderspec" / "state" / "agents.json")
 kilo_skills = state.get("agents", {}).get("kilocode", {}).get("sync_state", {}).get("skills", {})
 claude_skills = state.get("agents", {}).get("claude_code", {}).get("sync_state", {}).get("skills", {})
@@ -687,7 +748,7 @@ else:
 
 # === EDGE CASES ===
 
-# 29. sync with non-existent agent ID — error in results
+# 33. sync with non-existent agent ID — error in results
 reset_work()
 setup_prompts_source()
 rc, data, err = run_sync_json("sync", "--agents", "nonexistent", "--json")
@@ -698,7 +759,7 @@ else:
     bad(f"sync nonexistent :: rc={rc} err={err!r}")
 
 
-# 30. sync with empty prompts source — error reported
+# 34. sync with empty prompts source — error reported
 reset_work()
 setup_kilo()
 # No .orderspec/framework/prompts/ created
@@ -713,7 +774,7 @@ else:
     bad(f"sync empty source :: rc={rc} err={err!r}")
 
 
-# 31. .orderspec/skills/ directory created by sync
+# 35. .orderspec/skills/ directory created by sync
 reset_work()
 setup_prompts_source()
 setup_kilo()
@@ -722,7 +783,7 @@ assert_exists(".orderspec/skills", ".orderspec/skills/ directory created by sync
 assert_exists(".orderspec/skills/.gitkeep", ".orderspec/skills/.gitkeep created")
 
 
-# 32. prompts in subdirectories — copied with structure
+# 36. prompts in subdirectories — copied with structure
 reset_work()
 prompts = {
     "order.spec.md": "spec prompt",
@@ -735,7 +796,7 @@ assert_exists(".kilo/commands/order.spec.md", "Subdir test: order.spec.md at roo
 assert_exists(".kilo/commands/checks/order.spec-check.md", "Subdir test: checks/order.spec-check.md copied")
 
 
-# 33. Claude Code .claude/CLAUDE.md alternative location
+# 37. Claude Code .claude/CLAUDE.md alternative location
 reset_work()
 setup_prompts_source()
 mkdirp(WORK / ".claude")
@@ -752,7 +813,7 @@ else:
     bad(f"read-rules alt location :: rc={rc} err={err!r}")
 
 
-# 34. Kilo Code with instructions in kilo.jsonc — read via read_rules
+# 38. Kilo Code with instructions in kilo.jsonc — read via read_rules
 reset_work()
 setup_prompts_source()
 setup_kilo()
@@ -773,7 +834,7 @@ else:
 
 # === SYMLINK EDGE CASES ===
 
-# 35. Claude Code skills symlink — update wrong symlink target
+# 39. Claude Code skills symlink — update wrong symlink target
 reset_work()
 setup_prompts_source()
 setup_claude()

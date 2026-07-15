@@ -37,8 +37,8 @@ python3 .orderspec/framework/scripts/bootstrap_contracts.py validate --json
 
 # Multi-agent sync
 python3 .orderspec/framework/scripts/agents_sync.py detect --json
-python3 .orderspec/framework/scripts/agents_sync.py sync --agents kilocode claude_code --json
-python3 .orderspec/framework/scripts/agents_sync.py read-rules --agents kilocode claude_code --json
+python3 .orderspec/framework/scripts/agents_sync.py sync --agents kilocode claude_code codex --json
+python3 .orderspec/framework/scripts/agents_sync.py read-rules --agents kilocode claude_code codex --json
 python3 .orderspec/framework/scripts/agents_sync.py state
 ```
 

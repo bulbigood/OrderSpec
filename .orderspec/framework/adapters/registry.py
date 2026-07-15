@@ -1,5 +1,6 @@
 from .kilocode import KiloCodeAdapter
 from .claude_code import ClaudeCodeAdapter
+from .codex import CodexAdapter
 from .base import AgentAdapter
 from typing import List
 
@@ -8,7 +9,7 @@ def get_all_adapters() -> List[AgentAdapter]:
     return [
         KiloCodeAdapter(),
         ClaudeCodeAdapter(),
-        # Сюда будут добавлены: OpenCodeAdapter(), CursorAdapter() и т.д.
+        CodexAdapter(),
     ]
 
 def get_adapter_by_id(agent_id: str) -> AgentAdapter:

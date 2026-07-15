@@ -6,8 +6,9 @@
 >
 > - ✅ [Kilo Code](https://kilo.ai/) (`.kilo/` new format + `.kilocode/` legacy)
 > - ✅ [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`.claude/` + `CLAUDE.md`)
+> - ✅ [Codex](https://openai.com/codex/) (repository skills in `.agents/skills/`)
 >
-> There is **no installer yet**. Setup is manual: copy the OrderSpec `.orderspec/` directory into your project.
+> Setup is still explicit: copy the OrderSpec `.orderspec/` directory into your project, then run the agent sync command.
 
 ## Design principles
 
@@ -102,7 +103,7 @@ This is what makes OrderSpec safe under a weak model: the model is never trusted
 
 - **Python 3** — framework scripts are written in Python
 - **Shell access** — to run framework utilities
-- **At least one supported AI agent**
+- **At least one supported AI agent** — Kilo Code, Claude Code, or Codex
 
 No package manager, no `uv`, no installer, no framework daemon required.
 
@@ -150,7 +151,7 @@ Use `/order.code-to-spec` to scan existing modules and generate a compliant `spe
 - Project contract files live under `.orderspec/contracts/`; names there may still overlap with other frameworks if paths are made configurable in the future.
 - Operator-defined procedural extensions are not supported yet.
 - Some project facts cannot be inferred safely during bootstrap and are marked unresolved instead of guessed.
-- Not all AI agents are supported yet — only Kilo Code and Claude Code.
+- Not all AI agents are supported yet — current adapters cover Kilo Code, Claude Code, and Codex.
 - Claude Code skills registration uses a symlink, which may not work on all platforms (Windows without developer mode).
 
 This is intentional: OrderSpec prefers an explicit unresolved marker over a hallucinated contract.

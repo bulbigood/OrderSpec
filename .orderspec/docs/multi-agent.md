@@ -8,12 +8,13 @@ OrderSpec is not tied to a specific AI agent. It uses a deterministic **adapter 
 |---|---|---|---|---|
 | **Kilo Code** | `.kilo/` dir or `kilo.jsonc` (new); `.kilocode/` dir (legacy) | `.kilo/commands/` (new); `.kilocode/workflows/` (legacy) — copied, no symlinks | `skills.paths` array in `kilo.jsonc` | `AGENTS.md`, files from `instructions` array in `kilo.jsonc`, `.kilocode/rules/*.md` (legacy) |
 | **Claude Code** | `.claude/` dir or `CLAUDE.md` at root | `.claude/commands/` — copied | Symlink: `.claude/skills` → `.orderspec/skills` | `CLAUDE.md`, `.claude/CLAUDE.md` |
+| **Codex** | `.codex/`, `.agents/skills/`, `AGENTS.md`, or `.codex-plugin/plugin.json` | `.agents/skills/<order-command>/SKILL.md` — rendered from prompts | Symlink: `.agents/skills` → `.orderspec/skills`; existing real directory is preserved | `AGENTS.override.md` or `AGENTS.md` |
 
 ## How it works
 
 1. **Detection**: each adapter's `detect()` method checks the project for signs of its agent.
-2. **Prompt sync**: OrderSpec prompts live in `.orderspec/framework/prompts/` as a single source of truth. Each adapter copies them to the agent's commands directory. SHA-256 hashing avoids unnecessary copies.
-3. **Skills registration**: instead of copying skills, each adapter registers `.orderspec/skills/` in the agent's config — one source of truth.
+2. **Prompt sync**: OrderSpec prompts live in `.orderspec/framework/prompts/` as a single source of truth. Each adapter delivers them to the agent's command surface. SHA-256 hashing avoids unnecessary copies; Codex renders each prompt as a `SKILL.md`.
+3. **Skills registration**: instead of copying project skills, each adapter registers `.orderspec/skills/` in the agent's config or native discovery path — one source of truth.
 4. **External rules**: each adapter reads agent-specific rule files (AGENTS.md, CLAUDE.md, etc.) for optional integration into `conventions.md` during bootstrap.
 
 ## Adapter architecture
@@ -24,6 +25,7 @@ OrderSpec is not tied to a specific AI agent. It uses a deterministic **adapter 
 ├── registry.py      # Adapter registry
 ├── kilocode.py      # Kilo Code adapter
 ├── claude_code.py   # Claude Code adapter
+├── codex.py         # Codex adapter
 └── jsonc_utils.py   # JSONC read/write utilities for kilo.jsonc
 ```
 

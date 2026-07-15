@@ -231,8 +231,8 @@ def main():
 Examples:
   %(prog)s detect --json
   %(prog)s sync --agents kilocode --json
-  %(prog)s sync --agents kilocode opencode
-  %(prog)s read-rules --agents kilocode --json
+  %(prog)s sync --agents kilocode claude_code codex
+  %(prog)s read-rules --agents kilocode claude_code codex --json
         """
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -280,7 +280,7 @@ Examples:
             
             if not detected_agents:
                 print("\nNo supported AI agents detected in this project.")
-                print("Ensure your agent (e.g., Kilo Code or Claude Code) is installed and initialized.")
+                print("Ensure your agent (e.g., Kilo Code, Claude Code, or Codex) is installed and initialized.")
                 return
             
             print("\nDetected AI agents:")
