@@ -787,6 +787,75 @@ if rc == 0 and "M30" not in out:
 else:
     no("validate M30 covered", f"rc={rc} out={out} err={err}")
 
+# ── Contract-risk checks ─────────────────────────────────────────────────────
+
+# V_M33: exact-one audit guarantee without failure semantics → M33
+reset_feature()
+write_spec("""- **REQ-001** every task mutation creates exactly one audit log entry
+- **UJ-001** Task journey
+  Covers: REQ-001
+## 10. Invariants
+- **INV-001** every mutation MUST produce exactly one audit entry
+""")
+rc, out, err = run_trace("validate", "--stage", "spec", F)
+if rc == 1 and "M33" in out:
+    ok("validate: exact-one audit without failure semantics -> M33")
+else:
+    no("validate M33", f"rc={rc} out={out} err={err}")
+
+# V_M34: pagination named in IF input without envelope → M34
+reset_feature()
+write_spec("""- **REQ-001** user can list tasks
+- **UJ-001** Task journey
+  Covers: REQ-001
+## 9. Interface Contracts
+- **IF-001**: List tasks
+  | Field | Value |
+  |-------|-------|
+  | Kind | HTTP endpoint |
+  | Operation | List tasks |
+  | Actor | Authenticated user |
+  | Input | Optional pagination |
+  | Success | Returns 200 with an array |
+  | Failure | Returns 401 |
+  | Covers | REQ-001 |
+""")
+rc, out, err = run_trace("validate", "--stage", "spec", F)
+if rc == 1 and "M34" in out:
+    ok("validate: bare pagination input -> M34")
+else:
+    no("validate M34", f"rc={rc} out={out} err={err}")
+
+# V_M35: newly-created empty audit history contradicts creation audit
+reset_feature()
+write_spec("""- **REQ-001** system creates an audit log entry for every task creation
+- **UJ-001** Task journey
+  Covers: REQ-001
+## 11. Edge Cases
+- **EDGE-001** newly created task has no audit history and returns an empty array
+""")
+rc, out, err = run_trace("validate", "--stage", "spec", F)
+if rc == 1 and "M35" in out:
+    ok("validate: empty new audit history contradicts creation audit -> M35")
+else:
+    no("validate M35", f"rc={rc} out={out} err={err}")
+
+# V_M36: changed fields versus full snapshots → M36
+reset_feature()
+write_spec("""- **REQ-001** update audit records changed fields with before/after values
+- **UJ-001** Task journey
+  Covers: REQ-001
+## 14. Decisions
+- **DEC-001** audit records use full entity snapshots
+  - **Affects**: REQ-001
+  - **Rationale**: preserve complete state
+""")
+rc, out, err = run_trace("validate", "--stage", "spec", F)
+if rc == 1 and "M36" in out:
+    ok("validate: changed fields versus full snapshots -> M36")
+else:
+    no("validate M36", f"rc={rc} out={out} err={err}")
+
 # ── Cleanup ──────────────────────────────────────────────────────────────────
 
 if WORK.exists():

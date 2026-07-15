@@ -198,6 +198,13 @@ Inspect the complete response path, not only the controller. A model plugin that
 
 ### C3 — Invariants, writes, and failure semantics
 
+For immutable or append-only records, inspect every supported write surface:
+updateOne, updateMany, replaceOne, findOneAndReplace, findOneAndUpdate,
+findByIdAndUpdate, deleteOne, deleteMany, findOneAndDelete,
+findByIdAndDelete, findOneAndRemove, findByIdAndRemove, document remove,
+bulkWrite, and direct model writes where applicable. Schema immutable flags
+alone are not proof that every query write path is blocked.
+
 For every `INV`, identify every write path that could violate it and verify enforcement at the right boundary:
 
 - owner is set from auth context and cannot be client-controlled or changed;

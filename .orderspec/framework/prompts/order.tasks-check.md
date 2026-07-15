@@ -34,6 +34,7 @@ It runs after `/order.tasks` and answers: Is `tasks.md` a faithful, well-ordered
 - **T3 — E-M-C ordering**: Expand additive-only; Contract opens with a GATE.
 - **T4 — test-first**: tests precede impl within a story.
 - **T5 — SC buildability**: buildable success criteria have tasks.
+- **T6 — evidence topology**: declared unit/integration evidence has executable test-writing tasks; a generic GATE is not evidence for a direct mechanism.
 - **T7 — upstream reroute**: when the root defect lives in plan/spec, route up.
 
 This gate is a **pure inspector**. It writes only `tasks-report.md`. It MUST NOT edit `spec.md`, `plan.md`, `tasks.md`, or source code.
@@ -153,6 +154,10 @@ Semantic findings (T1-xxx through T7-xxx) must be integrated into the report's F
 ### T5. SC Buildability
 
 - **T5a**: Each Success Criterion (spec) implying **buildable work** (load tests, security tooling, performance assertions) is reflected by ≥1 task. Post-launch/business KPIs exempt. A buildable SC with no task → **Route** (HIGH). The gate never picks how the SC is realized.
+
+### T6. Evidence Topology
+
+- **T6a**: Read the feature state mechanisms.tsv and compare each direct row's test_type with actual test-writing task paths from plan.md. A direct unit mechanism must have a unit-test task; a direct integration mechanism must have an integration-test task. A generic GATE or checkpoint prose line does not provide evidence, and an integration test does not silently satisfy a unit claim. Route the root defect to /order.plan when mechanism topology is wrong, or /order.tasks when the plan is correct but the task list omits the test (HIGH for P1, MEDIUM otherwise).
 
 ### T7. Upstream Reroute
 

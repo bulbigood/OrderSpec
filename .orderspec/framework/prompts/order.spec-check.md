@@ -111,6 +111,36 @@ Untestable MVP/core REQ → Route (HIGH). Untestable non-core → Route (MEDIUM)
 ### S1-008 Scope Sizing
 Assess cohesion. Oversized but coherent → Route (MEDIUM) recommending `/order.spec --split`.
 
+### S1-009 Cross-Section Contradictions
+Compare REQ/INV/IF wording with EDGE, DEC, ASM, information-model fields, and
+out-of-scope statements. Do not limit contradiction review to the §10 grid:
+for example, an EDGE claiming an empty post-create history conflicts with a
+REQ that mandates a create audit entry, and a DEC choosing full snapshots may
+conflict with a REQ that promises changed-field deltas.
+Contradiction affecting P1 behaviour → Route (HIGH or CRITICAL).
+
+### S1-010 Multi-Entity Failure Semantics
+When one user operation writes more than one entity or persistence record and
+the contract says exactly one, every, or MUST produce, verify that the
+contract specifies atomic, best-effort, compensating, or partial-failure
+semantics and the observable result of failure. Missing semantics → Route
+(HIGH). Do not leave this as an unrecorded ASM.
+
+### S1-011 Interface Input/Response Completeness
+For every IF, reconcile every declared input option with success/failure
+behaviour and response shape. Pagination requires an envelope or a referenced
+project convention with bounds, ordering, and empty-page semantics. Filters,
+optional fields, nullability, and malformed identifiers need explicit
+observable outcomes. Missing contract detail → Route (HIGH for P1, MEDIUM
+otherwise).
+
+### S1-012 Absolute Guarantee Scope
+For invariants using exactly, every, always, or never, identify all
+supported write paths and failure states covered by the guarantee. If the
+scope is only successful requests, or only HTTP routes, say so in the
+contract; otherwise route the missing boundary/partial-failure decision.
+Ambiguous P1 guarantee scope → Route (HIGH).
+
 ## Report Generation
 
 The report template has already been copied to `$FEATURE_DIR/spec-report.md` by `setup.py spec-check --refresh-template` in the Target Feature Resolution step.

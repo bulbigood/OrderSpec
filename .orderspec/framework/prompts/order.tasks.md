@@ -197,6 +197,20 @@ Each mechanism BINDS the task that FIRST creates the affected function — fold 
 
 **A direct ref means "this mechanism is realized OR exercised in THIS task's `path`" — not "this ID needed a home to satisfy coverage".** A direct mechanism whose `primary_files` is an implementation file (model/service/controller/route) belongs on the IMPLEMENTATION task that writes that file — NOT on a verification/GATE/test task. Do NOT move a direct ID onto an unrelated task merely to clear an "uncovered" rejection: that is ID-parking, and it makes `traceability.md` lie about where the behavior lives. If a direct ID has nowhere to go within the 3-ref cap, that is the signal to add a task for its primary_files, not to park it elsewhere (see Granularity: god-file split). This is now MACHINE-ENFORCED: `extract-trace` rejects (rc=3) any ref whose mechanism's `primary_files` does not contain that task's path, so ID-parking fails the build rather than silently corrupting `traceability.md`.
 
+### Test Topology Binding
+
+Treat each direct mechanism's test_type as a binding, not a hint:
+
+- unit → create a unit-test path in the plan manifest and a test-writing task for that mechanism;
+- integration → create an integration-test path and a test-writing task for the endpoint/flow;
+- documented → do not create a test task unless a separate direct mechanism requires it;
+- delegated → task the delegate's declared test topology, not the delegated row.
+
+A generic GATE task never satisfies a unit or integration mechanism. If the
+plan declares a unit mechanism but has no unit-test path, stop and route the
+defect to /order.plan; do not relabel the mechanism as integration to make
+coverage pass.
+
 ### Step 7.5: Get Task Suggestions (Deterministic Pre-flight)
 
 Get deterministic task line skeletons from the tool. This reduces iterations in Step 10 by pre-grouping direct mechanisms by `primary_files` and pre-splitting god-files (>3 mechanisms per path).

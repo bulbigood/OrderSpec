@@ -153,6 +153,24 @@ Compare `mechanisms.tsv` test claims with `pathmanifest`:
 - Delegated `AC-NNN` rows point to an executable path that can actually verify the AC.
 Implausible topology → Route (HIGH for missing IF integration; MEDIUM/HIGH for service/model unit gaps).
 
+### P1-012 Mechanism-to-Path and Interface Fidelity
+For every direct mechanism, verify that primary_files directly realizes the
+mechanism described in the TSV row, not merely participates in the flow. A
+service that creates audit entries does not, by itself, enforce audit-log
+immutability owned by the model/write boundary. Route a misleading
+primary_files claim to /order.plan (HIGH for P1 behaviour).
+
+For every IF, compare the plan mapping and mechanism rows with all declared
+input semantics, response fields, nullability, pagination/filter behaviour,
+and failure statuses. A route file planned for an input that the controller
+ignores is incomplete. Route to /order.plan when the spec is complete; route
+to /order.spec when the interface is underspecified.
+
+When a direct mechanism is test_type=unit, require a unit-test path in the
+plan manifest and a task that writes or exercises that unit test. An
+integration-only test file is not a unit-test justification. Do not let a
+generic GATE task satisfy this check.
+
 ### P1-008 Physical Grounding & Naming
 Use focused reconnaissance (hard cap ~10 files: one manifest, route registration, exemplars per touched layer, barrel/index files, test exemplar).
 Verify:

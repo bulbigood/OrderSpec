@@ -223,6 +223,13 @@ Run phases strictly in order (hard sequential barriers). Within a phase, execute
 
 #### Per-Task Rules
 
+Evidence rule: a test-writing, checkpoint, or GATE task is complete only
+after its declared verification command or red-state check produced an
+observable result. Do not mark such a task [X] from source inspection,
+implementation intent, or a generic claim that tests should pass. If the
+command is denied, unavailable, or its result cannot be reported, leave the
+task unchecked and stop at that task with a precise route.
+
 - Touch only the file named in the task's `path` field. Need to change another file → that's a deviation (see Deviation Rule).
 - Never create a file as an empty stub to "fill later" — implement the task's real behavior now. If a task itself says to create a stub, that is its complete deliverable.
 - **Test tasks** (TDD): write the test, run it, **confirm it fails** before coding the corresponding implementation. If it passes immediately, flag it — the test may be vacuous.

@@ -26,7 +26,8 @@ DISPOSITION_MAP = {
     "M13": "Route", "M18": "Route", "M19": "Route", "M20": "Route",
     "M21": "Route", "M22": "Informational", "M23": "Route", "M24": "Route",
     "M25": "Route", "M28": "Route", "M29": "Route", "M30": "Route",
-    "M31": "Route", "M32": "Route"
+    "M31": "Route", "M32": "Route", "M33": "Route", "M34": "Route",
+    "M35": "Route", "M36": "Route"
 }
 
 def _load_specids(feature=None):
@@ -457,6 +458,105 @@ def _check_m32(spec_text, add):
             add("M32", "MEDIUM", "spec.md:\u00a714", f"{dec_id} missing required '**Rationale**' sub-item")
 
 
+def _check_contract_risks(spec_text, if_records, section_9, add):
+    """Catch high-value contract gaps that lexical coverage cannot prove.
+
+    These checks deliberately flag only explicit wording patterns. They do not
+    decide the product behaviour; they force the owner command to resolve a
+    missing decision before plan/tasks can turn it into code.
+    """
+    id_texts = _extract_id_texts(spec_text)
+
+    # An exact-one audit guarantee spans at least two writes. Without an
+    # atomic, compensating, or explicitly partial-failure policy, the contract
+    # has no defined behaviour when the second write fails.
+    has_exact_one_audit = bool(
+        re.search(r"exactly\s+one\s+(?:corresponding\s+)?audit(?:\s+log)?", spec_text, re.IGNORECASE)
+        or re.search(r"one\s+audit\s+log\s+entry", spec_text, re.IGNORECASE)
+    )
+    has_failure_policy = bool(
+        re.search(
+            r"\b(?:atomic(?:ity)?|transaction(?:al)?|all[- ]or[- ]nothing|"
+            r"compensat(?:e|ion|ing)|rollback|partial[- ]failure|best[- ]effort)\b",
+            spec_text,
+            re.IGNORECASE,
+        )
+    )
+    if has_exact_one_audit and not has_failure_policy:
+        add(
+            "M33",
+            "HIGH",
+            "spec.md:\u00a710 / \u00a714",
+            "Exact-one audit guarantee has no atomicity, compensation, or partial-failure semantics",
+        )
+
+    # Pagination is not a complete contract when it is only named as an input
+    # and the response shape remains an unqualified array.
+    for if_id, record in if_records.items():
+        input_text = record["fields"].get("Input", "")
+        if not re.search(r"\bpagination\b", input_text, re.IGNORECASE):
+            continue
+        has_envelope = bool(
+            re.search(r"pagination\s+envelope", section_9, re.IGNORECASE)
+            or re.search(r"\bCONV-\d{3}\b", section_9)
+        )
+        if not has_envelope:
+            add(
+                "M34",
+                "HIGH",
+                f"spec.md:\u00a79 ({if_id})",
+                "Pagination is named in interface input without a response envelope or CONV definition",
+            )
+
+    # Detect a direct contradiction that is easy for a weak model to miss:
+    # an edge says a newly-created entity has no audit history while a core
+    # requirement says creation always writes an audit entry.
+    create_audit_ids = [
+        sid for sid, text in id_texts.items()
+        if sid.startswith(("REQ-", "INV-"))
+        and "audit" in text.lower()
+        and re.search(r"\b(?:every|each|all)\b", text, re.IGNORECASE)
+        and re.search(r"audit.*creat|creat.*audit", text, re.IGNORECASE)
+    ]
+    for sid, text in id_texts.items():
+        if not sid.startswith("EDGE-"):
+            continue
+        lowered = text.lower()
+        says_no_history = bool(
+            re.search(r"no\s+audit(?:\s+history)?", lowered)
+            or re.search(r"empty\s+audit(?:\s+history)?", lowered)
+            or re.search(r"audit(?:\s+history)?[^\n]*empty\s+array", lowered)
+        )
+        if says_no_history and create_audit_ids and re.search(r"newly|new|created", lowered):
+            add(
+                "M35",
+                "HIGH",
+                f"spec.md:\u00a711 ({sid})",
+                f"{sid} conflicts with creation-audit guarantee(s): {', '.join(create_audit_ids)}",
+            )
+
+    # A requirement for changed-field deltas and a decision for full snapshots
+    # need an explicit reconciliation. Otherwise tests and implementation can
+    # both appear correct while recording different meanings of "before/after".
+    has_changed_fields = any(
+        "changed fields" in text.lower()
+        for sid, text in id_texts.items()
+        if sid.startswith(("REQ-", "IF-", "AC-"))
+    )
+    has_full_snapshots = any(
+        "full" in text.lower() and "snapshot" in text.lower()
+        for sid, text in id_texts.items()
+        if sid.startswith("DEC-")
+    )
+    if has_changed_fields and has_full_snapshots:
+        add(
+            "M36",
+            "HIGH",
+            "spec.md:\u00a74 / \u00a714",
+            "Contract mixes changed-field audit semantics with a full-snapshot decision without reconciliation",
+        )
+
+
 def _check_m11(spec, plan, tasks, have_plan, have_tasks, add):
     if have_plan and spec.stat().st_mtime > plan.stat().st_mtime:
         add("M11", "MEDIUM", "spec.md/plan.md", "spec.md modified after plan.md")
@@ -720,6 +820,7 @@ def cmd_validate(args):
     _check_m30(spec_text, defined_ids, ac_inline_covers, add)
     _check_m31(spec_text, add)
     _check_m32(spec_text, add)
+    _check_contract_risks(spec_text, if_records, section_9, add)
     _check_m11(spec, plan, tasks, have_plan, have_tasks, add)
 
     total = len(findings)

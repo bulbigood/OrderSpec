@@ -240,6 +240,18 @@ tests/example/test_new.py    [NEW]
 
 ### Step 11: Emit Mechanism Matrix
 
+Before emitting rows, verify two bindings:
+
+1. primary_files is the boundary that directly realizes the mechanism, not a
+   nearby coordinator. For example, audit-log immutability belongs to the
+   write boundary that blocks updates/deletes, not merely to an audit-create
+   service.
+2. test_type matches the evidence topology: unit mechanisms require a unit
+   test path in the manifest; integration mechanisms require an integration
+   test path. If the repository has no suitable path, add it to the plan
+   manifest and map it to tasks. Never label an implementation mechanism
+   documented or integration-only to avoid creating the needed test.
+
 Write mechanism decisions to machine state. You MUST NOT author a mechanism table in `plan.md`.
 
 **1. Get Spec IDs:**
