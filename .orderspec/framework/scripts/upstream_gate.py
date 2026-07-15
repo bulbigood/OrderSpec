@@ -47,6 +47,17 @@ def empty_arg(value):
     return value is None or str(value).strip() == ""
 
 
+def looks_like_unset_var(path):
+    """Detect paths like '/plan.md' that result from empty shell variables.
+
+    When an LLM forgets to run `eval "$(setup.py paths --shell-vars)"` or
+    the shell session resets, variables like $FEATURE_DIR expand to empty.
+    This turns "$FEATURE_DIR/plan.md" into "/plan.md", which is a root-level
+    path and almost certainly an invocation error, not a real file.
+    """
+    return bool(re.match(r'^/[a-zA-Z0-9_.-]+$', path))
+
+
 def parse_verdict(report_path):
     """Parse the verdict from a gate report file.
 
@@ -142,6 +153,32 @@ def main():
             "block": True,
             "reason": "empty --report argument; shell variables may not be initialized",
             "report": "",
+            "upstream_name": upstream_name,
+            "this": this_cmd,
+            "recheck": recheck_cmd,
+        })
+        sys.exit(64)
+
+    # Catch paths like "/plan.md" that result from unset $FEATURE_DIR.
+    # This happens when the LLM forgets to eval the shell-vars output.
+    if looks_like_unset_var(artifact):
+        output_json({
+            "status": "error",
+            "block": True,
+            "reason": "artifact path looks like an unset shell variable expanded to root (e.g. /plan.md). Did you forget to run `eval \"$(setup.py paths --shell-vars)\"`?",
+            "artifact": artifact,
+            "upstream_name": upstream_name,
+            "this": this_cmd,
+            "build": build_cmd,
+        })
+        sys.exit(64)
+
+    if looks_like_unset_var(report):
+        output_json({
+            "status": "error",
+            "block": True,
+            "reason": "report path looks like an unset shell variable expanded to root (e.g. /spec-report.md). Did you forget to run `eval \"$(setup.py paths --shell-vars)\"`?",
+            "report": report,
             "upstream_name": upstream_name,
             "this": this_cmd,
             "recheck": recheck_cmd,
