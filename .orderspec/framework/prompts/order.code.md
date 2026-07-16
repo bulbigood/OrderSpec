@@ -3,7 +3,7 @@ orderspec:
   artifact: command_prompt
   command: order.code
   phase: implement
-description: Execute tasks.md phase by phase in sequential task order, respecting [P] parallel hints, story checkpoints, and the irreversible Contract GATE.
+description: Execute every tasks.md task in a sub-agent, phase by phase in sequential task order, respecting [P] parallel hints, story checkpoints, and the irreversible Contract GATE.
 ---
 
 ## User Input
@@ -19,7 +19,8 @@ You **MUST** consider the user input before proceeding (if not empty).
 `order.code` **executes** — it makes no design decisions. All decisions live in `spec.md` (WHAT) and `plan.md` (HOW); `tasks.md` defines ORDER.
 
 - **Tasks are self-contained**: each task carries its file path, spec IDs, and a ≤15-word paraphrase. Execute from the task line; open `spec.md` ONLY if a paraphrase is insufficient to act — never preload it.
-- **Sequential by default, `[P]` is a hint**: tasks execute top-to-bottom in ID order. `[P]` means a task is file-disjoint from adjacent `[P]` tasks, so they MAY run concurrently. Sequential execution is always correct on its own.
+- **Sub-agent execution is mandatory**: every unchecked task MUST be delegated to its own sub-agent. The coordinator orchestrates, validates results, updates `[X]` markers, and reports; it MUST NOT implement a task itself.
+- **Sequential by default, `[P]` is a hint**: tasks execute top-to-bottom in ID order. `[P]` means a task is file-disjoint from adjacent `[P]` tasks, so their sub-agents MAY run concurrently. Sequential execution remains the fallback for any task that is not proven safe to parallelize.
 - **Resumable**: tasks marked `[X]` are done — skip them, never redo or "improve". A re-run continues from the first unchecked task. Never remove `[X]` markers.
 - **No silent deviations**: if a task cannot be executed as written (missing path, contradiction with `plan.md`, broken dependency), apply the Deviation Rule below — do not improvise.
 
@@ -74,9 +75,10 @@ CODE_STOPPED: no active feature
 
 Determine mode before writing any file. State the mode in chat.
 
-1. **Resume** — `tasks.md` exists, some tasks `[X]`, `$ARGUMENTS` empty or `--resume`. Continue from first unchecked task.
-2. **Force-Implement** — `tasks.md` exists, `$ARGUMENTS` contains `--force`. Bypass upstream gate halt; record override in completion report.
-3. **Refresh-blocked** — `tasks.md` does not exist → STOP (upstream gate handles this in Step 4).
+1. **Sub-agent orchestration** — required execution mode. Confirm that the current agent can dispatch sub-agents and wait for their results. If it cannot, STOP with `CODE_BLOCKED: sub-agents unavailable`; do not execute tasks in the coordinator.
+2. **Resume** — `tasks.md` exists, some tasks `[X]`, `$ARGUMENTS` empty or `--resume`. Continue from first unchecked task.
+3. **Force-Implement** — `tasks.md` exists, `$ARGUMENTS` contains `--force`. Bypass upstream gate halt; record override in completion report.
+4. **Refresh-blocked** — `tasks.md` does not exist → STOP (upstream gate handles this in Step 4).
 
 ### Step 4: Upstream Gate Guard
 
@@ -206,20 +208,28 @@ Run phases strictly in order (hard sequential barriers). Within a phase, execute
 #### The Loop
 
 1. Skip tasks already marked `[X]` (resume support — never redo).
-2. Execute the current task (see Per-Task Rules).
-3. After completing each task: mark it `[X]` in `tasks.md` immediately, before starting the next task.
-4. Advance to the next unchecked task in ID order.
+2. Build the next execution unit from the current phase: one unchecked task, or one adjacent `[P]` group proven safe by the parallelism rules below.
+3. Dispatch every task in the execution unit to its own sub-agent (see Per-Task Rules).
+4. Wait for the sub-agent or all sub-agents, verify results, then mark each successful task `[X]` in `tasks.md` before dispatching the next execution unit.
+5. Advance to the next unchecked task in ID order. Do not leave the phase until every task and its checkpoint are complete.
 
-#### Parallelism (`[P]`) — opt-in, verified, never assumed
+#### Sub-agent dispatch and parallelism (`[P]`) — mandatory delegation, opt-in concurrency
 
-- **Default**: execute sequentially. `[P]` is only a hint that adjacent marked tasks MAY be safe to run concurrently.
-- **Single-agent mode**: ignore `[P]` entirely — run everything sequentially in ID order. This is always correct.
-- **Orchestrator mode** (sub-agents available) — before dispatching any group of adjacent `[P]` tasks concurrently, VERIFY file-disjointness:
+- The coordinator MUST dispatch every unchecked task to a separate sub-agent. A task is not complete until its sub-agent reports success and the coordinator verifies the result.
+- Give each sub-agent the task line, its phase, relevant `plan.md` pathmanifest context, applicable project contracts, and the task's narrowly required execution rules. The sub-agent may open the specific `spec.md` section named by the task only when the task paraphrase is insufficient.
+- The sub-agent MUST touch only the file named in the task's `path` field, must follow the task line and `plan.md`, and must report the task ID, changed files, verification result, and any `DEVIATION:` line. It MUST NOT edit `[X]` markers, start another sub-agent, or advance to another task.
+- Tasks without `[P]` are dispatched one at a time in ID order. Wait for the sub-agent, verify success, then mark that task `[X]` before dispatching the next task.
+- An adjacent group of `[P]` tasks MAY be dispatched concurrently, one sub-agent per task. `[P]` never overrides task order, phase barriers, dependencies, or the Contract GATE.
+- Before dispatching any concurrent `[P]` group, VERIFY file-disjointness:
   - For each candidate task, read its `path` field (field 2 of the task line).
   - Cross-check against `plan.md` pathmanifest to resolve any path aliases.
-  - If any two candidate tasks share a resolved path, they are NOT parallel-safe — run them sequentially regardless of the `[P]` marker.
-  - Only dispatch tasks concurrently when every pair in the group is file-disjoint. Wait for ALL to finish before continuing past the group.
-  - When in doubt, fall back to sequential. Losing parallelism is harmless; a same-file race is not.
+  - If any two candidate tasks share a resolved path, they are NOT parallel-safe — dispatch them sequentially regardless of `[P]`.
+  - If dependency, generated-output, test-fixture, or other shared-state safety is uncertain, dispatch sequentially.
+  - Only dispatch concurrently when every pair is file-disjoint and independently executable. Wait for ALL sub-agents to finish before marking successful tasks `[X]` or continuing past the group.
+- A `[P]` task not adjacent to another `[P]` task still runs in its own sub-agent, sequentially.
+- If sub-agent dispatch is unavailable or a sub-agent returns no usable result, STOP and report `CODE_BLOCKED: sub-agent execution unavailable for Tnnn`.
+- Never dispatch tasks from different phases concurrently. Never dispatch a later task while an earlier phase, story checkpoint, or GATE is incomplete.
+- When in doubt, fall back to sequential. Losing parallelism is harmless; a same-file race is not.
 
 #### Per-Task Rules
 
@@ -250,8 +260,8 @@ task unchecked and stop at that task with a precise route.
 
 | Level | On failure |
 |---|---|
-| Task (sequential) | Halt; report task ID, error, suspected cause |
-| Task (in a concurrent `[P]` group) | Finish sibling tasks already dispatched; report failed ones; do not advance past the group |
+| Task sub-agent (sequential) | Halt; report task ID, error, suspected cause |
+| Task sub-agent (in a concurrent `[P]` group) | Wait for sibling sub-agents already dispatched; mark only successful tasks `[X]`; report failed ones; do not advance past the group |
 | Checkpoint | Stay in current story phase; fix forward; re-verify |
 | GATE | HALT everything; Contract phase is forbidden until GATE passes |
 
@@ -319,6 +329,7 @@ python3 .orderspec/framework/scripts/traceability.py mark-consumed --report "$FE
 Report to chat:
 
 - **Tasks**: completed / total, per phase; confirm all completed tasks are marked `[X]` in tasks.md.
+- **Sub-agents**: confirm every executed task was delegated to a sub-agent; report concurrent `[P]` groups and any sequential fallbacks.
 - **Coverage check**: `check-mechanisms` exit code (MUST be 0); one-line summary if defects found.
 - **Verification**: checkpoint results per story; GATE result; final test command output summary (pass/fail counts).
 - **Deviations log**: all `DEVIATION:` lines (or "none").
