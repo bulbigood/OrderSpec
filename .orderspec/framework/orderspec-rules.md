@@ -18,6 +18,22 @@ orderspec:
 > `constitution.md` may strengthen or extend these rules, but MUST NOT override,
 > weaken, or contradict this document.
 
+## Runtime Agent Boundary
+
+`.orderspec/framework/` is an opaque, framework-owned directory. Runtime agents
+MUST NOT open, read, inspect, search, enumerate, modify, delete, or otherwise
+investigate any file in this directory. This includes framework source code,
+prompts, schemas, protocols, templates, tests, and configuration.
+
+The only permitted runtime-agent interaction with this directory is invoking a
+documented framework script when the active command requires it and consuming
+the script's reported output, exit status, and other results. A script may
+read framework-owned files internally; that does not authorize the agent to
+inspect those files or their implementation.
+
+This boundary overrides any lower-level instruction that would require a
+runtime agent to inspect or edit `.orderspec/framework/` directly.
+
 ## 1. Authority Hierarchy
 
 OrderSpec uses the following authority hierarchy:
@@ -113,13 +129,23 @@ OrderSpec commands MUST NOT manually maintain command-specific file loading list
 
 Before command-specific logic, every command MUST perform Command Context Resolution.
 
-The resolver output is the only canonical list of framework rules, schemas, protocols, templates, configuration files, runtime state files, and project contracts that must be read before main command logic.
+The resolver output is the only canonical list of framework rules, schemas,
+protocols, templates, configuration files, runtime state files, and project
+contracts that the OrderSpec command runtime must load before main command
+logic.
 
-Commands MUST read every existing file returned in `to_read`, in returned order.
+The OrderSpec command runtime MUST load every existing file returned in
+`to_read`, in returned order. Runtime agents MUST NOT manually open any
+returned file under `.orderspec/framework/`; they must rely on the command
+runtime and documented script output.
 
-After a successful resolver invocation, commands MUST read all existing `to_read` files before running repository inspection, file-existence probes, command-specific scripts, or mode-specific logic, except when reporting resolver failure.
+After a successful resolver invocation, the OrderSpec command runtime MUST load
+all existing `to_read` files before running repository inspection,
+file-existence probes, command-specific scripts, or mode-specific logic, except
+when reporting resolver failure.
 
-Commands MUST interpret each resolved file according to its `usage` and `authority` fields.
+The OrderSpec command runtime MUST interpret each resolved file according to its
+`usage` and `authority` fields.
 
 Files required only during the main command algorithm may be read by that algorithm when needed. Examples include repository manifests inspected by bootstrap inference, template files used internally by deterministic scripts, feature artifacts selected during a feature-specific command, and implementation files inspected by code/check commands.
 
@@ -147,11 +173,17 @@ python3 .orderspec/framework/scripts/command_context.py resolve <order.command> 
 
 The resolver output is the only canonical source of command preload context.
 
-Agents MUST read every existing file returned in `to_read`, in returned order.
+The OrderSpec command runtime MUST load every existing file returned in
+`to_read`, in returned order. Runtime agents MUST NOT manually open any
+returned file under `.orderspec/framework/`.
 
-After a successful resolver invocation, agents MUST read all existing `to_read` files before running repository inspection, file-existence probes, command-specific scripts, or mode-specific logic, except when reporting resolver failure.
+After a successful resolver invocation, the OrderSpec command runtime MUST load
+all existing `to_read` files before running repository inspection,
+file-existence probes, command-specific scripts, or mode-specific logic, except
+when reporting resolver failure.
 
-Agents MUST interpret each resolved file according to its `usage` and `authority` fields.
+The OrderSpec command runtime MUST interpret each resolved file according to its
+`usage` and `authority` fields.
 
 If `ok` is `false` or `missing_required` is non-empty, the command MUST stop and report the missing required context.
 
@@ -228,9 +260,16 @@ Agents MUST NOT second-guess, reinterpret, silently override, or manually repair
 
 Agents MUST NOT hand-edit artifacts owned by a successful framework script unless the command prompt explicitly instructs them to do so.
 
-If a framework script exits non-zero, returns invalid JSON, reports validation errors, or reports missing required inputs, the agent MUST stop the current mutation flow and report the script output.
+If a framework script exits non-zero, returns invalid JSON, reports validation
+errors, reports missing required inputs, or otherwise produces a strange result,
+the agent MUST still treat that result as authoritative and continue the
+workflow based on it. The agent MUST NOT silently replace, reinterpret, repair,
+override, or work around the result.
 
-If framework script output appears to conflict with framework rules, the agent MUST stop and report the conflict. The agent MUST NOT invent a compromise behavior.
+If the agent believes a framework script is wrong, contradictory, or produces a
+strange result, it MUST continue without changing `.orderspec/framework/` and
+MUST mention the concern at the end of its response in a clearly labeled
+`Framework concerns` section, including the relevant reported result.
 
 Agents may summarize successful script output, but MUST NOT claim additional validation beyond what the script reported.
 
