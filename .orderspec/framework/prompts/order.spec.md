@@ -836,12 +836,17 @@ Before completion, reason through these checks. Do not write a checklist file.
 - IF `Failure` field must not contain template residue: `semicolon-separated`, `[Failure outcomes]`, or `None` as a literal value.
 - §6 references only valid `STACK-NNN`, `ARCH-NNN`, `CONV-NNN` IDs with neutral labels.
 - No unresolved blocking clarification remains.
+- No REQ contradicts another REQ, INV, or project contract constraint; no AC contradicts its covered REQ or IF; every `[narrowing REQ-NNN]` ASM preserves all cases required by that REQ.
+- NFRs do not mandate behaviour listed in §2 Out of Scope; quantitative thresholds have a source; every NFR has a sourced threshold, named standard, or qualitative SHOULD oracle.
 - Every REQ has acceptance coverage.
 - Every AC has inline `[Covers: ...]`.
 - IF `Covers` references defined IDs.
 - IF success/failure outcomes match related ACs.
+- Every declared IF input option has explicit success/failure behaviour and response semantics, including filters, optional fields, nullability, malformed identifiers, and pagination bounds, ordering, envelope, and empty-page semantics.
 - Authorization is specified for mutating interfaces and cross-owner reads (where the resource owner differs from the authenticated user).
 - Atomic/best-effort/compensating semantics are specified for multi-entity writes.
+- REQ/INV/IF wording is reconciled with EDGE, DEC, ASM, information-model fields, and §2 Out of Scope; contradiction review is not limited to the §10 grid.
+- Every absolute guarantee using `exactly`, `every`, `always`, or `never` identifies its supported write paths and failure states, or explicitly scopes the guarantee to defined paths.
 - Contradiction grid is present and has no unresolved conflict.
 - DEC/ASM separation is correct.
 - Tombstoned IDs remain strict anchors.

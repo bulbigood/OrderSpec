@@ -70,7 +70,10 @@ You MUST NOT downgrade or suppress imported findings.
 ## Semantic Inspection
 
 Read `spec.md`. Perform the following checks that require LLM judgment.
-For any finding, assign disposition `Route` and create a routing block.
+For any semantic finding, assign disposition `Route` and create a routing block.
+Keep each mechanical finding's `severity` and `disposition` exactly as provided by
+`traceability.py`; create a routing block for it only when its imported disposition
+is `Route`.
 
 **Important**: Semantic findings (S1-xxx) must be integrated into the report's Findings table alongside mechanical findings from traceability.py. Each semantic finding gets its own row with:
 - `ID`: S1-NNN
