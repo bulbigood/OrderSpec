@@ -114,6 +114,12 @@ If a script crashes or returns unparseable output, record `T0-001 (HIGH): mechan
 
 **Coverage is not re-litigated here.** The traceability tool already proved coverage at `/order.tasks` write time. You read the tool's output; you never re-derive or overrule it. There is no "uncovered ID" finding type in this gate.
 
+M4 is path-scoped: it reports a missing spec ref only when a `[USn]` task's
+exact path is the `primary_files` path of a `direct` mechanism. Empty refs are
+valid for story support tasks whose paths have no direct mechanism, including
+unit evidence, controller support, barrel, route-wiring, fixture, and GATE
+tasks. Do not route such tasks merely because they carry `[USn]`.
+
 ## Semantic Inspection
 
 Read `tasks.md`, `plan.md`, and `spec.md`. Perform the following checks that require LLM judgment.

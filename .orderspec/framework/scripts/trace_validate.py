@@ -329,11 +329,14 @@ def _check_tasks_coverage(ac_ids, defined_ids, task_refs, ck_of, add):
             add("M3", "HIGH", "tasks.md", f"{sid} is not referenced by any task")
 
 
-def _check_m4(task_lines, add):
+def _check_m4(task_lines, direct_primary_files, add):
     for line_num, line in task_lines:
         if not re.search(r"\[US\d+\]", line):
             continue
         parts = line.split(" | ")
+        task_path = parts[1].strip().lstrip("./") if len(parts) >= 2 else ""
+        if task_path not in direct_primary_files:
+            continue
         refs_str = parts[2].strip() if len(parts) >= 4 else ""
         has_ref = False
         if refs_str and " " not in refs_str:
@@ -799,18 +802,24 @@ def cmd_validate(args):
                             task_refs.add(rid)
 
         ck_of = {}
+        direct_primary_files = set()
         mtsv = state_dir(feature) / "mechanisms.tsv"
         if mtsv.exists() and not lint_file(mtsv, "mechanisms"):
             try:
                 for row in _read_table(mtsv, "mechanisms"):
                     ck_of[row["spec_id"]] = row.get("coverage_kind", "")
+                    if row.get("coverage_kind", "") == "direct":
+                        primary_file = row.get("primary_files", "").strip().lstrip("./")
+                        if primary_file:
+                            direct_primary_files.add(primary_file)
             except ValueError:
                 ck_of = {}
+                direct_primary_files = set()
 
         uj_ids = {sid for sid in defined_ids if sid.startswith("UJ-")}
 
         _check_tasks_coverage(ac_ids, defined_ids, task_refs, ck_of, add)
-        _check_m4(task_lines, add)
+        _check_m4(task_lines, direct_primary_files, add)
         _check_m5_tasks(task_refs, defined_ids, add)
         _check_m8(task_paths, plan, add)
         _check_m12(task_lines, add)

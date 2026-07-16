@@ -234,8 +234,9 @@ This is ordering, not coverage bookkeeping — coverage is the tool's job in Ste
 
 1.  List `UJ-NNN` by priority → user story phases (US1 ↔ UJ-001).
 2.  Place each `AC/EDGE/INV` under a UJ (or Setup/Contract if cross-cutting).
-3.  From `plan.md`, list every NEW/MOD file; assign each to the phase that first touches it.
-4.  Note the project's test command from `plan.md` (used verbatim in verification/GATE tasks).
+3.  Place each buildable Success Criterion (load, security, performance, or other executable evidence) under its owning UJ or cross-cutting phase; post-launch/business KPI criteria need no task.
+4.  From `plan.md`, list every NEW/MOD file; assign each to the phase that first touches it.
+5.  Note the project's test command from `plan.md` (used verbatim in verification/GATE tasks).
 
 ### Step 9: Write `tasks.md`
 
@@ -268,6 +269,7 @@ Rewrite `$TASKS_FILE` (which was initialized from `tasks-template.md` in Step 6)
 2. file path — one exact path from `plan.md`. No spaces. Raw path only — do NOT wrap it in backticks or any markdown. `extract-trace` matches the literal path; backticks make the field not match `plan.md` and silently drop the line's coverage.
 3. refs — OPTIONAL. Comma-separated spec IDs, NO SPACES (`REQ-001,AC-002`, never `REQ-001, AC-002`). An infrastructure task (barrel/index registration, route wiring, test fixtures, GATE/verification scaffolding) carries NO refs — write `... | path |  | gloss` (empty field 3) or omit field 3. This is LEGAL and contributes no coverage by design. The contract is "every DIRECT mechanism is covered by ≥1 task" — it is NOT "every task has a ref". NEVER invent a ref to give a task a home.
   **AC refs belong on test-WRITING tasks** (the task that writes the test code exercising that AC), NOT on verification/GATE tasks. Verification/GATE tasks carry EMPTY refs and list asserted AC/INV IDs in the gloss. Coverage of an AC is proven by the test-writing task that creates its test, not by the verification task that runs the suite.
+  A story-phase task may also have empty refs when no direct mechanism has this task's exact path in `primary_files` (for example, unit evidence tasks, controller support tasks, or wiring tasks). Do not invent or park a ref only to satisfy the `[USn]` marker; ref presence is required only on story tasks that own a direct mechanism path.
 4. gloss — ≤15-word paraphrase. Free text, never grepped (so prose like "see AC-999" is safe).
 
 **Constraints the tool ENFORCES** (any violation fails `extract-trace` with rc=3, file untouched):
@@ -289,7 +291,7 @@ Rewrite `$TASKS_FILE` (which was initialized from `tasks-template.md` in Step 6)
 - BAD: `- [ ] T020 [US1] | src/x.js | REQ-003,REQ-004,REQ-005,REQ-006 | does everything` (4 refs → rejected)
 - BAD: `- [ ] T003 | src/models/index.js | REQ-001 | barrel` (`REQ-001`'s `primary_files` is the model file, NOT `index.js` → filler/mis-attributed ref → rejected rc=3; leave refs EMPTY instead)
 
-`[USn]` is required on story-phase tasks (1:1 with `UJ-00n`), omitted in Setup/Expand and Contract.
+`[USn]` is required on story-phase tasks (1:1 with `UJ-00n`), including valid no-ref support tasks; omitted in Setup/Expand and Contract. A no-ref story task is valid when its exact path is not a direct mechanism's `primary_files` path.
 For endpoint tasks, fold non-2xx semantics from Spec § API Contracts into the gloss (e.g. `404 if task never existed including soft-deleted`).
 
 ### Task Context Block
@@ -448,6 +450,8 @@ Report to chat:
 - [ ] AC refs on test-writing tasks only (not on verification/GATE); cross-cutting test tasks omit `[USn]`
 - [ ] Placement validated: all `plan.md` files touched, no path outside `plan.md`, no same-file conflict within an adjacent `[P]` group
 - [ ] `validate --stage tasks` has no blocking findings
+- [ ] Every story task whose path owns a direct mechanism carries at least one valid spec ref; no-ref support tasks are allowed only on paths without direct mechanisms
+- [ ] Every buildable Success Criterion is represented by an executable task or verification path; KPI-only criteria are exempt
 - [ ] `task_context.py validate` passed; every task has a deterministic read whitelist
 - [ ] Active feature status updated to `tasks`
 - [ ] Completion Report provided, including manual/orchestrator recommendation to run `/order.tasks-check`

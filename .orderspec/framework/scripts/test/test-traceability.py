@@ -457,7 +457,36 @@ if has_finding(data, "M4"):
 else:
     bad("M4 neg: [US] task with no refs not detected", f"findings={[f['check'] for f in data.get('findings',[])]}")
 
-# 19. M4 positive: story task with [US] marker and refs → no M4 finding
+# 19. M4 positive: story support task without a direct primary mechanism may omit refs
+reset_feature()
+write_spec(MINIMAL_SPEC)
+write_plan("""# Plan
+
+## Physical Project Structure
+
+```pathmanifest
+src/service.py    [NEW]
+src/controller.js    [NEW]
+```
+""")
+(SPECS / "tasks.md").write_text("""# Tasks
+
+## Phase 2: US1
+
+- [ ] T002 [US1] | src/controller.js |  | controller support task without direct mechanism ref
+""", encoding="utf-8")
+run_trace("extract-spec-ids", F)
+json_data = json.dumps([
+    {"spec_id": "REQ-001", "coverage_kind": "direct", "mechanism": "Test", "primary_files": "src/service.py", "test_type": "unit"}
+])
+run_trace("put-mechanisms", "--json", F, input_text=json_data)
+rc, data = run_validate("tasks")
+if not has_finding(data, "M4"):
+    ok("M4 pos: story support task without direct primary path may omit refs")
+else:
+    bad("M4 pos: support task without direct primary path falsely flagged", finding_msg(data, "M4"))
+
+# 20. M4 positive: story task with [US] marker and refs → no M4 finding
 reset_feature()
 write_spec(MINIMAL_SPEC)
 write_plan("""# Plan
@@ -486,7 +515,7 @@ if not has_finding(data, "M4"):
 else:
     bad("M4 pos: [US] task with refs false positive", finding_msg(data, "M4"))
 
-# 20. M4 positive: non-story task (no [US]) with no refs → no M4 finding
+# 21. M4 positive: non-story task (no [US]) with no refs → no M4 finding
 reset_feature()
 write_spec(MINIMAL_SPEC)
 write_plan("""# Plan
@@ -515,7 +544,7 @@ if not has_finding(data, "M4"):
 else:
     bad("M4 pos: non-story task false positive", finding_msg(data, "M4"))
 
-# 21. M4 positive: cross-cutting test task (no [US]) with AC refs → no M4 finding
+# 22. M4 positive: cross-cutting test task (no [US]) with AC refs → no M4 finding
 reset_feature()
 write_spec(MINIMAL_SPEC)
 write_plan("""# Plan
@@ -545,7 +574,7 @@ if not has_finding(data, "M4"):
 else:
     bad("M4 pos: cross-cutting test task false positive", finding_msg(data, "M4"))
 
-# 22. Double coverage not penalized: same AC ref on two tasks
+# 23. Double coverage not penalized: same AC ref on two tasks
 reset_feature()
 write_spec(MINIMAL_SPEC)
 write_plan("""# Plan
