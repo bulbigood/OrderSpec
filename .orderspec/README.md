@@ -55,6 +55,17 @@ OrderSpec splits each feature into three documents with distinct roles:
 
 The key insight: **`plan.md` depends on the state of the repository; `spec.md` does not.**
 
+Command context makes feature dependencies explicit. For an active feature,
+`/order.plan` requires `spec.md`, `/order.tasks` requires `spec.md` and
+`plan.md`, and `/order.code` requires `plan.md` and `tasks.md`. `/order.spec`
+also receives the framework `spec-template.md` through command context.
+
+During `/order.code`, `task_context.py` resolves the literal source-file
+whitelist for each task. `task_contract_context.py` separately resolves task
+refs to exact `spec.md` ID excerpts, `mechanisms.tsv` rows, and story-phase
+Goal/Verification context. Workers receive this contract context in their
+packet and do not infer requirements from task glosses or repository scans.
+
 Each phase can be followed by an optional verification gate (`/order.spec-check`, `/order.plan-check`, etc.) that checks the previous artifact before you proceed.
 
 ## Why OrderSpec exists

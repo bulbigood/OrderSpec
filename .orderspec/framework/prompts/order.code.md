@@ -252,7 +252,7 @@ Read the following from `$FEATURE_DIR`:
 
 1. **REQUIRED**: `tasks.md` — phases, task lines (`T### [P?] [US?] | path | refs? | gloss`), checkpoints, GATE.
 2. **REQUIRED**: `plan.md` — tech stack, file structure (pathmanifest), build/test commands.
-3. **ON DEMAND ONLY**: `spec.md` — open a specific section only when a task's spec-ID paraphrase is insufficient to act. Do not preload.
+3. `spec.md` is available to the coordinator for resolving contract IDs and preparing targeted excerpts. Workers receive those excerpts through `contract_context`; they do not open `spec.md` unless it is explicitly listed by the resolver.
 
 Do NOT look for a hand-built Traceability Matrix or Files Touched table in `tasks.md` — those are derived artifacts; `order.tasks` does not author them. For file-disjointness verification (Step 9), use `plan.md` pathmanifest and task `path` fields directly.
 
@@ -278,6 +278,17 @@ python3 .orderspec/framework/scripts/task_context.py validate \
 
 If this exits non-zero, STOP and route to `/order.tasks`. Do not construct a
 replacement whitelist in `/order.code`.
+
+Validate that every task's referenced spec IDs can be resolved into exact
+contract excerpts and that its phase context is available:
+
+```bash
+python3 .orderspec/framework/scripts/task_contract_context.py validate \
+  --feature-dir "$FEATURE_DIR" --json
+```
+
+If this exits non-zero, STOP and route to `/order.tasks` or `/order.spec` as
+reported. Do not paraphrase missing contract IDs in the worker packet.
 
 - Every task line matches: `- [ ] T### [P?] [US?] | path | refs? | gloss` (or `- [X] ...` for completed).
 - Task IDs are monotonically non-decreasing (T001, T002, ...). Gaps ARE legal (T005, T010, T015). Duplicates and out-of-order IDs are rejected by `task_progress.py`; route invalid task structure to `/order.tasks`.
@@ -306,8 +317,13 @@ Run phases strictly in order (hard sequential barriers). Within a phase, execute
   python3 .orderspec/framework/scripts/task_context.py resolve \
     --feature-dir "$FEATURE_DIR" --task-id "$TASK_ID" --json
   ```
+- Resolve the task's contract context before dispatch:
+  ```bash
+  python3 .orderspec/framework/scripts/task_contract_context.py resolve \
+    --feature-dir "$FEATURE_DIR" --task-id "$TASK_ID" --json
+  ```
 - The resolver output is authoritative. The coordinator MUST pass its `to_read` entries verbatim and its `write_paths` verbatim. The coordinator MUST NOT construct, expand, reorder, or replace this file list.
-- The packet contains the exact task line, imperative objective, resolver `to_read`, resolver `write_paths`, inline context excerpts, verification requirement, and stop conditions.
+- The packet contains the exact task line, imperative objective, resolver `to_read`, resolver `write_paths`, exact `contract_context` output, inline context excerpts, verification requirement, and stop conditions.
 - The coordinator may read command context, project contracts, feature artifacts, and relevant source files to prepare inline context. The worker receives only resolver-listed files and inline excerpts. The worker MUST NOT scan the repository or open files absent from resolver output.
 - In `DELEGATED`, the worker MUST touch only the task `path`, must not edit `[X]`, start another worker, or advance to another task. It returns the protocol result object.
 - In `LOCAL_PHASE`/`LOCAL_ALL`, the coordinator follows the same packet and result rules. It MUST NOT use local fallback as permission to broaden scope.
@@ -475,6 +491,7 @@ Report to chat:
 - [ ] All tasks executed in phase + task-ID order; each successful marker written by `task_progress.py`, or a precise stopping point reported
 - [ ] `[P]` groups run concurrently ONLY after path-disjoint verification via `plan.md` pathmanifest; otherwise sequential
 - [ ] All story checkpoints passed; GATE passed before any Contract task ran
+- [ ] `task_context.py validate` and `task_contract_context.py validate` passed before execution
 - [ ] `check-mechanisms` exited 0 (no coverage defects); defects routed to `/order.tasks` or `/order.spec`, not silently patched
 - [ ] Deviations logged and reported; no silent design decisions made
 - [ ] Active feature status updated to `implementing`

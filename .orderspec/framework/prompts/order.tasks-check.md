@@ -102,9 +102,19 @@ python3 .orderspec/framework/scripts/task_context.py validate \
   --feature-dir "$FEATURE_DIR" --json
 ```
 
+```bash
+python3 .orderspec/framework/scripts/task_contract_context.py validate \
+  --feature-dir "$FEATURE_DIR" --json
+```
+
 If this exits non-zero, import one blocking finding:
 `T0-009 (HIGH): task context whitelist invalid`, include the script's exact
 validation errors, route to `/order.tasks`, and stop semantic inspection.
+
+If contract-context validation exits non-zero, import one blocking finding:
+`T0-010 (HIGH): task contract context invalid`, include the script's exact
+errors, and route an undefined spec ID to `/order.spec` or a missing phase
+context to `/order.tasks`.
 
 The JSON output is the **ground truth** for mechanical findings, inventory, categories, matrices, and contradiction grid data.
 You MUST import all findings exactly as provided, including their `severity` and `disposition`.

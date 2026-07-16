@@ -158,10 +158,6 @@ def validate_payload(
             errors.append(
                 f"task {task_id} target_state {target_state!r} disagrees with plan.md {manifest_tag}: {task_path}"
             )
-        prior_writer = any(
-            prior["path"] == task_path and prior["line_number"] < record["line_number"]
-            for prior in records
-        )
         if target_state in {"mod", "del"} and task_path not in read_paths:
             errors.append(f"task {task_id} write target is not in read whitelist: {task_path}")
 
@@ -173,10 +169,14 @@ def validate_payload(
                 errors.append(f"task {task_id} read path escapes repository: {path}")
                 continue
             if not absolute.is_file():
+                # Sequential tasks may consume a file created by an earlier
+                # [NEW] task before that file exists on disk.
                 if (
-                    target_state == "new"
-                    and path == task_path
-                    and prior_writer
+                    pathmanifest.get(path) == "[NEW]"
+                    and any(
+                        prior["path"] == path and prior["line_number"] < record["line_number"]
+                        for prior in records
+                    )
                 ):
                     continue
                 if target_state == "del" and path == task_path and record["status"] in {"x", "X"}:

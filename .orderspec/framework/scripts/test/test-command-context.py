@@ -106,6 +106,15 @@ def setup_base_files(
             WORK / ".orderspec" / "framework" / "protocols" / "tooling-protocol.md",
             "# Tooling Protocol\n",
         )
+    write(
+        WORK / ".orderspec" / "framework" / "protocols" / "sub-agent-execution.md",
+        "# Sub-agent Execution\n",
+    )
+    write(
+        WORK / ".orderspec" / "framework" / "protocols" / "sub-agent-rules.md",
+        "# Sub-agent Rules\n",
+    )
+    write(WORK / ".orderspec" / "framework" / "schemas" / "task-context.schema.json", "{}\n")
 
 
     if with_contracts:
@@ -113,6 +122,10 @@ def setup_base_files(
         write(WORK / "stack.md", "# Stack\n")
         write(WORK / "architecture.md", "# Architecture\n")
         write(WORK / "conventions.md", "# Conventions\n")
+        write(WORK / ".orderspec" / "contracts" / "constitution.md", "# Constitution\n")
+        write(WORK / ".orderspec" / "contracts" / "stack.md", "# Stack\n")
+        write(WORK / ".orderspec" / "contracts" / "architecture.md", "# Architecture\n")
+        write(WORK / ".orderspec" / "contracts" / "conventions.md", "# Conventions\n")
 
     if with_tooling_config:
         write(WORK / ".orderspec" / "config" / "tooling.json", "{}\n")
@@ -788,7 +801,7 @@ else:
 reset_work()
 setup_base_files()
 import shutil as _shutil
-_real_manifest = Path(__file__).resolve().parent.parent / "command-context.json"
+_real_manifest = Path(__file__).resolve().parents[2] / "command-context.json"
 if _real_manifest.exists():
     _dst = WORK / ".orderspec" / "framework" / "command-context.json"
     _dst.parent.mkdir(parents=True, exist_ok=True)
@@ -813,10 +826,10 @@ if _real_manifest.exists():
     ]
     included = [
         ".orderspec/framework/orderspec-rules.md",
-        "constitution.md",
-        "stack.md",
-        "architecture.md",
-        "conventions.md",
+        ".orderspec/contracts/constitution.md",
+        ".orderspec/contracts/stack.md",
+        ".orderspec/contracts/architecture.md",
+        ".orderspec/contracts/conventions.md",
     ]
     if (
         rc == 0
@@ -869,7 +882,12 @@ if _real_manifest.exists():
     write(WORK / ".orderspec" / "orderspec.json", '{"framework_version":"0.3.0","schema_versions":{}}\n')
     rc, data, err = run_cc_json("resolve", "order.plan", "--json")
     p = paths(data)
-    expected_contracts = ["constitution.md", "stack.md", "architecture.md", "conventions.md"]
+    expected_contracts = [
+        ".orderspec/contracts/constitution.md",
+        ".orderspec/contracts/stack.md",
+        ".orderspec/contracts/architecture.md",
+        ".orderspec/contracts/conventions.md",
+    ]
     if rc == 0 and all(c in p for c in expected_contracts):
         ok("real manifest: order.plan includes all project contracts")
     else:
@@ -934,6 +952,46 @@ if _real_manifest.exists():
         bad(f"order.code exclusions wrong :: rc={rc} paths={p} err={err!r}")
 else:
     ok("real manifest order.code test skipped")
+
+
+# 29f. real manifest: feature_context materializes active feature artifacts
+reset_work()
+setup_base_files()
+if _real_manifest.exists():
+    _shutil.copy2(_real_manifest, manifest_path())
+    for _name in ("plan-template.md", "tasks-template.md", "spec-template.md", "report-template.md"):
+        write(WORK / ".orderspec" / "framework" / "templates" / _name, f"# {_name}\n")
+    feature = WORK / ".orderspec" / "features" / "001-demo"
+    for _name in ("spec.md", "plan.md", "tasks.md"):
+        write(feature / _name, f"# {_name}\n")
+    write(
+        WORK / ".orderspec" / "state" / "active-feature.json",
+        json.dumps(
+            {
+                "feature_id": "001-demo",
+                "feature_directory": ".orderspec/features/001-demo",
+                "status": "tasks",
+            }
+        ),
+    )
+    rc, data, err = run_cc_json("resolve", "order.code", "--json")
+    items = {item["path"]: item for item in data.get("to_read", [])}
+    expected_feature_paths = {
+        ".orderspec/features/001-demo/plan.md",
+        ".orderspec/features/001-demo/tasks.md",
+    }
+    if (
+        rc == 0
+        and expected_feature_paths.issubset(items)
+        and all(items[path]["authority"] == "feature" for path in expected_feature_paths)
+        and all(items[path]["required"] is True for path in expected_feature_paths)
+        and data.get("feature_context", {}).get("active") is True
+    ):
+        ok("real manifest: order.code requires active feature plan and tasks")
+    else:
+        bad(f"order.code feature context wrong :: rc={rc} items={items} data={data} err={err!r}")
+else:
+    ok("real manifest feature context test skipped")
 
 
 # 30. v2 ref and group entries expand in order

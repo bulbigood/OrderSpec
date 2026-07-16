@@ -25,7 +25,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 Core principles:
 
 - **Disposable & derived**: regenerated freely; overwrite without preserving prior content. You make NO design decisions — every choice already lives in `plan.md`. You only compose a spec ID with a file path and sequence the result. Invent nothing.
-- **Weak-LLM-proof**: each task is executable without re-reading the spec — it carries its file path, the spec IDs that define "done", and a ≤15-word paraphrase of the asserted criteria.
+- **Weak-LLM-proof**: each task is executable without re-reading the spec — it carries its file path and spec IDs, while `/order.code` resolves those IDs into exact contract excerpts before execution.
 - **Sequential by default**: structure is **Phases → Tasks**. Phases are hard sequential barriers; within a phase, tasks run top-to-bottom and that order MUST be correct on its own. `[P]` parallelism is an OPTIONAL annotation layered on top — never a precondition for correctness.
 - **Coverage is proven, not asserted**: you do NOT hand-build, hand-count, or hand-fill any traceability matrix. `traceability.py extract-trace` projects coverage from your task lines and is the SOLE arbiter of completeness. Your job is correct task lines; the tool decides if they cover everything.
 
@@ -318,13 +318,21 @@ needs to inspect, in read order, including a `mod` or `del` task write target.
 A `[NEW]` write target is not included until it exists. Do not list
 directories, globs, or broad repository scans.
 Do not include Markdown unless it is the task's own write target. Derive the
-list from the task objective, `plan.md`, and targeted source inspection. If a
-required dependency cannot be stated as an exact file, route the defect to
-`/order.plan`; do not leave worker context implicit.
+list from the task objective, `plan.md`, and targeted source inspection. An
+exact `[NEW]` path written by an earlier task may be listed as a dependency even
+before it exists on disk; sequential execution guarantees it is available when
+the later task runs. If a required dependency cannot be stated as an exact
+file, route the defect to `/order.plan`; do not leave worker context implicit.
 
 `task_context.py` owns parsing, validation, file-existence checks, and resolver
 output. `/order.code` consumes its output verbatim. Do not hand-author a
 second whitelist in a prompt, packet, or coordinator note.
+
+`task_contract_context.py` owns deterministic resolution of task refs to exact
+ID blocks from `spec.md`, relevant `mechanisms.tsv` rows, and the current phase
+Goal/Verification context. `/order.code` MUST run it for every task and pass
+its output verbatim to the worker. Task glosses remain short execution hints;
+they are not substitutes for the resolved contract excerpts.
 
 **Prose to fill by hand** (NOT machine state): the Execution Order line (Phase 1 → US1 → STOP & VALIDATE → US2.. → GATE → Contract), and each story phase's Goal and Verification lines (from Spec § Acceptance Criteria).
 
@@ -389,8 +397,14 @@ python3 .orderspec/framework/scripts/task_context.py validate \
   --feature-dir "$FEATURE_DIR" --json
 ```
 
-If this exits non-zero, stop and route to `/order.tasks`. Do not repair the
-block from `/order.code` or bypass missing read files.
+```bash
+python3 .orderspec/framework/scripts/task_contract_context.py validate \
+  --feature-dir "$FEATURE_DIR" --json
+```
+
+If either command exits non-zero, stop and route to `/order.tasks` or
+`/order.spec` as reported. Do not repair the block from `/order.code` or
+bypass missing read files or contract IDs.
 
 Blocking findings (`severity: HIGH` or `CRITICAL`) must be fixed. Fix the data in `tasks.md` or `mechanisms.tsv` and re-run validation. Do not maintain a separate list of checks; trust the script output.
 
@@ -453,5 +467,6 @@ Report to chat:
 - [ ] Every story task whose path owns a direct mechanism carries at least one valid spec ref; no-ref support tasks are allowed only on paths without direct mechanisms
 - [ ] Every buildable Success Criterion is represented by an executable task or verification path; KPI-only criteria are exempt
 - [ ] `task_context.py validate` passed; every task has a deterministic read whitelist
+- [ ] `task_contract_context.py validate` passed; every task ref resolves to exact spec excerpts and phase context
 - [ ] Active feature status updated to `tasks`
 - [ ] Completion Report provided, including manual/orchestrator recommendation to run `/order.tasks-check`

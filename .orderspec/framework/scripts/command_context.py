@@ -57,6 +57,12 @@ ALLOWED_FEATURE_ARTIFACTS = {
     "tasks",
 }
 
+FEATURE_ARTIFACT_FILES = {
+    "spec": "spec.md",
+    "plan": "plan.md",
+    "tasks": "tasks.md",
+}
+
 
 def posix(path: Path | str) -> str:
     return str(path).replace(os.sep, "/")
@@ -569,6 +575,100 @@ def materialize(
     }
 
 
+def resolve_active_feature_directory(root: Path) -> Path | None:
+    """Resolve active feature directory without mutating runtime state.
+
+    Command context resolution runs before command-specific path setup. It uses
+    the same two read-only sources as `setup.py paths`: explicit environment
+    override first, then active-feature state.
+    """
+    raw_value = os.environ.get("SPECIFY_FEATURE_DIRECTORY")
+
+    if not raw_value:
+        state_path = root / ".orderspec" / "state" / "active-feature.json"
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            state = {}
+        if isinstance(state, dict):
+            raw_value = state.get("feature_directory")
+
+    if not isinstance(raw_value, str) or not raw_value:
+        return None
+
+    candidate = Path(raw_value)
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    candidate = candidate.resolve()
+
+    try:
+        candidate.relative_to(root.resolve())
+    except ValueError as exc:
+        raise ValueError(
+            "active feature directory must be inside repository root"
+        ) from exc
+
+    return candidate
+
+
+def resolve_feature_context(
+    root: Path,
+    feature_context: dict[str, Any] | None,
+    command: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+    """Materialize active feature artifacts declared by command context.
+
+    `required` means artifacts are required when an active feature exists. A
+    command with no active feature still reaches its normal path-resolution
+    step, which owns the user-facing `no active feature` stop message.
+    """
+    if not feature_context or feature_context.get("mode") == "none":
+        return [], [], {"mode": "none", "artifacts": [], "active": False}
+
+    mode = feature_context["mode"]
+    artifacts = feature_context["artifacts"]
+    feature_dir = resolve_active_feature_directory(root)
+    summary: dict[str, Any] = {
+        "mode": mode,
+        "artifacts": artifacts,
+        "active": feature_dir is not None,
+    }
+
+    if feature_dir is None:
+        return [], [], summary
+
+    try:
+        feature_rel = feature_dir.relative_to(root.resolve())
+    except ValueError as exc:
+        raise ValueError("active feature directory is outside repository root") from exc
+
+    summary["feature_directory"] = posix(feature_rel)
+    required = mode == "required"
+    resolved: list[dict[str, Any]] = []
+    missing: list[dict[str, Any]] = []
+
+    for index, artifact in enumerate(artifacts):
+        filename = FEATURE_ARTIFACT_FILES[artifact]
+        path_value = posix(feature_rel / filename)
+        entry = {
+            "path": path_value,
+            "kind": "feature_artifact",
+            "usage": "inspect",
+            "authority": "feature",
+            "required": required,
+            "reason": f"{command} active feature {artifact}.md",
+            "source": f"commands.{command}.feature_context.artifacts[{index}]",
+            "exists": (root / path_value).is_file(),
+            "expanded_from": None,
+        }
+        if entry["exists"]:
+            resolved.append(entry)
+        elif required:
+            missing.append(entry)
+
+    return resolved, missing, summary
+
+
 def expand_entry(
     root: Path,
     entry: dict[str, Any],
@@ -672,6 +772,23 @@ def resolve_with_normalized_manifest(
     all_entries.extend(command_group.get("required", []))
     all_entries.extend(command_group.get("read_if_exists", []))
 
+    feature_context = command_group.get("feature_context")
+    if feature_context is None:
+        feature_context = defaults.get("feature_context")
+
+    try:
+        feature_entries, feature_missing, feature_summary = resolve_feature_context(
+            root,
+            feature_context,
+            command,
+        )
+    except ValueError as exc:
+        result["ok"] = False
+        result["validation_errors"].append(str(exc))
+        return result
+
+    result["feature_context"] = feature_summary
+
     seen_to_read: set[str] = set()
     seen_missing: set[str] = set()
     seen_skipped: set[str] = set()
@@ -699,6 +816,20 @@ def resolve_with_normalized_manifest(
                     continue
                 seen_skipped.add(path_value)
                 result["skipped_if_missing"].append(item)
+
+    for item in feature_entries:
+        path_value = item["path"]
+        if path_value in seen_to_read:
+            continue
+        seen_to_read.add(path_value)
+        result["to_read"].append(item)
+
+    for item in feature_missing:
+        path_value = item["path"]
+        if path_value in seen_missing:
+            continue
+        seen_missing.add(path_value)
+        result["missing_required"].append(item)
 
     if result["missing_required"]:
         result["ok"] = False

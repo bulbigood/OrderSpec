@@ -139,6 +139,45 @@ with tempfile.TemporaryDirectory(prefix="orderspec-task-context-") as temp:
     rc, _ = run(root, "validate", "--feature-dir", str(feature))
     expect(rc == 0, "later task may whitelist a not-yet-created new target")
 
+    write_plan(feature, "src/future.py [NEW]\nsrc/other.py [MOD]")
+    write_tasks(
+        feature,
+        json.dumps(
+            {
+                "version": 1,
+                "tasks": {
+                    "T001": {"read": ["src/input.py"], "target_state": "new"},
+                    "T002": {"read": ["src/missing.py", "src/other.py"], "target_state": "mod"},
+                },
+            }
+        ),
+        "- [ ] T001 | src/future.py |  | create implementation\n"
+        "- [ ] T002 | src/other.py |  | consume earlier implementation",
+    )
+    (root / "src" / "other.py").write_text("VALUE = 4\n", encoding="utf-8")
+    rc, _ = run(root, "validate", "--feature-dir", str(feature))
+    expect(rc != 0, "unrelated missing path still fails validation")
+
+    write_tasks(
+        feature,
+        json.dumps(
+            {
+                "version": 1,
+                "tasks": {
+                    "T001": {"read": ["src/input.py"], "target_state": "new"},
+                    "T002": {"read": ["src/future.py", "src/other.py"], "target_state": "mod"},
+                },
+            }
+        ),
+        "- [ ] T001 | src/future.py |  | create implementation\n"
+        "- [ ] T002 | src/other.py |  | consume earlier implementation",
+    )
+    rc, _ = run(root, "validate", "--feature-dir", str(feature))
+    expect(rc == 0, "later task may read an earlier new dependency before creation")
+    (root / "src" / "future.py").write_text("VALUE = 3\n", encoding="utf-8")
+    rc, _ = run(root, "validate", "--feature-dir", str(feature))
+    expect(rc == 0, "later task may read an earlier new dependency")
+
     write_plan(feature, "src/deleted.py [DEL]")
     write_tasks(
         feature,

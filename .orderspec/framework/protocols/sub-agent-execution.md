@@ -26,6 +26,9 @@ task_context:
   resolver: python3 .orderspec/framework/scripts/task_context.py resolve --feature-dir "$FEATURE_DIR" --task-id "$TASK_ID" --json
   to_read: exact resolver output, copied verbatim
   write_paths: exact resolver output, copied verbatim
+contract_context:
+  resolver: python3 .orderspec/framework/scripts/task_contract_context.py resolve --feature-dir "$FEATURE_DIR" --task-id "$TASK_ID" --json
+  output: exact resolver output, copied verbatim
 context:
   - short excerpt or fact prepared by coordinator
 verification:
@@ -44,6 +47,9 @@ Rules:
 - `task_context.write_paths` MUST be copied verbatim from resolver output. A
   task requiring another write path is a task decomposition or plan defect, not
   worker discretion.
+- `contract_context` MUST be copied verbatim from
+  `task_contract_context.py`. It is the authoritative mapping from task refs to
+  exact `spec.md` excerpts, mechanism rows, and current phase Goal/Verification.
 - Coordinator MUST prepare only the minimum relevant inline excerpts in
   `context`; excerpts are not permission to open additional files.
 - Worker MUST receive literal file paths only. Directories, globs, and
@@ -57,7 +63,10 @@ Rules:
 
 Worker is a literal executor, not a planner, reviewer, or reasoner.
 
-- Read only `task_context.to_read` and inline `context`.
+- Read only `task_context.to_read`, `contract_context`, and inline `context`.
+- Treat `contract_context.spec_excerpts` as the exact contract for every
+  referenced spec ID. Do not invent missing requirements or replace excerpts
+  with memory or paraphrase.
 - Modify only `task_context.write_paths`.
 - Follow `objective` and `task_line` literally.
 - Do not infer missing requirements or choose architecture.

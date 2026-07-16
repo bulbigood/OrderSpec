@@ -221,14 +221,27 @@
         {
           "group": "project.contracts"
         }
-      ]
+      ],
+      "feature_context": {
+        "mode": "required",
+        "artifacts": [
+          "spec"
+        ]
+      }
     },
     "order.plan-check": {
       "required": [
         {
           "group": "project.contracts"
         }
-      ]
+      ],
+      "feature_context": {
+        "mode": "required",
+        "artifacts": [
+          "spec",
+          "plan"
+        ]
+      }
     },
     "order.tasks": {
       "required": [
@@ -238,7 +251,14 @@
         {
           "ref": "schema.task_context"
         }
-      ]
+      ],
+      "feature_context": {
+        "mode": "required",
+        "artifacts": [
+          "spec",
+          "plan"
+        ]
+      }
     },
     "order.tasks-check": {
       "required": [
@@ -248,7 +268,15 @@
         {
           "ref": "schema.task_context"
         }
-      ]
+      ],
+      "feature_context": {
+        "mode": "required",
+        "artifacts": [
+          "spec",
+          "plan",
+          "tasks"
+        ]
+      }
     },
     "order.code": {
       "required": [
@@ -264,14 +292,29 @@
         {
           "ref": "schema.task_context"
         }
-      ]
+      ],
+      "feature_context": {
+        "mode": "required",
+        "artifacts": [
+          "plan",
+          "tasks"
+        ]
+      }
     },
     "order.code-check": {
       "required": [
         {
           "group": "project.contracts"
         }
-      ]
+      ],
+      "feature_context": {
+        "mode": "required",
+        "artifacts": [
+          "spec",
+          "plan",
+          "tasks"
+        ]
+      }
     },
     "order.sync-check": {
       "required": [
