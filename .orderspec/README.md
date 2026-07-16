@@ -141,6 +141,37 @@ python3 .orderspec/framework/scripts/agents_sync.py subagents ensure \
 Shared rules live in `framework/protocols/sub-agent-rules.md`; agent-specific
 deployment and configuration rules live in `framework/adapters/`.
 
+### Codex worker model defaults
+
+Codex's built-in `worker` does not need a project TOML file. It inherits the
+model and reasoning settings of the parent Codex session. For example, when
+the global `~/.codex/config.toml` contains:
+
+```toml
+model = "gpt-5.6-luna"
+model_reasoning_effort = "high"
+```
+
+the built-in `worker` normally inherits `gpt-5.6-luna` and `high`. Runtime
+overrides from the CLI, IDE, or Codex app can change these defaults.
+
+To make worker settings reproducible for this project, create a project-scoped
+custom worker:
+
+```bash
+python3 .orderspec/framework/scripts/agents_sync.py subagents configure \
+  --agent codex \
+  --name worker \
+  --model gpt-5.6-luna \
+  --reasoning high \
+  --scope project
+```
+
+This writes `.codex/agents/worker.toml`. A custom project worker named
+`worker` takes precedence over Codex's built-in worker. Omit `--model` to let
+Codex inherit the parent session model. Omit project configuration only when
+inherited defaults are acceptable.
+
 ## Brownfield projects
 
 If you are applying OrderSpec to an existing codebase (a brownfield project), you don't need to write specs for everything manually. You can use the reverse-engineering command to extract specifications directly from your existing code.
