@@ -15,6 +15,13 @@
       "usage": "apply",
       "authority": "framework"
     },
+    "protocol.sub_agent_execution": {
+      "path": ".orderspec/framework/protocols/sub-agent-execution.md",
+      "kind": "protocol",
+      "reason": "isolated task packet and worker result protocol",
+      "usage": "apply",
+      "authority": "framework"
+    },
     "schema.frontmatter": {
       "path": ".orderspec/framework/schemas/frontmatter.yml",
       "kind": "schema",
@@ -227,6 +234,9 @@
       "required": [
         {
           "group": "project.contracts"
+        },
+        {
+          "ref": "protocol.sub_agent_execution"
         }
       ]
     },

@@ -79,7 +79,15 @@ No OrderSpec-generated artifact is written to the repository root. Everything li
 | `.orderspec/contracts/conventions.md` | Operator via `/order.bootstrap` | Project conventions contract. |
 | `.orderspec/features/*/spec.md` | `/order.spec` | Stable WHAT-contract. |
 | `.orderspec/features/*/plan.md` | `/order.plan` | Technical plan. |
-| `.orderspec/features/*/tasks.md` | `/order.tasks` | Implementation tasks. |
+| `.orderspec/features/*/tasks.md` | `/order.tasks` | Task content and order. During `/order.code`, execution checkboxes may change only through `task_progress.py`; task content remains frozen. |
+
+Execution marker rules:
+
+- `/order.tasks` owns task content, ordering, paths, refs, and phase structure.
+- `/order.code` owns execution progress for the current run, but MUST change
+  only one checkbox at a time through `.orderspec/framework/scripts/task_progress.py`.
+- A worker or coordinator MUST NOT hand-edit `[X]` markers.
+- A failed, blocked, or incomplete task remains unchecked.
 
 ## 4. Frontmatter Rule
 

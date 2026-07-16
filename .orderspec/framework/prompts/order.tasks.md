@@ -257,7 +257,7 @@ Rewrite `$TASKS_FILE` (which was initialized from `tasks-template.md` in Step 6)
   1. Test-writing tasks first (carry that story's `AC-NNN` refs; MUST fail before implementation). Split into multiple sequential test tasks on the same file if ACs exceed the 3-ref cap (see test-file split rule).
   2. Data layer → service logic → wiring to contracts.
   3. `EDGE-NNN` for this story.
-  4. End with a **Checkpoint** prose line: story independently functional and backwards-compatible. This is NOT a task — mechanical proof comes from the story's test-writing tasks (AC refs) and the final GATE.
+  4. Emit a **Verification** prose line with the exact permitted test command and asserted AC/INV IDs, then a **Checkpoint** prose line: story independently functional and backwards-compatible. Neither line is a task; `/order.code` executes the declared Verification command at the phase barrier.
   Omit test tasks only if the user or constitution explicitly opts out.
 - **Final Phase — Contract**: start with a GATE task (run the test command verbatim; verify all `AC-*` pass, `INV-*` hold, `NFR-*` met; STOP on failure — contraction is irreversible). Then remove flags, delete deprecated code/routes, drop obsolete columns, lint/format, update docs.
   **Greenfield rule**: if nothing pre-exists to deprecate, Contract only removes scaffolding/flags.

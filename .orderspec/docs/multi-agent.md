@@ -47,6 +47,32 @@ This file is generated and maintained by `.orderspec/framework/scripts/agents_sy
 
 The framework core remains agent-agnostic. All agent-specific logic lives in adapters.
 
+### Task worker boundary
+
+Prompt synchronization is not sub-agent dispatch. The adapter interface records
+agent detection and prompt/skill delivery; it does not claim that the current
+runtime can create or wait for child agents. `/order.code` checks actual runtime
+dispatch capability and selects `DELEGATED`, `LOCAL_PHASE`, or explicit
+`LOCAL_ALL` fallback.
+
+Worker execution follows:
+
+```text
+coordinator reads context
+      ↓
+task packet with explicit read/write paths
+      ↓
+worker executes one task
+      ↓
+structured result + allowed diff check
+      ↓
+task_progress.py marks one [X]
+```
+
+The packet and result contract lives in
+`.orderspec/framework/protocols/sub-agent-execution.md`. The worker receives
+the rendered packet, not the protocol file or the whole OrderSpec context.
+
 ## External rules integration policy
 
 The policy is defined in `constitution.md`:

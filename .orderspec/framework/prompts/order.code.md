@@ -3,7 +3,7 @@ orderspec:
   artifact: command_prompt
   command: order.code
   phase: implement
-description: Execute every tasks.md task in a sub-agent, phase by phase in sequential task order, respecting [P] parallel hints, story checkpoints, and the irreversible Contract GATE.
+description: Execute every tasks.md task phase by phase, delegating when available and using bounded local fallback otherwise.
 ---
 
 ## User Input
@@ -19,7 +19,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 `order.code` **executes** — it makes no design decisions. All decisions live in `spec.md` (WHAT) and `plan.md` (HOW); `tasks.md` defines ORDER.
 
 - **Tasks are self-contained**: each task carries its file path, spec IDs, and a ≤15-word paraphrase. Execute from the task line; open `spec.md` ONLY if a paraphrase is insufficient to act — never preload it.
-- **Sub-agent execution is mandatory**: every unchecked task MUST be delegated to its own sub-agent. The coordinator orchestrates, validates results, updates `[X]` markers, and reports; it MUST NOT implement a task itself.
+- **Delegation is conditional**: in `DELEGATED`, every unchecked task MUST use its own sub-agent. In local fallback, coordinator executes the same bounded task packet itself. Coordinator always validates results, updates `[X]` markers through the deterministic script, and reports.
 - **Sequential by default, `[P]` is a hint**: tasks execute top-to-bottom in ID order. `[P]` means a task is file-disjoint from adjacent `[P]` tasks, so their sub-agents MAY run concurrently. Sequential execution remains the fallback for any task that is not proven safe to parallelize.
 - **Resumable**: tasks marked `[X]` are done — skip them, never redo or "improve". A re-run continues from the first unchecked task. Never remove `[X]` markers.
 - **No silent deviations**: if a task cannot be executed as written (missing path, contradiction with `plan.md`, broken dependency), apply the Deviation Rule below — do not improvise.
@@ -71,14 +71,29 @@ CODE_STOPPED: no active feature
   4. Then run /order.code
 ```
 
-### Step 3: Mode Detection
+### Step 3: Execution Mode Detection
 
-Determine mode before writing any file. State the mode in chat.
+Determine execution strategy before writing any file. State the selected mode in chat.
 
-1. **Sub-agent orchestration** — required execution mode. Confirm that the current agent can dispatch sub-agents and wait for their results. If it cannot, STOP with `CODE_BLOCKED: sub-agents unavailable`; do not execute tasks in the coordinator.
-2. **Resume** — `tasks.md` exists, some tasks `[X]`, `$ARGUMENTS` empty or `--resume`. Continue from first unchecked task.
-3. **Force-Implement** — `tasks.md` exists, `$ARGUMENTS` contains `--force`. Bypass upstream gate halt; record override in completion report.
-4. **Refresh-blocked** — `tasks.md` does not exist → STOP (upstream gate handles this in Step 4).
+Execution modes:
+
+1. **DELEGATED** — runtime explicitly exposes sub-agent dispatch and wait. Dispatch every unchecked task according to Step 9.
+2. **LOCAL_PHASE** — dispatch is unavailable. Coordinator executes every unchecked task in the first incomplete phase sequentially, then stops at the phase barrier. This is the default fallback and is not a block.
+3. **LOCAL_ALL** — dispatch is unavailable and `$ARGUMENTS` contains `--all`. Coordinator executes every unchecked task in every remaining phase sequentially.
+
+Additional controls:
+
+- **RESUME** — `$ARGUMENTS` is empty or contains `--resume`; skip tasks already marked `[X]` in every selected execution mode.
+- **`--force`** — upstream gate override only. It never selects an execution mode and must be recorded in the Completion Report.
+- Missing `tasks.md` remains a hard stop handled by Step 4. It is not a fallback case.
+
+Mode precedence:
+
+1. Resolve command context and paths.
+2. Run the upstream gate.
+3. Detect actual dispatch capability in the current runtime; do not infer it from `agents.json` or adapter detection.
+4. Select `DELEGATED`, otherwise `LOCAL_PHASE`, unless `--all` selects `LOCAL_ALL`.
+5. State mode before the first task mutation.
 
 ### Step 4: Upstream Gate Guard
 
@@ -111,6 +126,18 @@ Act on exit code / `status`:
 - **exit 0, `status: forced`** → Proceed, but record in the Completion Report: `⚠ Implemented over non-PASS tasks gate (verdict: {verdict}) via --force`.
 - **exit 0, `status: advisory`** → Emit `reason` as one-line ⚠ warning in chat; proceed.
 - **exit 0, `status: ok`** → Proceed silently.
+
+### Step 4.5: Deterministic Implementation Setup
+
+After the upstream gate passes, validate the complete implementation input set:
+
+```bash
+python3 .orderspec/framework/scripts/setup.py code --json
+```
+
+If this exits non-zero, STOP and report the script output. Do not execute a
+task with missing `plan.md` or `tasks.md`, and do not reconstruct either file
+from `/order.code`.
 
 **STOP message (exit 2):**
 
@@ -194,8 +221,17 @@ Do NOT look for a hand-built Traceability Matrix or Files Touched table in `task
 
 Before executing, validate structure. If invalid, STOP and suggest re-running `/order.tasks` (tasks.md is disposable — regenerate, don't hand-patch).
 
+Run deterministic task-state validation first:
+
+```bash
+python3 .orderspec/framework/scripts/task_progress.py validate \
+  --tasks "$FEATURE_DIR/tasks.md"
+```
+
+Non-zero exit is a STOP. Do not repair `tasks.md` from `/order.code`; route to `/order.tasks`.
+
 - Every task line matches: `- [ ] T### [P?] [US?] | path | refs? | gloss` (or `- [X] ...` for completed).
-- Task IDs are monotonically non-decreasing (T001, T002, ...). Gaps ARE legal (T005, T010, T015). Duplicates are rejected. Out-of-order insertions signal a hand-patched file — flag but proceed in document order.
+- Task IDs are monotonically non-decreasing (T001, T002, ...). Gaps ARE legal (T005, T010, T015). Duplicates and out-of-order IDs are rejected by `task_progress.py`; route invalid task structure to `/order.tasks`.
 - Structure follows E-M-C: optional Setup/Expand phase first, one phase per user story in the middle, Contract phase LAST whose first task is the GATE. Extra non-story phases (e.g. dedicated unit-test phase) are allowed as long as they sit before the Contract GATE.
 - `[P]` is OPTIONAL; absence everywhere is valid (purely sequential plan). Do NOT require any parallel markers.
 - Verification/GATE tasks carry EMPTY refs (AC/INV IDs named in gloss, not in refs field).
@@ -209,16 +245,18 @@ Run phases strictly in order (hard sequential barriers). Within a phase, execute
 
 1. Skip tasks already marked `[X]` (resume support — never redo).
 2. Build the next execution unit from the current phase: one unchecked task, or one adjacent `[P]` group proven safe by the parallelism rules below.
-3. Dispatch every task in the execution unit to its own sub-agent (see Per-Task Rules).
-4. Wait for the sub-agent or all sub-agents, verify results, then mark each successful task `[X]` in `tasks.md` before dispatching the next execution unit.
+3. In `DELEGATED`, dispatch every task in the execution unit to its own sub-agent. In `LOCAL_PHASE` and `LOCAL_ALL`, execute the same task packet in the coordinator.
+4. Wait for the result, inspect allowed changes, run declared verification, then call `task_progress.py mark` with the worker result. Continue only after the marker script marks that exact task `[X]`.
 5. Advance to the next unchecked task in ID order. Do not leave the phase until every task and its checkpoint are complete.
 
-#### Sub-agent dispatch and parallelism (`[P]`) — mandatory delegation, opt-in concurrency
+#### Task packet, worker boundary, and parallelism (`[P]`) — delegation when available
 
-- The coordinator MUST dispatch every unchecked task to a separate sub-agent. A task is not complete until its sub-agent reports success and the coordinator verifies the result.
-- Give each sub-agent the task line, its phase, relevant `plan.md` pathmanifest context, applicable project contracts, and the task's narrowly required execution rules. The sub-agent may open the specific `spec.md` section named by the task only when the task paraphrase is insufficient.
-- The sub-agent MUST touch only the file named in the task's `path` field, must follow the task line and `plan.md`, and must report the task ID, changed files, verification result, and any `DEVIATION:` line. It MUST NOT edit `[X]` markers, start another sub-agent, or advance to another task.
-- Tasks without `[P]` are dispatched one at a time in ID order. Wait for the sub-agent, verify success, then mark that task `[X]` before dispatching the next task.
+- Apply `sub-agent-execution.md` exactly. The coordinator MUST build one task packet per task.
+- The packet contains the exact task line, imperative objective, finite `read_paths`, exactly one `write_path`, inline context excerpts, verification requirement, and stop conditions.
+- The coordinator reads `spec.md`, `plan.md`, contracts, and relevant source files. The worker receives only explicit paths and inline excerpts. The worker MUST NOT receive OrderSpec Markdown contracts as read paths or scan the repository.
+- In `DELEGATED`, the worker MUST touch only the task `path`, must not edit `[X]`, start another worker, or advance to another task. It returns the protocol result object.
+- In `LOCAL_PHASE`/`LOCAL_ALL`, the coordinator follows the same packet and result rules. It MUST NOT use local fallback as permission to broaden scope.
+- Tasks without `[P]` run one at a time in ID order. Continue only after successful result validation and deterministic marker update.
 - An adjacent group of `[P]` tasks MAY be dispatched concurrently, one sub-agent per task. `[P]` never overrides task order, phase barriers, dependencies, or the Contract GATE.
 - Before dispatching any concurrent `[P]` group, VERIFY file-disjointness:
   - For each candidate task, read its `path` field (field 2 of the task line).
@@ -227,11 +265,33 @@ Run phases strictly in order (hard sequential barriers). Within a phase, execute
   - If dependency, generated-output, test-fixture, or other shared-state safety is uncertain, dispatch sequentially.
   - Only dispatch concurrently when every pair is file-disjoint and independently executable. Wait for ALL sub-agents to finish before marking successful tasks `[X]` or continuing past the group.
 - A `[P]` task not adjacent to another `[P]` task still runs in its own sub-agent, sequentially.
-- If sub-agent dispatch is unavailable or a sub-agent returns no usable result, STOP and report `CODE_BLOCKED: sub-agent execution unavailable for Tnnn`.
+- If dispatch is unavailable, use the mode selected in Step 3. If a delegated worker returns no usable result, leave the task unchecked and STOP with `CODE_BLOCKED: unusable sub-agent result for Tnnn`; do not silently switch modes mid-phase.
 - Never dispatch tasks from different phases concurrently. Never dispatch a later task while an earlier phase, story checkpoint, or GATE is incomplete.
 - When in doubt, fall back to sequential. Losing parallelism is harmless; a same-file race is not.
 
 #### Per-Task Rules
+
+Worker result must match the protocol schema:
+
+```json
+{
+  "task_id": "T###",
+  "status": "SUCCESS|FAILED|BLOCKED|NEEDS_CONTEXT",
+  "changed_files": ["repo/relative/path"],
+  "verification": {"status": "PASS|NOT_RUN|FAIL", "evidence": "short result"},
+  "deviation": null
+}
+```
+
+After coordinator validation, mark only that task:
+
+```bash
+python3 .orderspec/framework/scripts/task_progress.py mark \
+  --tasks "$FEATURE_DIR/tasks.md" \
+  --result-file "$RESULT_FILE"
+```
+
+`RESULT_FILE` contains exactly the worker result JSON. A non-zero marker exit is a STOP. Never edit the checkbox manually.
 
 Evidence rule: a test-writing, checkpoint, or GATE task is complete only
 after its declared verification command or red-state check produced an
@@ -248,7 +308,12 @@ task unchecked and stop at that task with a precise route.
 
 #### Checkpoint / STOP & VALIDATE (end of each story phase)
 
-- Run the story's verification task; confirm the story works independently and earlier stories show no regressions.
+- `order.tasks` represents a checkpoint as prose, not a task. Read the current
+  phase's `**Verification**` line and use its declared command and asserted IDs.
+  If that line is absent or has no executable command, STOP and route to
+  `/order.tasks`; do not invent a verification task or command.
+- Run the declared verification command when project governance permits it;
+  confirm the story works independently and earlier stories show no regressions.
 - On failure: **STOP within this phase**. Fix forward only the tasks of the current story; do not start the next story until the checkpoint passes.
 
 #### GATE before Contract (absolute barrier)
@@ -328,8 +393,9 @@ python3 .orderspec/framework/scripts/traceability.py mark-consumed --report "$FE
 
 Report to chat:
 
-- **Tasks**: completed / total, per phase; confirm all completed tasks are marked `[X]` in tasks.md.
-- **Sub-agents**: confirm every executed task was delegated to a sub-agent; report concurrent `[P]` groups and any sequential fallbacks.
+- **Tasks**: completed / total, per phase; confirm all completed tasks are marked `[X]` by `task_progress.py`.
+- **Execution mode**: `DELEGATED`, `LOCAL_PHASE`, or `LOCAL_ALL`; report fallback reason and concurrent `[P]` groups.
+- **Sub-agents**: confirm delegated tasks and any local tasks; report sequential fallbacks.
 - **Coverage check**: `check-mechanisms` exit code (MUST be 0); one-line summary if defects found.
 - **Verification**: checkpoint results per story; GATE result; final test command output summary (pass/fail counts).
 - **Deviations log**: all `DEVIATION:` lines (or "none").
@@ -343,12 +409,12 @@ Report to chat:
 
 - [ ] Command context resolved via `command_context.py`
 - [ ] Every `to_read` file was read and interpreted by `usage`
-- [ ] Mode detected and stated (Resume / Force-Implement)
+- [ ] Execution mode detected and stated (`DELEGATED` / `LOCAL_PHASE` / `LOCAL_ALL`); `RESUME` and `--force` recorded separately
 - [ ] Feature paths resolved; `eval` used for shell vars
 - [ ] Upstream gate respected: guard returned `ok`/`advisory`/`forced` (not `halt`/`stop`/`error`); on `forced`, a `--force` warning was recorded in the completion report; on `advisory`, user was warned in chat
 - [ ] Tooling validated via `validate_tooling.py` (if `tooling-protocol.md` was loaded); missing required skills routed per rule 6, not silently continued
 - [ ] Prior gate report consumed (if present and targeting `/order.code`): findings addressed or routed; `mark-consumed` run
-- [ ] All tasks executed in phase + task-ID order and marked `[X]`, or a precise stopping point reported
+- [ ] All tasks executed in phase + task-ID order; each successful marker written by `task_progress.py`, or a precise stopping point reported
 - [ ] `[P]` groups run concurrently ONLY after path-disjoint verification via `plan.md` pathmanifest; otherwise sequential
 - [ ] All story checkpoints passed; GATE passed before any Contract task ran
 - [ ] `check-mechanisms` exited 0 (no coverage defects); defects routed to `/order.tasks` or `/order.spec`, not silently patched

@@ -14,6 +14,11 @@ The key insight:
 
 > **`plan.md` depends on the state of the repository; `spec.md` does not.**
 
+During implementation, `tasks.md` content remains frozen. Its checkboxes are
+execution progress, not task design: `/order.code` may mark one successful task
+at a time through `task_progress.py`, while `/order.tasks` remains owner of task
+content and ordering.
+
 A spec is a contract about behavior. It should survive refactors, renames, and merges.
 
 A plan is a snapshot of how to realize that contract against the code as it exists right now, so it is regenerated whenever the codebase moves underneath it.
@@ -129,6 +134,11 @@ Project contracts constrain behavior.
 Config and state are data.
 
 The internal command context manifest is framework input for the resolver, not something runtime agents should interpret directly.
+
+For `/order.code`, the resolver also supplies the sub-agent execution protocol.
+The coordinator reads feature artifacts and passes workers only explicit task
+packets with finite read/write paths. Workers do not scan the repository or
+interpret OrderSpec Markdown contracts.
 
 ## Repository layout
 
