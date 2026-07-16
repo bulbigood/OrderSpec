@@ -230,6 +230,16 @@ python3 .orderspec/framework/scripts/task_progress.py validate \
 
 Non-zero exit is a STOP. Do not repair `tasks.md` from `/order.code`; route to `/order.tasks`.
 
+Validate the machine-readable task context before executing any task:
+
+```bash
+python3 .orderspec/framework/scripts/task_context.py validate \
+  --feature-dir "$FEATURE_DIR" --json
+```
+
+If this exits non-zero, STOP and route to `/order.tasks`. Do not construct a
+replacement whitelist in `/order.code`.
+
 - Every task line matches: `- [ ] T### [P?] [US?] | path | refs? | gloss` (or `- [X] ...` for completed).
 - Task IDs are monotonically non-decreasing (T001, T002, ...). Gaps ARE legal (T005, T010, T015). Duplicates and out-of-order IDs are rejected by `task_progress.py`; route invalid task structure to `/order.tasks`.
 - Structure follows E-M-C: optional Setup/Expand phase first, one phase per user story in the middle, Contract phase LAST whose first task is the GATE. Extra non-story phases (e.g. dedicated unit-test phase) are allowed as long as they sit before the Contract GATE.
@@ -252,8 +262,14 @@ Run phases strictly in order (hard sequential barriers). Within a phase, execute
 #### Task packet, worker boundary, and parallelism (`[P]`) — delegation when available
 
 - Apply `sub-agent-execution.md` exactly. The coordinator MUST build one task packet per task.
-- The packet contains the exact task line, imperative objective, finite `read_paths`, exactly one `write_path`, inline context excerpts, verification requirement, and stop conditions.
-- The coordinator reads `spec.md`, `plan.md`, contracts, and relevant source files. The worker receives only explicit paths and inline excerpts. The worker MUST NOT receive OrderSpec Markdown contracts as read paths or scan the repository.
+- Before building the packet, resolve the exact task context:
+  ```bash
+  python3 .orderspec/framework/scripts/task_context.py resolve \
+    --feature-dir "$FEATURE_DIR" --task-id "$TASK_ID" --json
+  ```
+- The resolver output is authoritative. The coordinator MUST pass its `to_read` entries verbatim and its `write_paths` verbatim. The coordinator MUST NOT construct, expand, reorder, or replace this file list.
+- The packet contains the exact task line, imperative objective, resolver `to_read`, resolver `write_paths`, inline context excerpts, verification requirement, and stop conditions.
+- The coordinator may read command context, project contracts, feature artifacts, and relevant source files to prepare inline context. The worker receives only resolver-listed files and inline excerpts. The worker MUST NOT scan the repository or open files absent from resolver output.
 - In `DELEGATED`, the worker MUST touch only the task `path`, must not edit `[X]`, start another worker, or advance to another task. It returns the protocol result object.
 - In `LOCAL_PHASE`/`LOCAL_ALL`, the coordinator follows the same packet and result rules. It MUST NOT use local fallback as permission to broaden scope.
 - Tasks without `[P]` run one at a time in ID order. Continue only after successful result validation and deterministic marker update.

@@ -297,6 +297,38 @@ Rewrite `$TASKS_FILE` (which was initialized from `tasks-template.md` in Step 6)
 `[USn]` is required on story-phase tasks (1:1 with `UJ-00n`), omitted in Setup/Expand and Contract.
 For endpoint tasks, fold non-2xx semantics from Spec § API Contracts into the gloss (e.g. `404 if task never existed including soft-deleted`).
 
+### Task Context Block
+
+After composing all task lines, replace the template's `task-context` block
+with exactly one machine-readable JSON block:
+
+````text
+```task-context
+{
+  "version": 1,
+  "tasks": {
+    "T001": {"read": ["src/existing.py", "src/shared.py"], "target_state": "mod"}
+  }
+}
+```
+````
+
+This block is the sole source of truth for task worker file context. Build one
+entry for every task ID. For each task, `target_state` MUST copy the status of
+its path from `plan.md` (`new` for `[NEW]`, `mod` for `[MOD]`, `del` for
+`[DEL]`). `read` MUST contain the exact existing repo-relative files the worker
+needs to inspect, in read order, including a `mod` or `del` task write target.
+A `[NEW]` write target is not included until it exists. Do not list
+directories, globs, or broad repository scans.
+Do not include Markdown unless it is the task's own write target. Derive the
+list from the task objective, `plan.md`, and targeted source inspection. If a
+required dependency cannot be stated as an exact file, route the defect to
+`/order.plan`; do not leave worker context implicit.
+
+`task_context.py` owns parsing, validation, file-existence checks, and resolver
+output. `/order.code` consumes its output verbatim. Do not hand-author a
+second whitelist in a prompt, packet, or coordinator note.
+
 **Prose to fill by hand** (NOT machine state): the Execution Order line (Phase 1 → US1 → STOP & VALIDATE → US2.. → GATE → Contract), and each story phase's Goal and Verification lines (from Spec § Acceptance Criteria).
 
 > Do **NOT** hand-write a Traceability Matrix or a Files Touched table in `tasks.md`. Those are derived: `extract-trace` projects coverage into `traceability.tsv`, and `render` produces the human-readable mirror. A hand-built matrix is exactly the drift this system removes — if the template contains such placeholder sections, leave them empty or delete them.
@@ -352,6 +384,16 @@ eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" check-mechanisms
 python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" validate --stage tasks --json
 ```
+
+Validate task worker context as a separate deterministic input gate:
+
+```bash
+python3 .orderspec/framework/scripts/task_context.py validate \
+  --feature-dir "$FEATURE_DIR" --json
+```
+
+If this exits non-zero, stop and route to `/order.tasks`. Do not repair the
+block from `/order.code` or bypass missing read files.
 
 Blocking findings (`severity: HIGH` or `CRITICAL`) must be fixed. Fix the data in `tasks.md` or `mechanisms.tsv` and re-run validation. Do not maintain a separate list of checks; trust the script output.
 
@@ -411,5 +453,6 @@ Report to chat:
 - [ ] AC refs on test-writing tasks only (not on verification/GATE); cross-cutting test tasks omit `[USn]`
 - [ ] Placement validated: all `plan.md` files touched, no path outside `plan.md`, no same-file conflict within an adjacent `[P]` group
 - [ ] `validate --stage tasks` has no blocking findings
+- [ ] `task_context.py validate` passed; every task has a deterministic read whitelist
 - [ ] Active feature status updated to `tasks`
 - [ ] Completion Report provided, including recommendation to run `/order.tasks-check`

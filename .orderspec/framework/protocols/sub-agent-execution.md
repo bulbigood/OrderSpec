@@ -10,10 +10,8 @@ orderspec:
 
 This protocol defines the boundary between `/order.code` coordinator and one
 task worker. It is framework procedure for the coordinator. The worker receives
-the rendered task packet; it does not read this file, `command-context.json`,
-`orderspec-rules.md`, project contracts, `spec.md`, `plan.md`, or the whole
-repository unless the coordinator explicitly includes an exact path in the
-packet.
+the rendered task packet and resolver output. Files absent from that output are
+unavailable to the worker.
 
 ## Coordinator contract
 
@@ -24,10 +22,10 @@ task_id: T###
 phase: phase name
 task_line: exact tasks.md line
 objective: one imperative sentence
-read_paths:
-  - exact repo-relative file path
-write_paths:
-  - exact repo-relative task path
+task_context:
+  resolver: python3 .orderspec/framework/scripts/task_context.py resolve --feature-dir "$FEATURE_DIR" --task-id "$TASK_ID" --json
+  to_read: exact resolver output, copied verbatim
+  write_paths: exact resolver output, copied verbatim
 context:
   - short excerpt or fact prepared by coordinator
 verification:
@@ -36,21 +34,20 @@ verification:
 stop_conditions:
   - missing required context
   - task contradicts supplied context
-  - required change outside write_paths
+  - required change outside task_context.write_paths
 ```
 
 Rules:
 
-- `read_paths` MUST be an explicit finite list. No directories, globs, or
-  repository-wide searches.
-- `write_paths` MUST contain exactly the task `path` field. A task requiring
-  another file is a task decomposition or plan defect, not worker discretion.
-- Coordinator MUST read OrderSpec Markdown artifacts and project contracts
-  itself, then pass only the minimum relevant excerpts in `context`.
-- By default, worker MUST NOT open any `.md` file. A Markdown target may be
-  included only when the task path itself is that Markdown file.
-- Coordinator MUST NOT pass `plan.md`, `spec.md`, contracts, or framework rules
-  as worker paths. Their relevant facts belong in `context`.
+- `task_context.to_read` MUST be copied verbatim from `task_context.py` output.
+  Coordinator MUST NOT add, remove, reorder, or manually recreate entries.
+- `task_context.write_paths` MUST be copied verbatim from resolver output. A
+  task requiring another write path is a task decomposition or plan defect, not
+  worker discretion.
+- Coordinator MUST prepare only the minimum relevant inline excerpts in
+  `context`; excerpts are not permission to open additional files.
+- Worker MUST receive literal file paths only. Directories, globs, and
+  repository-wide searches are invalid.
 - `verification.command` is allowed only when the command is declared by the
   task/plan and permitted by project governance.
 - Network access, package installation, git mutation, new sub-agents, and
@@ -58,16 +55,17 @@ Rules:
 
 ## Worker contract
 
-Worker is a literal executor, not a planner or reviewer.
+Worker is a literal executor, not a planner, reviewer, or reasoner.
 
-- Read only `read_paths` and inline `context`.
-- Modify only `write_paths`.
+- Read only `task_context.to_read` and inline `context`.
+- Modify only `task_context.write_paths`.
 - Follow `objective` and `task_line` literally.
 - Do not infer missing requirements or choose architecture.
 - Do not broaden scope, create stubs, fix unrelated defects, or edit task
   checkboxes.
 - Do not start another worker.
-- Do not expose chain-of-thought or perform an open-ended reasoning report.
+- Do not produce chain-of-thought or an open-ended reasoning report. Return
+  only the protocol result object.
 - If any stop condition occurs, stop without guessing and return `BLOCKED` or
   `NEEDS_CONTEXT`.
 - Return one result object. Do not claim success without observable evidence.
@@ -92,7 +90,7 @@ Worker result MUST have this shape:
 `SUCCESS` requires:
 
 - matching `task_id`;
-- every changed file is in `write_paths`;
+- every changed file is in `task_context.write_paths`;
 - verification is `PASS` when task declares verification;
 - no `deviation` requiring a design decision.
 

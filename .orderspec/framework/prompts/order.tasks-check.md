@@ -108,6 +108,17 @@ eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" validate --stage tasks --json
 ```
 
+Validate task worker context as a second deterministic gate:
+
+```bash
+python3 .orderspec/framework/scripts/task_context.py validate \
+  --feature-dir "$FEATURE_DIR" --json
+```
+
+If this exits non-zero, import one blocking finding:
+`T0-009 (HIGH): task context whitelist invalid`, include the script's exact
+validation errors, route to `/order.tasks`, and stop semantic inspection.
+
 The JSON output is the **ground truth** for mechanical findings, inventory, categories, matrices, and contradiction grid data.
 You MUST import all findings exactly as provided, including their `severity` and `disposition`.
 You MUST NOT downgrade or suppress imported findings.

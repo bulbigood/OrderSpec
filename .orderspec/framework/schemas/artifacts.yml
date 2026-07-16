@@ -15,6 +15,7 @@ framework_artifacts:
   - orderspec-rules.md
   - command-context.json
   - command-context.schema.json
+  - task-context.schema.json
   - artifacts.yml
   - frontmatter.yml
   - lifecycle.yml

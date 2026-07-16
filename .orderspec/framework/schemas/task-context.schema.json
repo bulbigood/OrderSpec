@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OrderSpec Task Context",
+  "description": "Machine-readable per-task read whitelist owned by tasks.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "tasks"],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "tasks": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["read", "target_state"],
+        "properties": {
+          "read": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "target_state": {
+            "enum": ["new", "mod", "del"]
+          }
+        }
+      }
+    }
+  }
+}

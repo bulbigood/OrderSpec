@@ -25,6 +25,10 @@ expect(
     "order.code requires sub-agent protocol",
 )
 expect(
+    any(item.get("ref") == "schema.task_context" for item in code_required),
+    "order.code requires task context schema",
+)
+expect(
     resources["protocol.sub_agent_execution"]["usage"] == "apply"
     and resources["protocol.sub_agent_execution"]["authority"] == "framework",
     "sub-agent protocol has framework apply authority",
@@ -36,10 +40,12 @@ expect("task_progress.py mark" in code_prompt, "order.code delegates marker writ
 expect("`**Verification**` line" in code_prompt, "order.code uses phase Verification prose")
 
 protocol = (FRAMEWORK / "protocols" / "sub-agent-execution.md").read_text(encoding="utf-8")
-expect("read_paths" in protocol and "write_paths" in protocol, "protocol defines read/write allowlists")
+expect("task_context" in protocol and "to_read" in protocol, "protocol consumes resolver task context")
+expect("MUST be copied verbatim" in protocol, "protocol forbids coordinator whitelist edits")
 expect("NEEDS_CONTEXT" in protocol and "changed_files" in protocol, "protocol defines bounded worker result")
 
 rules = (FRAMEWORK / "orderspec-rules.md").read_text(encoding="utf-8")
 expect("task_progress.py" in rules, "framework rules define marker ownership")
+expect("task-context" in rules and "task_context.py" in rules, "framework rules define task context authority")
 
 print("All order-code contract tests passed")

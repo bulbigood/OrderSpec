@@ -123,6 +123,18 @@ Commands MUST interpret each resolved file according to its `usage` and `authori
 
 Files required only during the main command algorithm may be read by that algorithm when needed. Examples include repository manifests inspected by bootstrap inference, template files used internally by deterministic scripts, feature artifacts selected during a feature-specific command, and implementation files inspected by code/check commands.
 
+Task execution context is separate from command preload context. The
+machine-readable `task-context` block in each feature `tasks.md` is the sole
+declaration of per-task worker inputs. `/order.tasks` owns that block;
+`task_context.py` is its sole resolver and validator; `/order.code` MUST use
+resolver output verbatim. `plan.md` pathmanifest remains the source for task
+write-path planning and validation, not a second worker read whitelist.
+
+Workers MUST receive only resolver-listed literal files and coordinator inline
+excerpts. They MUST NOT scan the repository or open files absent from resolver
+output. A missing or invalid task-context block is a `/order.tasks` defect and
+blocks execution.
+
 Commands MUST NOT mutate files before completing read-only mode detection unless the command explicitly owns that mutation.
 
 ## Command Context Resolution

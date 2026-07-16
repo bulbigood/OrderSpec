@@ -99,6 +99,13 @@
       "usage": "parse",
       "authority": "framework"
     },
+    "schema.task_context": {
+      "path": ".orderspec/framework/schemas/task-context.schema.json",
+      "kind": "schema",
+      "reason": "per-task worker context schema",
+      "usage": "parse",
+      "authority": "framework"
+    },
     "framework.meta": {
       "path": ".orderspec/orderspec.json",
       "kind": "framework_config",
@@ -220,6 +227,9 @@
       "required": [
         {
           "group": "project.contracts"
+        },
+        {
+          "ref": "schema.task_context"
         }
       ]
     },
@@ -227,6 +237,9 @@
       "required": [
         {
           "group": "project.contracts"
+        },
+        {
+          "ref": "schema.task_context"
         }
       ]
     },
@@ -237,6 +250,9 @@
         },
         {
           "ref": "protocol.sub_agent_execution"
+        },
+        {
+          "ref": "schema.task_context"
         }
       ]
     },

@@ -19,6 +19,28 @@
 - The `[P]` marker is OPTIONAL: present only when the task is file-disjoint and independent of adjacent marked tasks. Sequential top-to-bottom order is always correct on its own. There are no "waves".
 - The `[USn]` marker maps 1:1 to UJ-NNN in spec (US1 ↔ UJ-001); present on story-phase tasks only, omitted in Setup/Expand and Contract.
 
+## Task Context (Machine-Readable)
+
+`/order.tasks` MUST replace this block with exactly one entry for every task.
+It is the single source of truth for task read context. `/order.code` MUST NOT
+invent or edit per-task file lists; it resolves this block through
+`task_context.py` before each task.
+
+```task-context
+{
+  "version": 1,
+  "tasks": {}
+}
+```
+
+Each `read` item is one existing repo-relative file that the task worker must
+inspect before editing. `target_state` is `new`, `mod`, or `del`, copied from
+the task path's `[NEW]`/`[MOD]`/`[DEL]` status in `plan.md`. Include a `mod` or
+`del` write target and only the exact source/config/test files required by that
+task. New write targets are not readable until created. Paths must be literal
+files, not directories or globs. The resolver validates existence, path safety,
+task coverage, and output order.
+
 <!--
   IMPORTANT: Tasks below are SAMPLE placeholders. The /order.tasks command MUST
   replace them with real tasks derived from spec.md (UJ/AC/REQ/EDGE/INV IDs) and
