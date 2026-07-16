@@ -26,6 +26,17 @@ class KiloCodeAdapter(AgentAdapter):
     # Rules
     RULES_FILENAME = "AGENTS.md"
 
+    def subagent_policy(self) -> Dict[str, Any]:
+        """Kilo Code delegation is runtime-managed, not project-file managed."""
+        return {
+            "supports_subagents": True,
+            "management": "runtime_only",
+            "project_scope": None,
+            "global_scope": None,
+            "built_in_agents": [],
+            "details": "The adapter cannot create or validate named Kilo workers; the runtime owns dispatch.",
+        }
+
     def _detect_format(self, project_root: str) -> Optional[str]:
         """Determine if using new (.kilo/) or legacy (.kilocode/) format.
         

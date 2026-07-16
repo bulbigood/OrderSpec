@@ -15,13 +15,14 @@ OrderSpec is not tied to a specific AI agent. It uses a deterministic **adapter 
 1. **Detection**: each adapter's `detect()` method checks the project for signs of its agent.
 2. **Prompt sync**: OrderSpec prompts live in `.orderspec/framework/prompts/` as a single source of truth. Each adapter delivers them to the agent's command surface. SHA-256 hashing avoids unnecessary copies; Codex renders each prompt as a `SKILL.md`.
 3. **Skills registration**: instead of copying project skills, each adapter registers `.orderspec/skills/` in the agent's config or native discovery path — one source of truth.
-4. **External rules**: each adapter reads agent-specific rule files (AGENTS.md, CLAUDE.md, etc.) for optional integration into `conventions.md` during bootstrap.
+4. **Worker inspection**: before delegation, the command asks the current runtime adapter to validate its selected worker. Sync never creates one silently.
+5. **External rules**: each adapter reads agent-specific rule files (AGENTS.md, CLAUDE.md, etc.) for optional integration into `conventions.md` during bootstrap.
 
 ## Adapter architecture
 
 ```text
 .orderspec/framework/adapters/
-├── base.py          # AgentAdapter interface (detect, sync_skills_dir, sync_prompts, read_rules)
+├── base.py          # AgentAdapter interface plus worker policy/inspection/configuration
 ├── registry.py      # Adapter registry
 ├── kilocode.py      # Kilo Code adapter
 ├── claude_code.py   # Claude Code adapter
@@ -43,17 +44,26 @@ This file is generated and maintained by `.orderspec/framework/scripts/agents_sy
 
 1. Create a new file in `.orderspec/framework/adapters/` implementing the `AgentAdapter` interface from `base.py`.
 2. Register it in `registry.py`.
-3. The adapter must implement four methods: `detect`, `sync_skills_dir`, `sync_prompts`, `read_rules`.
+3. The adapter must implement four core methods: `detect`, `sync_skills_dir`, `sync_prompts`, `read_rules`.
+4. If the agent has named worker configuration, implement `subagent_policy`,
+   `inspect_subagents`, and `configure_subagent`; otherwise report runtime-only
+   worker management through the base implementation.
 
 The framework core remains agent-agnostic. All agent-specific logic lives in adapters.
 
-### Task worker boundary
+### Worker selection and task boundary
 
 Prompt synchronization is not sub-agent dispatch. The adapter interface records
 agent detection and prompt/skill delivery; it does not claim that the current
 runtime can create or wait for child agents. `/order.code` checks actual runtime
 dispatch capability and selects `DELEGATED`, `LOCAL_PHASE`, or explicit
-`LOCAL_ALL` fallback.
+`LOCAL_ALL` fallback. Worker selection follows
+`.orderspec/framework/protocols/sub-agent-rules.md`.
+
+Codex custom workers live in project-scoped `.codex/agents/*.toml` by default.
+The adapter validates the TOML schema and `name` field, recognizes built-ins,
+and writes a definition only after explicit operator choice. Global
+`~/.codex/agents/` configuration is available only when explicitly selected.
 
 Worker execution follows:
 

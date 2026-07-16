@@ -1,6 +1,9 @@
 import hashlib
 import json
 import os
+import re
+import tempfile
+import tomllib
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -25,9 +28,20 @@ class CodexAdapter(AgentAdapter):
     CODEX_DIR = ".codex"
     CODEX_CONFIG_FILE = ".codex/config.toml"
     PROJECT_SKILLS_DIR = ".agents/skills"
+    PROJECT_AGENTS_DIR = ".codex/agents"
+    GLOBAL_AGENTS_DIR = "~/.codex/agents"
     RULES_FILENAME = "AGENTS.md"
     RULES_OVERRIDE_FILENAME = "AGENTS.override.md"
     PLUGIN_MANIFEST = ".codex-plugin/plugin.json"
+
+    BUILT_IN_AGENTS = {
+        "default": "General-purpose fallback agent.",
+        "worker": "Execution-focused agent for implementation and fixes.",
+        "explorer": "Read-heavy codebase exploration agent.",
+    }
+    REASONING_EFFORTS = {
+        "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"
+    }
 
     def _hash_file(self, filepath: str) -> Optional[str]:
         if not os.path.isfile(filepath):
@@ -96,6 +110,328 @@ class CodexAdapter(AgentAdapter):
             "expect a shell environment variable named `ARGUMENTS`.\n\n"
             f"{body.rstrip()}\n"
         )
+
+    def subagent_policy(self) -> Dict[str, Any]:
+        """Return Codex's native custom-agent discovery and config rules."""
+        return {
+            "supports_subagents": True,
+            "management": "standalone_toml",
+            "project_scope": self.PROJECT_AGENTS_DIR,
+            "global_scope": self.GLOBAL_AGENTS_DIR,
+            "built_in_agents": sorted(self.BUILT_IN_AGENTS),
+            "required_fields": ["name", "description", "developer_instructions"],
+            "optional_fields": [
+                "nickname_candidates",
+                "model",
+                "model_reasoning_effort",
+                "sandbox_mode",
+                "mcp_servers",
+                "skills.config",
+            ],
+            "reasoning_efforts": sorted(self.REASONING_EFFORTS),
+            "name_source_of_truth": "name field in TOML",
+        }
+
+    def _subagent_dir(self, project_root: str, scope: str) -> Optional[Path]:
+        if scope == "project":
+            return Path(project_root) / self.PROJECT_AGENTS_DIR
+        if scope == "global":
+            return Path(os.path.expanduser(self.GLOBAL_AGENTS_DIR))
+        return None
+
+    def _validate_agent_data(
+        self,
+        data: Any,
+        expected_name: Optional[str] = None,
+    ) -> list[str]:
+        errors: list[str] = []
+        if not isinstance(data, dict):
+            return ["TOML root must be a table"]
+
+        for field_name in ("name", "description", "developer_instructions"):
+            value = data.get(field_name)
+            if not isinstance(value, str) or not value.strip():
+                errors.append(f"missing or empty required field: {field_name}")
+
+        if expected_name is not None and data.get("name") != expected_name:
+            errors.append(
+                f"name field is {data.get('name')!r}, expected {expected_name!r}"
+            )
+
+        reasoning = data.get("model_reasoning_effort")
+        if reasoning is not None:
+            if not isinstance(reasoning, str) or reasoning not in self.REASONING_EFFORTS:
+                errors.append(
+                    "model_reasoning_effort must be one of: "
+                    + ", ".join(sorted(self.REASONING_EFFORTS))
+                )
+
+        nicknames = data.get("nickname_candidates")
+        if nicknames is not None:
+            if (
+                not isinstance(nicknames, list)
+                or not nicknames
+                or any(not isinstance(item, str) or not item.strip() for item in nicknames)
+                or len(set(nicknames)) != len(nicknames)
+            ):
+                errors.append("nickname_candidates must be a non-empty list of unique strings")
+
+        return errors
+
+    def _read_custom_agent(self, path: Path) -> Dict[str, Any]:
+        result: Dict[str, Any] = {
+            "file": str(path),
+            "name": None,
+            "source": "custom",
+            "valid": False,
+            "errors": [],
+        }
+        try:
+            data = tomllib.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError) as exc:
+            result["errors"] = [f"failed to read: {exc}"]
+            return result
+        except tomllib.TOMLDecodeError as exc:
+            result["errors"] = [f"invalid TOML: {exc}"]
+            return result
+
+        result["name"] = data.get("name") if isinstance(data, dict) else None
+        result["errors"] = self._validate_agent_data(data)
+        result["valid"] = not result["errors"]
+        if result["valid"]:
+            result["description"] = data["description"]
+            if "model" in data:
+                result["model"] = data["model"]
+            if "model_reasoning_effort" in data:
+                result["model_reasoning_effort"] = data["model_reasoning_effort"]
+        return result
+
+    def inspect_subagents(
+        self,
+        project_root: str,
+        requested_name: Optional[str] = None,
+        scope: str = "project",
+    ) -> Dict[str, Any]:
+        """Inspect built-in and custom Codex agents without changing files."""
+        agents_dir = self._subagent_dir(project_root, scope)
+        result: Dict[str, Any] = {
+            "agent": self.agent_id,
+            "scope": scope,
+            "directory": str(agents_dir) if agents_dir else None,
+            "requested_name": requested_name,
+            "status": "ok",
+            "supports_subagents": True,
+            "policy": self.subagent_policy(),
+            "agents": [],
+            "errors": [],
+        }
+
+        if agents_dir is None:
+            result["status"] = "error"
+            result["errors"].append(f"unsupported scope: {scope}")
+            return result
+
+        for name, description in sorted(self.BUILT_IN_AGENTS.items()):
+            result["agents"].append({
+                "name": name,
+                "source": "builtin",
+                "file": None,
+                "valid": True,
+                "configured": True,
+                "description": description,
+            })
+
+        if agents_dir.is_dir():
+            for path in sorted(agents_dir.glob("*.toml")):
+                if not path.is_file():
+                    continue
+                entry = self._read_custom_agent(path)
+                entry["file"] = os.path.relpath(path, project_root) if scope == "project" else str(path)
+                entry["configured"] = bool(entry.get("valid"))
+                result["agents"].append(entry)
+
+        if requested_name is not None:
+            matches = [entry for entry in result["agents"] if entry.get("name") == requested_name]
+            custom_matches = [entry for entry in matches if entry.get("source") == "custom"]
+            builtin_matches = [entry for entry in matches if entry.get("source") == "builtin"]
+            if custom_matches:
+                valid_matches = [entry for entry in custom_matches if entry.get("valid")]
+                if len(custom_matches) > 1:
+                    result["status"] = "invalid"
+                    result["errors"].append(
+                        f"multiple custom agent files declare name {requested_name!r}"
+                    )
+                elif not valid_matches:
+                    result["status"] = "invalid"
+                entry = custom_matches[0]
+                result["requested"] = {
+                    "name": requested_name,
+                    "configured": bool(valid_matches) and len(custom_matches) == 1,
+                    "valid": bool(valid_matches) and len(custom_matches) == 1,
+                    "source": "custom",
+                    "file": entry.get("file"),
+                    "reasoning_effort": entry.get("model_reasoning_effort"),
+                    "errors": entry.get("errors", []),
+                }
+            elif builtin_matches:
+                result["requested"] = {
+                    "name": requested_name,
+                    "configured": True,
+                    "valid": True,
+                    "source": "builtin",
+                    "file": None,
+                    "reasoning_effort": "inherited",
+                }
+            else:
+                result["status"] = "missing"
+                result["requested"] = {
+                    "name": requested_name,
+                    "configured": False,
+                    "valid": False,
+                    "source": None,
+                }
+        return result
+
+    def _safe_agent_filename(self, name: str) -> Optional[str]:
+        if not isinstance(name, str) or not name.strip():
+            return None
+        if any(char in name for char in ("/", "\\", "\x00")):
+            return None
+        slug = re.sub(r"[^A-Za-z0-9_-]+", "-", name.strip()).strip("-_")
+        if not slug:
+            return None
+        return f"{slug}.toml"
+
+    def _render_agent_toml(
+        self,
+        name: str,
+        description: str,
+        developer_instructions: str,
+        reasoning_effort: str,
+        model: Optional[str],
+    ) -> str:
+        lines = [
+            f"name = {json.dumps(name, ensure_ascii=False)}",
+            f"description = {json.dumps(description, ensure_ascii=False)}",
+            f"developer_instructions = {json.dumps(developer_instructions, ensure_ascii=False)}",
+        ]
+        if model:
+            lines.append(f"model = {json.dumps(model, ensure_ascii=False)}")
+        lines.append(f"model_reasoning_effort = {json.dumps(reasoning_effort)}")
+        return "\n".join(lines) + "\n"
+
+    def configure_subagent(
+        self,
+        project_root: str,
+        name: str,
+        reasoning_effort: str,
+        scope: str = "project",
+        description: Optional[str] = None,
+        developer_instructions: Optional[str] = None,
+        model: Optional[str] = None,
+        overwrite: bool = False,
+    ) -> Dict[str, Any]:
+        """Create or explicitly update one native Codex custom-agent file."""
+        result: Dict[str, Any] = {
+            "agent": self.agent_id,
+            "scope": scope,
+            "name": name,
+            "reasoning_effort": reasoning_effort,
+            "status": "error",
+            "details": "",
+        }
+
+        agents_dir = self._subagent_dir(project_root, scope)
+        if agents_dir is None:
+            result["details"] = f"Unsupported scope: {scope}"
+            return result
+        if not isinstance(reasoning_effort, str) or reasoning_effort not in self.REASONING_EFFORTS:
+            result["details"] = (
+                "Invalid reasoning effort. Choose one of: "
+                + ", ".join(sorted(self.REASONING_EFFORTS))
+            )
+            return result
+
+        filename = self._safe_agent_filename(name)
+        if filename is None:
+            result["details"] = (
+                "Agent name must be non-empty and must not contain path separators "
+                "or NUL characters"
+            )
+            return result
+
+        inspection = self.inspect_subagents(project_root, requested_name=name, scope=scope)
+        requested = inspection.get("requested", {})
+        if requested.get("source") == "custom" and requested.get("configured") and not overwrite:
+            result["status"] = "already_configured"
+            result["details"] = f"Agent '{name}' is already configured"
+            result["path"] = requested.get("file")
+            return result
+        if requested.get("source") == "custom" and requested.get("errors") and not overwrite:
+            result["details"] = (
+                f"Agent '{name}' has an invalid existing configuration; "
+                "use --overwrite only after reviewing it"
+            )
+            result["errors"] = requested["errors"]
+            return result
+
+        description = description or "Executes one bounded worker task for an OrderSpec command or skill."
+        developer_instructions = developer_instructions or (
+            "You are an OrderSpec worker. Execute exactly one bounded task packet "
+            "from the coordinator, use only supplied context and write paths, "
+            "do not start another worker, and return the required structured result."
+        )
+        if not isinstance(description, str) or not description.strip():
+            result["details"] = "description must be a non-empty string"
+            return result
+        if not isinstance(developer_instructions, str) or not developer_instructions.strip():
+            result["details"] = "developer_instructions must be a non-empty string"
+            return result
+
+        content = self._render_agent_toml(
+            name=name,
+            description=description,
+            developer_instructions=developer_instructions,
+            reasoning_effort=reasoning_effort,
+            model=model,
+        )
+        try:
+            tomllib.loads(content)
+            agents_dir.mkdir(parents=True, exist_ok=True)
+            target = agents_dir / filename
+            if target.exists() and requested.get("source") != "custom" and not overwrite:
+                existing = self._read_custom_agent(target)
+                result["details"] = (
+                    f"Target file {filename} already belongs to agent "
+                    f"{existing.get('name')!r}; choose another name or use --overwrite"
+                )
+                return result
+            with tempfile.NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                dir=agents_dir,
+                prefix=f".{filename}.",
+                suffix=".tmp",
+                delete=False,
+            ) as handle:
+                handle.write(content)
+                temporary = Path(handle.name)
+            os.replace(temporary, target)
+        except (OSError, UnicodeError, tomllib.TOMLDecodeError) as exc:
+            try:
+                if "temporary" in locals() and temporary.exists():
+                    temporary.unlink()
+            except OSError:
+                pass
+            result["details"] = f"Failed to write {target if 'target' in locals() else agents_dir}: {exc}"
+            return result
+
+        result["status"] = "updated" if overwrite and requested else "created"
+        result["path"] = (
+            os.path.relpath(target, project_root) if scope == "project" else str(target)
+        )
+        result["details"] = f"Configured Codex agent '{name}'"
+        return result
 
     def detect(self, project_root: str) -> Optional[AgentInfo]:
         markers = [

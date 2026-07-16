@@ -39,6 +39,11 @@
             "type": "array",
             "items": { "type": "string" }
           },
+          "subagent_policy": {
+            "type": "object",
+            "description": "Adapter-owned worker discovery and configuration policy",
+            "additionalProperties": true
+          },
           "enabled": { "type": "boolean" },
           "sync_state": {
             "type": "object",
@@ -50,6 +55,11 @@
                   "copied": { "type": "array", "items": { "type": "string" } },
                   "skipped": { "type": "array", "items": { "type": "string" } },
                   "last_sync": { "type": "string", "format": "date-time" }
+                },
+                "subagents": {
+                  "type": "object",
+                  "description": "Last adapter-owned worker inspection",
+                  "additionalProperties": true
                 }
               }
             }

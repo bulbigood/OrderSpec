@@ -852,6 +852,86 @@ else:
     bad(f"Claude Code wrong symlink :: rc={rc} err={err!r}")
 
 
+# === SUB-AGENT TESTS ===
+
+# 40. Codex built-in worker is recognized without creating project config
+reset_work()
+setup_prompts_source()
+setup_codex()
+rc, data, err = run_sync_json(
+    "subagents", "inspect", "--agent", "codex", "--name", "worker", "--json"
+)
+requested = data.get("requested", {})
+if rc == 0 and data.get("status") == "ok" and requested.get("configured") and requested.get("source") == "builtin":
+    ok("Codex sub-agents — built-in worker is ready")
+else:
+    bad(f"Codex built-in worker inspection :: rc={rc} data={data} err={err!r}")
+
+
+# 41. Missing Codex worker is reported before dispatch/configuration
+rc, data, err = run_sync_json(
+    "subagents", "inspect", "--agent", "codex", "--name", "orderspec-worker", "--json"
+)
+if rc == 0 and data.get("status") == "missing" and not data.get("requested", {}).get("configured"):
+    ok("Codex sub-agents — missing worker reported")
+else:
+    bad(f"Codex missing worker inspection :: rc={rc} data={data} err={err!r}")
+
+
+# 42. Explicit project configuration writes native Codex custom-agent TOML
+rc, data, err = run_sync_json(
+    "subagents", "configure", "--agent", "codex", "--name", "orderspec-worker",
+    "--reasoning", "high", "--json"
+)
+agent_file = WORK / ".codex" / "agents" / "orderspec-worker.toml"
+if rc == 0 and data.get("status") == "created" and agent_file.exists():
+    content = read(agent_file)
+    if 'name = "orderspec-worker"' in content and 'model_reasoning_effort = "high"' in content:
+        ok("Codex sub-agents — project worker TOML created")
+    else:
+        bad(f"Codex worker TOML content :: {content!r}")
+else:
+    bad(f"Codex worker configuration :: rc={rc} data={data} err={err!r}")
+
+
+# 43. Configured Codex worker is validated by name field and required fields
+rc, data, err = run_sync_json(
+    "subagents", "inspect", "--agent", "codex", "--name", "orderspec-worker", "--json"
+)
+requested = data.get("requested", {})
+if rc == 0 and requested.get("configured") and requested.get("valid") and requested.get("source") == "custom":
+    ok("Codex sub-agents — custom worker validates successfully")
+else:
+    bad(f"Codex custom worker inspection :: rc={rc} data={data} err={err!r}")
+
+
+# 44. Invalid custom worker is rejected instead of being dispatched
+write(
+    WORK / ".codex" / "agents" / "broken.toml",
+    'name = "broken"\ndescription = "broken"\ndeveloper_instructions = "broken"\nmodel_reasoning_effort = "invalid"\n',
+)
+rc, data, err = run_sync_json(
+    "subagents", "inspect", "--agent", "codex", "--name", "broken", "--json"
+)
+if rc == 0 and data.get("status") == "invalid" and data.get("requested", {}).get("valid") is False:
+    ok("Codex sub-agents — invalid reasoning level rejected")
+else:
+    bad(f"Codex invalid worker inspection :: rc={rc} data={data} err={err!r}")
+
+
+# 45. Non-interactive ensure asks for operator input rather than guessing
+reset_work()
+setup_prompts_source()
+setup_codex()
+rc, data, err = run_sync_json(
+    "subagents", "ensure", "--agent", "codex", "--name", "missing-worker", "--json"
+)
+if rc == 0 and data.get("status") == "needs_user_input" and not (WORK / ".codex" / "agents").exists():
+    ok("Codex sub-agents — non-interactive ensure does not guess or write")
+else:
+    bad(f"Codex non-interactive ensure :: rc={rc} data={data} err={err!r}")
+
+
 # ── Cleanup ──────────────────────────────────────────────────────────────────
 
 if WORK.exists():

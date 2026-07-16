@@ -38,3 +38,62 @@ class AgentAdapter(ABC):
     def read_rules(self, project_root: str) -> Dict[str, Any]:
         """Прочитать существующие rule-файлы агента (AGENTS.md и т.д.)."""
         pass
+
+    def subagent_policy(self) -> Dict[str, Any]:
+        """Describe how this agent discovers and manages delegated workers.
+
+        Sub-agent orchestration is a runtime concern, so adapters expose the
+        agent-specific discovery/configuration rules without forcing the
+        framework core to know a particular config format.
+        """
+        return {
+            "supports_subagents": False,
+            "management": "runtime_only",
+            "project_scope": None,
+            "global_scope": None,
+            "built_in_agents": [],
+        }
+
+    def inspect_subagents(
+        self,
+        project_root: str,
+        requested_name: Optional[str] = None,
+        scope: str = "project",
+    ) -> Dict[str, Any]:
+        """Inspect available workers for this agent.
+
+        Agents without a known project configuration surface still return a
+        deterministic report. This keeps future adapters additive and lets
+        callers use one protocol for every command that may delegate work.
+        """
+        policy = self.subagent_policy()
+        return {
+            "agent": self.agent_id,
+            "scope": scope,
+            "requested_name": requested_name,
+            "status": "unsupported",
+            "supports_subagents": policy.get("supports_subagents", False),
+            "policy": policy,
+            "agents": [],
+            "errors": [],
+        }
+
+    def configure_subagent(
+        self,
+        project_root: str,
+        name: str,
+        reasoning_effort: str,
+        scope: str = "project",
+        description: Optional[str] = None,
+        developer_instructions: Optional[str] = None,
+        model: Optional[str] = None,
+        overwrite: bool = False,
+    ) -> Dict[str, Any]:
+        """Configure a worker using the agent's native configuration format."""
+        return {
+            "agent": self.agent_id,
+            "scope": scope,
+            "name": name,
+            "status": "unsupported",
+            "details": "This agent adapter has no sub-agent configuration surface.",
+        }

@@ -95,6 +95,45 @@ Mode precedence:
 4. Select `DELEGATED`, otherwise `LOCAL_PHASE`, unless `--all` selects `LOCAL_ALL`.
 5. State mode before the first task mutation.
 
+### Step 3.5: Worker Resolution
+
+Apply `sub-agent-rules.md` before the first delegated task. Build this request:
+
+```yaml
+caller: order.code
+role: implementation-worker
+preferred_name: worker
+reasoning_effort: medium
+scope: project
+```
+
+User input may override `preferred_name`, `reasoning_effort`, or `scope`.
+
+If the selected mode is `DELEGATED`:
+
+1. Identify the current runtime agent. Do not infer it from
+   `.orderspec/state/agents.json` when multiple agents are enabled.
+2. Inspect the requested worker through the matching adapter:
+   ```bash
+   python3 .orderspec/framework/scripts/agents_sync.py subagents inspect \
+     --agent <runtime-agent> --name <worker-name> --scope <scope> --json
+   ```
+3. Continue only when the report says `configured: true` and `valid: true`.
+   A built-in worker is usable only when the adapter reports it.
+4. If the worker is missing or invalid, stop before dispatch and ask the user
+   for a worker name and reasoning level. After the user chooses, configure it
+   through the adapter, defaulting to project scope:
+   ```bash
+   python3 .orderspec/framework/scripts/agents_sync.py subagents configure \
+     --agent <runtime-agent> --name <worker-name> \
+     --reasoning <level> --scope project --json
+   ```
+   Re-run `inspect` and dispatch only after it reports readiness. Do not
+   silently write global configuration or invent a worker name.
+
+If the selected mode is `LOCAL_PHASE` or `LOCAL_ALL`, do not configure a
+worker. Execute the bounded packet locally according to the selected fallback.
+
 ### Step 4: Upstream Gate Guard
 
 Run the deterministic guard. `$FORCE_FLAG` is `--force` iff `$ARGUMENTS` contains `--force`; otherwise empty.
@@ -412,6 +451,8 @@ Report to chat:
 - **Tasks**: completed / total, per phase; confirm all completed tasks are marked `[X]` by `task_progress.py`.
 - **Execution mode**: `DELEGATED`, `LOCAL_PHASE`, or `LOCAL_ALL`; report fallback reason and concurrent `[P]` groups.
 - **Sub-agents**: confirm delegated tasks and any local tasks; report sequential fallbacks.
+- **Worker selection**: report runtime adapter, worker name, reasoning effort,
+  scope, readiness result, and any user configuration step.
 - **Coverage check**: `check-mechanisms` exit code (MUST be 0); one-line summary if defects found.
 - **Verification**: checkpoint results per story; GATE result; final test command output summary (pass/fail counts).
 - **Deviations log**: all `DEVIATION:` lines (or "none").
@@ -426,6 +467,7 @@ Report to chat:
 - [ ] Command context resolved via `command_context.py`
 - [ ] Every `to_read` file was read and interpreted by `usage`
 - [ ] Execution mode detected and stated (`DELEGATED` / `LOCAL_PHASE` / `LOCAL_ALL`); `RESUME` and `--force` recorded separately
+- [ ] Worker request resolved through `sub-agent-rules.md`; delegated worker inspected and ready, or local fallback used without configuration
 - [ ] Feature paths resolved; `eval` used for shell vars
 - [ ] Upstream gate respected: guard returned `ok`/`advisory`/`forced` (not `halt`/`stop`/`error`); on `forced`, a `--force` warning was recorded in the completion report; on `advisory`, user was warned in chat
 - [ ] Tooling validated via `validate_tooling.py` (if `tooling-protocol.md` was loaded); missing required skills routed per rule 6, not silently continued

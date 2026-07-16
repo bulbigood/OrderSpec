@@ -126,6 +126,21 @@ python3 .orderspec/framework/scripts/agents_sync.py sync
 /order.code
 ```
 
+When `/order.code` delegates work, it resolves a worker through the current
+agent adapter. Missing or invalid workers are reported before dispatch; the
+operator chooses the worker name and reasoning level. Project scope is the
+default. Inspect or configure workers explicitly:
+
+```bash
+python3 .orderspec/framework/scripts/agents_sync.py subagents inspect \
+  --agent codex --name worker --json
+python3 .orderspec/framework/scripts/agents_sync.py subagents ensure \
+  --agent codex --json
+```
+
+Shared rules live in `framework/protocols/sub-agent-rules.md`; agent-specific
+deployment and configuration rules live in `framework/adapters/`.
+
 ## Brownfield projects
 
 If you are applying OrderSpec to an existing codebase (a brownfield project), you don't need to write specs for everything manually. You can use the reverse-engineering command to extract specifications directly from your existing code.

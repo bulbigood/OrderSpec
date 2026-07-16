@@ -389,6 +389,9 @@ Each adapter implements the `AgentAdapter` interface defined in `.orderspec/fram
 | `sync_skills_dir(project_root, skills_dir)` | Register the OrderSpec skills directory in the agent's config |
 | `sync_prompts(project_root, prompts_source)` | Deliver OrderSpec prompts to the agent's commands/workflows directory |
 | `read_rules(project_root)` | Read external rule files owned by the agent (AGENTS.md, .cursorrules, etc.) |
+| `subagent_policy()` | Describe agent-specific worker discovery, scopes, built-ins, and fields |
+| `inspect_subagents(project_root, requested_name, scope)` | Validate worker availability without changing files |
+| `configure_subagent(...)` | Write one explicit worker definition in the agent's native format |
 
 The adapter registry is at `.orderspec/framework/adapters/registry.py`.
 
@@ -417,6 +420,9 @@ It provides four subcommands:
 | `sync --agents <ids>` | Synchronize prompts and skills for specified agents, update agents.json |
 | `read-rules --agents <ids>` | Read external rule files from specified agents |
 | `state` | Display current agent configuration state |
+| `subagents inspect` | Inspect named and built-in workers through an adapter |
+| `subagents ensure` | Use an existing worker or interactively configure a missing worker |
+| `subagents configure` | Explicitly write one worker definition through an adapter |
 
 ### Prompt Distribution Model
 
@@ -446,6 +452,20 @@ Instead of copying or symlinking skills, OrderSpec registers its skills director
 - [future agents]: [adapter-defined config mechanism]
 
 This ensures one source of truth — skills are maintained in `.orderspec/skills/` and all agents read from there directly.
+
+### Sub-agent worker management
+
+Worker selection and shared safety rules live in
+`.orderspec/framework/protocols/sub-agent-rules.md`. They apply to `/order.code`
+and to future commands or skills that delegate work. Agent-specific discovery,
+validation, and configuration remain adapter responsibilities.
+
+`agents_sync.py sync` only inspects workers and records the result. It does not
+silently create one. A delegating command must inspect its selected worker and
+stop for operator input when the worker is missing or invalid.
+
+Project-scoped configuration is the default because it is reproducible and
+reviewable. Global configuration requires explicit operator choice.
 
 ## External Rules Integration Policy
 

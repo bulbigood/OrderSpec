@@ -31,6 +31,17 @@ class ClaudeCodeAdapter(AgentAdapter):
     RULES_FILENAME = "CLAUDE.md"
     RULES_FILENAME_ALT = ".claude/CLAUDE.md"
 
+    def subagent_policy(self) -> Dict[str, Any]:
+        """Claude Code delegation is runtime-managed, not project-file managed."""
+        return {
+            "supports_subagents": True,
+            "management": "runtime_only",
+            "project_scope": None,
+            "global_scope": None,
+            "built_in_agents": [],
+            "details": "The adapter cannot create or validate named Claude workers; the runtime owns dispatch.",
+        }
+
     def _hash_file(self, filepath: str) -> Optional[str]:
         if not os.path.isfile(filepath):
             return None

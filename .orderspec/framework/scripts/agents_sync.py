@@ -12,6 +12,7 @@ import os
 import json
 import argparse
 from datetime import datetime, timezone
+from typing import Optional
 
 # Add framework to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
@@ -58,7 +59,9 @@ def detect_all() -> list:
     for adapter in get_all_adapters():
         info = adapter.detect(project_root)
         if info:
-            results.append(info.to_dict())
+            info_dict = info.to_dict()
+            info_dict["subagent_policy"] = adapter.subagent_policy()
+            results.append(info_dict)
         else:
             # Include undetected adapters in the list for transparency
             results.append({
@@ -69,7 +72,8 @@ def detect_all() -> list:
                 "config_paths": [],
                 "prompts_dir": "",
                 "supports_symlinks": False,
-                "rules_files": []
+                "rules_files": [],
+                "subagent_policy": adapter.subagent_policy(),
             })
     return results
 
@@ -109,7 +113,8 @@ def sync_agents(enabled_ids: list) -> dict:
                 "agent_id": adapter.agent_id,
                 "skills_sync": {},
                 "prompts_sync": {},
-                "rules_read": {}
+                "rules_read": {},
+                "subagents": {},
             }
 
             # Sync skills dir
@@ -137,17 +142,31 @@ def sync_agents(enabled_ids: list) -> dict:
                 agent_report["prompts_sync"] = {"errors": [str(e)]}
                 report["errors"].append(f"[{adapter.agent_id}] prompts sync: {e}")
 
+            # Inspect workers without changing agent configuration. Named
+            # worker setup is explicit and handled by the subagents command.
+            try:
+                agent_report["subagents"] = adapter.inspect_subagents(project_root)
+            except Exception as e:
+                agent_report["subagents"] = {
+                    "agent": adapter.agent_id,
+                    "status": "error",
+                    "errors": [str(e)],
+                }
+                report["errors"].append(f"[{adapter.agent_id}] sub-agent inspection: {e}")
+
             # Update state for this agent
             detect_info = adapter.detect(project_root)
             if detect_info:
                 state["agents"][adapter.agent_id] = detect_info.to_dict()
+                state["agents"][adapter.agent_id]["subagent_policy"] = adapter.subagent_policy()
                 state["agents"][adapter.agent_id]["sync_state"] = {
                     "skills": agent_report["skills_sync"],
                     "prompts": {
                         "copied": agent_report["prompts_sync"].get("copied", []),
                         "skipped": agent_report["prompts_sync"].get("skipped", []),
                         "last_sync": datetime.now(timezone.utc).isoformat()
-                    }
+                    },
+                    "subagents": agent_report["subagents"],
                 }
 
             report["sync_results"].append(agent_report)
@@ -198,6 +217,114 @@ def read_rules(enabled_ids: list) -> dict:
     return results
 
 
+def inspect_subagents(agent_id: str, name: Optional[str] = None, scope: str = "project") -> dict:
+    """Inspect one agent's worker registry through its adapter."""
+    project_root = os.getcwd()
+    try:
+        adapter = next(a for a in get_all_adapters() if a.agent_id == agent_id)
+    except StopIteration:
+        return {
+            "agent": agent_id,
+            "scope": scope,
+            "status": "error",
+            "errors": [f"Adapter '{agent_id}' not found in registry."],
+        }
+    return adapter.inspect_subagents(project_root, requested_name=name, scope=scope)
+
+
+def configure_subagent(
+    agent_id: str,
+    name: str,
+    reasoning_effort: str,
+    scope: str = "project",
+    description: Optional[str] = None,
+    developer_instructions: Optional[str] = None,
+    model: Optional[str] = None,
+    overwrite: bool = False,
+) -> dict:
+    """Write one worker definition through the selected adapter."""
+    project_root = os.getcwd()
+    try:
+        adapter = next(a for a in get_all_adapters() if a.agent_id == agent_id)
+    except StopIteration:
+        return {
+            "agent": agent_id,
+            "scope": scope,
+            "name": name,
+            "status": "error",
+            "details": f"Adapter '{agent_id}' not found in registry.",
+        }
+    return adapter.configure_subagent(
+        project_root,
+        name=name,
+        reasoning_effort=reasoning_effort,
+        scope=scope,
+        description=description,
+        developer_instructions=developer_instructions,
+        model=model,
+        overwrite=overwrite,
+    )
+
+
+def ensure_subagent(
+    agent_id: str,
+    name: Optional[str] = None,
+    reasoning_effort: Optional[str] = None,
+    scope: str = "project",
+    description: str | None = None,
+    developer_instructions: str | None = None,
+    model: str | None = None,
+    overwrite: bool = False,
+    interactive: bool = True,
+) -> dict:
+    """Use an existing worker or interactively configure a missing one."""
+    inspection = inspect_subagents(agent_id, name=name, scope=scope)
+    if inspection.get("status") in ("error", "unsupported"):
+        return inspection
+
+    requested = inspection.get("requested") if name else None
+    if requested and requested.get("configured") and requested.get("valid"):
+        return {
+            "action": "use_existing",
+            "status": "ready",
+            "inspection": inspection,
+            "worker": requested,
+        }
+
+    if not interactive:
+        missing = name or "worker name"
+        return {
+            "action": "configure",
+            "status": "needs_user_input",
+            "inspection": inspection,
+            "details": f"No valid worker '{missing}' is configured; provide --name and --reasoning.",
+        }
+
+    if not name or (requested and not requested.get("valid")):
+        prompt = "Sub-agent name"
+        if requested and requested.get("errors"):
+            prompt += " (existing definition is invalid; choose a new name)"
+        name = input(f"{prompt}: ").strip()
+    if not name:
+        return {"action": "configure", "status": "error", "details": "Sub-agent name cannot be empty."}
+
+    if not reasoning_effort:
+        reasoning_effort = input(
+            "Reasoning effort [medium] (none, minimal, low, medium, high, xhigh, max, ultra): "
+        ).strip() or "medium"
+
+    return configure_subagent(
+        agent_id=agent_id,
+        name=name,
+        reasoning_effort=reasoning_effort,
+        scope=scope,
+        description=description,
+        developer_instructions=developer_instructions,
+        model=model,
+        overwrite=overwrite,
+    )
+
+
 def print_text_report(report: dict):
     """Print human-readable sync report."""
     for res in report.get("sync_results", []):
@@ -216,6 +343,10 @@ def print_text_report(report: dict):
         if errors:
             print(f"  Errors: {errors}")
 
+        subagents = res.get("subagents", {})
+        if subagents:
+            print(f"  Sub-agents: {subagents.get('status', 'unknown')}")
+
     for warn in report.get("warnings", []):
         print(f"\n⚠️  WARNING: {warn}")
 
@@ -233,6 +364,8 @@ Examples:
   %(prog)s sync --agents kilocode --json
   %(prog)s sync --agents kilocode claude_code codex
   %(prog)s read-rules --agents kilocode claude_code codex --json
+  %(prog)s subagents inspect --agent codex --name worker --json
+  %(prog)s subagents ensure --agent codex
         """
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -254,6 +387,34 @@ Examples:
     # state
     parser_state = subparsers.add_parser("state", help="Show current agents state")
     parser_state.add_argument("--json", action="store_true", help="Output as JSON")
+
+    # subagents
+    parser_subagents = subparsers.add_parser(
+        "subagents",
+        help="Inspect or configure delegated workers through an agent adapter",
+    )
+    subagent_parsers = parser_subagents.add_subparsers(dest="subagents_command", required=True)
+
+    parser_subagents_inspect = subagent_parsers.add_parser("inspect", help="Inspect configured workers")
+    parser_subagents_inspect.add_argument("--agent", required=True, help="Agent adapter id")
+    parser_subagents_inspect.add_argument("--name", help="Worker name to validate")
+    parser_subagents_inspect.add_argument("--scope", choices=["project", "global"], default="project")
+    parser_subagents_inspect.add_argument("--json", action="store_true", help="Output as JSON")
+
+    for action, help_text in (
+        ("ensure", "Use an existing worker or configure a missing worker"),
+        ("configure", "Create or update one worker definition"),
+    ):
+        subagent_parser = subagent_parsers.add_parser(action, help=help_text)
+        subagent_parser.add_argument("--agent", required=True, help="Agent adapter id")
+        subagent_parser.add_argument("--name", required=(action == "configure"), help="Worker name")
+        subagent_parser.add_argument("--reasoning", dest="reasoning_effort", required=(action == "configure"), help="Reasoning effort")
+        subagent_parser.add_argument("--scope", choices=["project", "global"], default="project")
+        subagent_parser.add_argument("--description", help="Optional worker description")
+        subagent_parser.add_argument("--developer-instructions", help="Optional worker instructions")
+        subagent_parser.add_argument("--model", help="Optional model override")
+        subagent_parser.add_argument("--overwrite", action="store_true", help="Replace an existing custom definition")
+        subagent_parser.add_argument("--json", action="store_true", help="Output as JSON")
 
     args = parser.parse_args()
 
@@ -339,6 +500,38 @@ Examples:
             for agent_id, info in state.get("agents", {}).items():
                 enabled = agent_id in state.get("enabled_agents", [])
                 print(f"  [{'+'if enabled else '-'}] {agent_id}: prompts_dir={info.get('prompts_dir', '?')}")
+
+    elif args.command == "subagents":
+        if args.subagents_command == "inspect":
+            result = inspect_subagents(args.agent, args.name, args.scope)
+        elif args.subagents_command == "configure":
+            result = configure_subagent(
+                agent_id=args.agent,
+                name=args.name,
+                reasoning_effort=args.reasoning_effort,
+                scope=args.scope,
+                description=args.description,
+                developer_instructions=args.developer_instructions,
+                model=args.model,
+                overwrite=args.overwrite,
+            )
+        else:
+            result = ensure_subagent(
+                agent_id=args.agent,
+                name=args.name,
+                reasoning_effort=args.reasoning_effort,
+                scope=args.scope,
+                description=args.description,
+                developer_instructions=args.developer_instructions,
+                model=args.model,
+                overwrite=args.overwrite,
+                interactive=not args.json,
+            )
+
+        if getattr(args, "json", False):
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print(json.dumps(result, indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":
