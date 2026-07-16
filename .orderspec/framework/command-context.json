@@ -210,7 +210,7 @@
         }
       ],
       "feature_context": {
-        "mode": "if_active",
+        "mode": "required",
         "artifacts": [
           "spec"
         ]
@@ -315,18 +315,6 @@
           "tasks"
         ]
       }
-    },
-    "order.sync-check": {
-      "required": [
-        {
-          "group": "project.contracts"
-        }
-      ],
-      "read_if_exists": [
-        {
-          "group": "runtime.agents"
-        }
-      ]
     }
   }
 }
