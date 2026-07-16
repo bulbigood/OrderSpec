@@ -4,11 +4,6 @@ orderspec:
   command: order.tasks
   phase: tasks
 description: Generate a disposable, Expand-Migrate-Contract ordered tasks.md from spec.md (IDs) and plan.md (paths). Sequential phases are the backbone; parallelism is an optional annotation. Coverage is proven by the deterministic traceability tool, never hand-built.
-handoffs:
-  - label: Implement Project
-    agent: order.code
-    prompt: Start the implementation in phases
-    send: true
 ---
 
 ## User Input
@@ -145,9 +140,9 @@ Tasks break down an existing plan — the plan must exist first.
 TASKS_BLOCKED: plan gate not passed
 Plan gate verdict: {verdict} (from plan-report.md, dated {date})
 The plan has unresolved findings. Resolve them first:
-  1. Action each Routing block in plan-report.md via /order.plan "..."
-  2. Re-run /order.plan-check until the verdict is ✅ PASS
-  3. Then re-run /order.tasks
+  1. Report each Routing block in plan-report.md as human/orchestrator work for `/order.plan "..."`.
+  2. Stop. Human or orchestrator runs `/order.plan`, then `/order.plan-check` until the verdict is ✅ PASS.
+  3. Human or orchestrator starts `/order.tasks` again.
 To derive tasks anyway (NOT recommended), re-run with --force.
 ```
 
@@ -433,7 +428,7 @@ Report to chat:
 - Oversized stories flagged (any UJ over the 15-task soft limit).
 - Suggested MVP scope (US1) and the STOP & VALIDATE checkpoint.
 - If a prior `tasks-report.md` drove this run: which finding IDs were addressed.
-- **Recommended next step:** Run `/order.tasks-check` to verify the tasks before proceeding to `/order.code`
+- **Manual/orchestrator next step:** Run `/order.tasks-check` to verify the tasks before starting `/order.code`
 
 ## Done When
 
@@ -455,4 +450,4 @@ Report to chat:
 - [ ] `validate --stage tasks` has no blocking findings
 - [ ] `task_context.py validate` passed; every task has a deterministic read whitelist
 - [ ] Active feature status updated to `tasks`
-- [ ] Completion Report provided, including recommendation to run `/order.tasks-check`
+- [ ] Completion Report provided, including manual/orchestrator recommendation to run `/order.tasks-check`

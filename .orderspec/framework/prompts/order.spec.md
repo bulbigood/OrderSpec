@@ -4,10 +4,6 @@ orderspec:
   command: order.spec
   phase: specify
 description: Create or update the feature specification — the stable WHAT-contract with logical architecture. Owns spec.md contract content.
-handoffs:
-  - label: Build Technical Plan
-    agent: order.plan
-    prompt: Create a plan for this specification.
 ---
 
 ## Role
@@ -895,7 +891,7 @@ Include:
 - contradiction-grid result;
 - bootstrap routing, if any;
 - readiness for `/order.plan`;
-- recommendation to run `/order.spec-check` for high-importance work.
+- manual/orchestrator recommendation to run `/order.spec-check` for high-importance work.
 
 ### Refine report
 
@@ -911,7 +907,7 @@ Include:
 - active feature update result;
 - downstream impact warnings;
 - bootstrap routing, if any;
-- recommendation to run `/order.spec-check`.
+- manual/orchestrator recommendation to run `/order.spec-check`.
 
 ### Decompose report
 

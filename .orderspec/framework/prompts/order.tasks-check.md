@@ -4,19 +4,6 @@ orderspec:
   command: order.tasks-check
   phase: check
 description: Per-stage gate validating tasks.md as a faithful, well-ordered projection of plan.md. The deterministic traceability tool already proves coverage, cap, subset-binding, and ID legality at /order.tasks time. This gate spends LLM context only on semantic checks: faithfulness to plan, E-M-C ordering, test-first discipline, and SC buildability. Pure inspector: writes only tasks-report.md.
-handoffs:
-  - label: "Proceed to Code"
-    agent: "order.code"
-    prompt: "/order.code"
-  - label: "Fix Tasks"
-    agent: "order.tasks"
-    prompt: "/order.tasks"
-  - label: "Fix Plan"
-    agent: "order.plan"
-    prompt: "/order.plan"
-  - label: "Fix Spec"
-    agent: "order.spec"
-    prompt: "/order.spec"
 ---
 
 # OrderSpec Tasks Check
@@ -267,6 +254,6 @@ After writing the report, respond in chat with:
 - Number of findings by severity
 - Number of auto-fixes applied
 - Number of routing blocks
-- Next action:
-  - PASS → proceed to `/order.code`
-  - ROUTING_REQUIRED/BLOCK → run routed `/order.tasks` and/or `/order.plan`/`/order.spec` request(s), then rerun `/order.tasks-check`
+- Manual/orchestrator next action:
+  - PASS → human or orchestrator may start `/order.code`
+  - ROUTING_REQUIRED/BLOCK → human or orchestrator may run routed `/order.tasks` and/or `/order.plan`/`/order.spec` request(s), then rerun `/order.tasks-check`

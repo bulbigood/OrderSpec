@@ -4,10 +4,6 @@ orderspec:
   command: order.bootstrap
   phase: bootstrap
 description: Create or amend four project-level contract documents — stack.md, architecture.md, conventions.md, and constitution.md. Infers stack and architecture from the repository on first run.
-handoffs:
-  - label: Write a specification
-    agent: order.spec
-    prompt: With project contracts in place, specify the feature. I want to build...
 ---
 
 ## Role

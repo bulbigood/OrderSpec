@@ -4,10 +4,6 @@ orderspec:
   command: order.code-to-spec
   phase: specify
 description: Reverse-engineer a feature specification from existing code. Requires a capable model. Produces a spec.md fully compatible with the OrderSpec pipeline.
-handoffs:
-  - label: Build Technical Plan
-    agent: order.plan
-    prompt: Create a plan for this specification.
 ---
 
 ## Role
@@ -834,7 +830,7 @@ Include:
 - bootstrap routing, if any;
 - scope sizing finding (if oversized);
 - readiness for `/order.plan`;
-- recommendation to run `/order.spec-check`;
+- manual/orchestrator recommendation to run `/order.spec-check`;
 - recommendation to manually review extracted specs for missed invariants.
 
 ### Refine report
@@ -853,7 +849,7 @@ Include:
 - invariant extraction summary;
 - downstream impact warnings;
 - bootstrap routing, if any;
-- recommendation to run `/order.spec-check`.
+- manual/orchestrator recommendation to run `/order.spec-check`.
 
 ## Done When
 

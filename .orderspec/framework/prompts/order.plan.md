@@ -4,11 +4,6 @@ orderspec:
   command: order.plan
   phase: plan
 description: Map the spec's logical architecture onto the current repository state — physical structure, verified stack, path manifest, and mechanism machine state.
-handoffs:
-  - label: Create Tasks
-    agent: order.tasks
-    prompt: Break the plan into tasks
-    send: true
 ---
 
 ## User Input
@@ -351,7 +346,7 @@ Report to chat:
 -   `[NEW]` / `[MOD]` / `[DEL]` file counts
 -   Mechanism matrix result (row counts from `summarize-mechanisms --json`)
 -   Validation result (`validate --stage plan`)
--   **Recommended next step:** Run `/order.plan-check` to verify the plan before proceeding to `/order.tasks`
+-   **Manual/orchestrator next step:** Run `/order.plan-check` to verify the plan before starting `/order.tasks`
 -   Readiness for `/order.tasks` (after plan-check passes)
 
 ## Done When
@@ -372,4 +367,4 @@ Report to chat:
 - [ ] Active feature status updated to `planned`
 - [ ] Skills and MCP documentation sources consulted before reconnaissance
 - [ ] `[DATE]` replaced with today's date in `plan.md` header
-- [ ] Completion Report provided, including recommendation to run `/order.plan-check`
+- [ ] Completion Report provided, including manual/orchestrator recommendation to run `/order.plan-check`

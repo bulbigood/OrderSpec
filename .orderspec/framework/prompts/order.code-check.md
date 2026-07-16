@@ -86,7 +86,7 @@ Resolve a feature only after Step 1.
    python3 .orderspec/framework/scripts/active_feature.py validate --json
    ```
 
-3. If no feature is resolved, stop with `CODE_STOPPED: no active feature` and the next command `/order.spec`.
+3. If no feature is resolved, stop with `CODE_STOPPED: no active feature` and report `/order.spec` as the human/orchestrator next command.
 4. Resolve paths from active state or:
 
    ```bash

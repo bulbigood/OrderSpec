@@ -4,13 +4,6 @@ orderspec:
   command: order.spec-check
   phase: check
 description: Per-stage gate validating spec.md for coverage, internal integrity, and contract completeness. Pure inspector; routes contractual changes to /order.spec and writes a report on every run.
-handoffs:
-  - label: "Proceed to Plan"
-    agent: "order.plan"
-    prompt: "/order.plan"
-  - label: "Fix Spec"
-    agent: "order.spec"
-    prompt: "/order.spec"
 ---
 
 # OrderSpec Spec Check
@@ -220,6 +213,6 @@ After writing the report, respond in chat with:
 - Verdict (BLOCK, ROUTING_REQUIRED, or PASS)
 - Report path
 - Number of findings by severity
-- Next action:
-  - PASS -> proceed to `/order.plan`
-  - ROUTING_REQUIRED/BLOCK -> run routed `/order.spec` request(s), then rerun `/order.spec-check`
+- Manual/orchestrator next action:
+  - PASS -> human or orchestrator may start `/order.plan`
+  - ROUTING_REQUIRED/BLOCK -> human or orchestrator may run routed `/order.spec` request(s), then rerun `/order.spec-check`

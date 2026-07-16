@@ -4,16 +4,6 @@ orderspec:
   command: order.plan-check
   phase: check
 description: Per-stage gate validating plan.md as a faithful, complete, role-pure physical mapping of spec.md onto the current repository. Pure inspector; routes plan defects to /order.plan and contract defects to /order.spec; writes plan-report.md on every run.
-handoffs:
-  - label: "Proceed to Tasks"
-    agent: "order.tasks"
-    prompt: "/order.tasks"
-  - label: "Fix Plan"
-    agent: "order.plan"
-    prompt: "/order.plan"
-  - label: "Fix Spec"
-    agent: "order.spec"
-    prompt: "/order.spec"
 ---
 
 # OrderSpec Plan Check
@@ -278,6 +268,6 @@ After writing the report, respond in chat with:
 - Report path
 - Number of findings by severity
 - Number of routing blocks
-- Next action:
-  - PASS -> proceed to `/order.tasks`
-  - ROUTING_REQUIRED/BLOCK -> run routed `/order.plan` and/or `/order.spec` request(s), then rerun `/order.plan-check`
+- Manual/orchestrator next action:
+  - PASS -> human or orchestrator may start `/order.tasks`
+  - ROUTING_REQUIRED/BLOCK -> human or orchestrator may run routed `/order.plan` and/or `/order.spec` request(s), then rerun `/order.plan-check`

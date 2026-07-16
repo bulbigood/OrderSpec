@@ -157,9 +157,9 @@ Implementation executes an existing task list — the tasks must exist first.
 CODE_BLOCKED: tasks gate not passed
 Tasks gate verdict: {verdict} (from tasks-report.md, dated {date})
 The task list has unresolved findings. Resolve them first:
-  1. Action each Routing block in tasks-report.md via /order.tasks "..."
-  2. Re-run /order.tasks-check until the verdict is ✅ PASS
-  3. Then re-run /order.code
+  1. Report each Routing block in tasks-report.md as human/orchestrator work for `/order.tasks "..."`.
+  2. Stop. Human or orchestrator runs `/order.tasks`, then `/order.tasks-check` until the verdict is ✅ PASS.
+  3. Human or orchestrator starts `/order.code` again.
 To implement anyway (NOT recommended), re-run with --force.
 ```
 
@@ -419,7 +419,7 @@ Report to chat:
 - **If halted early**: exact stopping point (phase/task), reason, and the recommended next command (`/order.code` to resume, or `/order.tasks` / `/order.plan` if the failure is a design gap).
 - **Active feature status**: updated to `implementing` (or not, with reason).
 - **Gate report consumed**: if `tasks-report.md` was marked consumed in Step 12.
-- **Recommended next step**: Run `/order.code-check` to verify the implementation before considering the feature done.
+- **Manual/orchestrator next step**: Run `/order.code-check` to verify the implementation before considering the feature done.
 
 ## Done When
 
@@ -436,4 +436,4 @@ Report to chat:
 - [ ] `check-mechanisms` exited 0 (no coverage defects); defects routed to `/order.tasks` or `/order.spec`, not silently patched
 - [ ] Deviations logged and reported; no silent design decisions made
 - [ ] Active feature status updated to `implementing`
-- [ ] Completion Report provided, including Library Documentation Evidence and recommendation to run `/order.code-check`
+- [ ] Completion Report provided, including Library Documentation Evidence and manual/orchestrator recommendation to run `/order.code-check`
