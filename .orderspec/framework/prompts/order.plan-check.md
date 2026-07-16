@@ -119,8 +119,8 @@ For any finding, assign disposition `Route` and create a routing block.
 - `Summary`: concise description
 
 ### P1-001 Artifact Hygiene
-Check `plan.md` for template residue, placeholder tokens, stale comments from `plan-template.md`, a Markdown mechanism table, or copied self-check checklists.
-Residue present → Route (HIGH for template placeholders / mechanism table; MEDIUM/LOW for minor comments).
+Check `plan.md` for unresolved placeholder tokens, a Markdown mechanism table, copied self-check checklists, or comments that are not part of the canonical plan template. Canonical template comments that document machine-readable syntax are allowed and MUST NOT be routed.
+Residue present → Route (HIGH for unresolved placeholders / mechanism table; MEDIUM/LOW for non-canonical comments).
 
 ### P1-002 Role Purity — Spec Duplication
 Verify `plan.md` does not restate the Executive Summary, duplicate full interface contracts, or redraw spec logical diagrams.
@@ -167,9 +167,10 @@ ignores is incomplete. Route to /order.plan when the spec is complete; route
 to /order.spec when the interface is underspecified.
 
 When a direct mechanism is test_type=unit, require a unit-test path in the
-plan manifest and a task that writes or exercises that unit test. An
-integration-only test file is not a unit-test justification. Do not let a
-generic GATE task satisfy this check.
+plan manifest. An integration-only test file is not a unit-test justification.
+Task-writing evidence belongs to `/order.tasks` and `/order.tasks-check`; this
+gate MUST NOT inspect or modify `tasks.md`, and a generic GATE task is not
+evidence for the plan-stage topology check.
 
 ### P1-008 Physical Grounding & Naming
 Use focused reconnaissance (hard cap ~10 files: one manifest, route registration, exemplars per touched layer, barrel/index files, test exemplar).
@@ -177,7 +178,7 @@ Verify:
 - `[MOD]` files exist; `[NEW]` files are plausible in repo structure.
 - Barrel/index files planned when needed; route mount files planned when new endpoints exist.
 - Multi-word filename naming cites actual same-layer precedent or fallback rules.
-- Branch field is accurate; if `setup.py paths` returned empty branch, `plan.md` must say `not detected` — not invent a branch.
+- Feature path and physical paths are repo-relative and match the resolved active feature and current repository.
 Violation → Route (MEDIUM; LOW for minor naming).
 
 ### P1-009 Stack, Constraints & Constitution

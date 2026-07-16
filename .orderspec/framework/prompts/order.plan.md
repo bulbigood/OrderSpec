@@ -199,7 +199,7 @@ Rewrite `$IMPL_PLAN` (which was initialized from `plan-template.md` in Step 7).
 3.  **Constitution Check:** Fill the table.
     *   **Status**: Use `PASS`, `DESIGN-OK`, or `FAIL`.
     *   Never mark `PASS` for planned `[NEW]` files.
-4.  **Physical Project Structure:** Emit the `pathmanifest` block (see Step 10). Do not modify the surrounding instructional comments in the template.
+4.  **Physical Project Structure:** Emit the `pathmanifest` block (see Step 10). Preserve the fenced-block syntax and canonical template comments that document machine-readable output. Remove copied self-check lists or non-canonical authoring residue.
 5.  **Structure & Path Decisions:**
     *   **File Naming Convention Evidence**: Fill the table. For the `Rule Fired` column, apply these rules in order for multi-word new filenames:
         1.  Same-layer multi-word filename precedent.
@@ -208,8 +208,9 @@ Rewrite `$IMPL_PLAN` (which was initialized from `plan-template.md` in Step 7).
         4.  Ecosystem default.
         If rule 1 fails, explicitly write: "No same-layer precedent; rule fired: N; chosen convention: ...".
     *   **Architectural Mapping**: Map logical roles / Spec IDs to physical files.
+    *   **Interface Fidelity**: For every `IF-NNN`, preserve the exact method, externally visible path, mounted route prefix, input semantics, response shape and nullability, pagination/filter behavior, and failure statuses. Map each behavior to the physical boundary that directly realizes it. Do not add endpoints absent from `spec.md`.
     *   **Internal Component Diagram**: Draw physical/internal decomposition using quoted Mermaid labels.
-6.  **Mechanism Matrix:** **Leave this section exactly as is in the template.** Do not add or remove text. The explanatory text is already present.
+6.  **Mechanism Matrix:** Preserve this section's structure and explanatory text; do not add a Markdown mechanism table. Replace `<FEATURE_DIR>` and `<feature>` placeholders with the resolved repo-relative feature path. Mechanism rows remain machine state, not plan prose.
 7.  **Library Documentation Evidence:** For each library-specific implementation claim made in this plan (e.g., specific API usage, non-obvious configuration, framework-specific patterns), cite the evidence source (skill name, documentation source name, or user-provided reference). If no library-specific claims were made, write exactly: "No library-specific claims."
 
     Note: Referencing `STACK-NNN` IDs from `spec.md` §6 is not itself a library-specific claim — those IDs map to `stack.md` entries. A library-specific claim is a concrete implementation detail (e.g., "use Mongoose middleware hooks", "configure Joi abortEarly option") that goes beyond simply naming the technology.
@@ -249,8 +250,14 @@ Before emitting rows, verify two bindings:
 2. test_type matches the evidence topology: unit mechanisms require a unit
    test path in the manifest; integration mechanisms require an integration
    test path. If the repository has no suitable path, add it to the plan
-   manifest and map it to tasks. Never label an implementation mechanism
-   documented or integration-only to avoid creating the needed test.
+   manifest. Task-writing evidence is owned and checked by `/order.tasks` and
+   `/order.tasks-check`; do not inspect or modify `tasks.md` in this command.
+3. For `delegated:<ID>` rows, the target mechanism must semantically cover the
+   source ID. Do not delegate an edge or acceptance criterion to a generic
+   endpoint that does not explicitly verify it.
+4. For `ASM-NNN` rows, emit a mechanism only when the assumption materially
+   narrows implementation. Do not emit a mechanism for a `[default]`
+   assumption that merely restates normal behavior.
 
 Write mechanism decisions to machine state. You MUST NOT author a mechanism table in `plan.md`.
 
@@ -359,7 +366,7 @@ Report to chat:
 - [ ] Scope Lock enforced: no invented requirements
 - [ ] Files listed in `Verified Against`
 - [ ] `pathmanifest` uses `[MOD]` for seen files, `[NEW]` for created, `[DEL]` for deleted
-- [ ] Mechanism rows emitted via `put-mechanisms` using Templates; **Mechanism Matrix section in plan.md left as template default**
+- [ ] Mechanism rows emitted via `put-mechanisms` using templates; Mechanism Matrix section retains its structure, has no Markdown mechanism table, and contains no unresolved placeholders
 - [ ] `traceability.py lint` and `check-mechanisms` pass
 - [ ] `validate --stage plan` has no blocking findings
 - [ ] Active feature status updated to `planned`
