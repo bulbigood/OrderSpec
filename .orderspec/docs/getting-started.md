@@ -65,11 +65,12 @@ No package manager, no `uv`, no installer, no framework daemon.
    /order.plan
    /order.tasks
    /order.code
+   /order.code-check
    ```
 
-   In Codex, use `$order-spec`, `$order-plan`, `$order-tasks`, and `$order-code`.
+   In Codex, use `$order-spec`, `$order-plan`, `$order-tasks`, `$order-code`, and `$order-code-check`.
 
-5. Run gates when you want verification:
+5. Run per-stage gates when you want earlier verification:
 
    ```text
    /order.spec-check
@@ -78,6 +79,8 @@ No package manager, no `uv`, no installer, no framework daemon.
    /order.code-check
    /order.sync-check
    ```
+
+   `/order.code-check` is the terminal verification gate and is required before a feature may be considered `implemented`. It may be deferred during iteration, but `/order.code` output remains `implementing` and unverified until this gate passes.
 
 6. Re-run bootstrap when project-level contracts need to evolve:
 

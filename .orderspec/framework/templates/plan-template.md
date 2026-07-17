@@ -27,6 +27,32 @@
 
 ---
 
+## Mechanism Evidence & Runtime Closure
+
+<!--
+Add one row for each material mechanism whose correctness depends on an existing
+project abstraction, runtime/deployment capability, external service, or
+concurrency scope. Group Spec IDs only when they share the same mechanism.
+
+Evidence rules:
+- Prefer an existing project mechanism. If it is not reused, state the concrete mismatch.
+- Library/API documentation proves API semantics, not repository runtime readiness.
+- Runtime prerequisites need repository evidence from manifests, configuration,
+  deployment files, or the test harness.
+- Every file needed to establish the prerequisite must also appear in the pathmanifest.
+- Operational scope must be explicit: process, host, cluster, external service,
+  or not applicable.
+
+If no material mechanism needs closure, retain the table and write one `None`
+row with a short repository-evidence statement.
+-->
+
+| Mechanism / Spec IDs | Existing Project Mechanism / Reuse Decision | Runtime Prerequisites | Repository Evidence | Required Paths | Operational Scope |
+|----------------------|---------------------------------------------|-----------------------|---------------------|----------------|-------------------|
+| [`REQ-001`, `INV-001`] | [Reuse `...`, or justify why observed mechanism does not fit] | [Required capability, or none] | [`file`, setting, test setup] | [`pathmanifest` entries, or none] | [process / host / cluster / external service / not applicable] |
+
+---
+
 ## Constitution Check
 
 <!--

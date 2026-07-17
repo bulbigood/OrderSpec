@@ -176,6 +176,18 @@ Only after consulting skills and docs sources, perform a focused repository scan
 -   Test/lint/build commands.
 -   Source layout and module boundaries.
 -   Implementation mechanisms for Spec IDs.
+-   Existing project abstractions relevant to the feature (for example shared plugins, middleware, base models, transaction helpers, locks, serializers, and pagination helpers).
+-   Runtime and deployment capabilities required by candidate mechanisms (for example database topology, process count, external services, queues, and distributed coordination).
+
+For each material mechanism, distinguish three evidence classes:
+
+1. **Library/API evidence** proves only that an API or feature exists and how it behaves.
+2. **Repository runtime evidence** proves that the required capability is configured or supplied by manifests, deployment files, runtime configuration, or the test harness.
+3. **Operational scope evidence** proves the boundary within which the mechanism is correct: `process`, `host`, `cluster`, `external service`, or `not applicable`.
+
+Do not treat library support as runtime readiness. For example, documentation that an ODM exposes transactions does not prove that the repository deploys a transaction-capable database topology. A process-local lock does not satisfy a cluster-wide concurrency invariant unless the repository proves single-process deployment or the spec limits the invariant to one process.
+
+Prefer an existing project abstraction when it satisfies the contract. If the plan introduces a parallel mechanism, record the observed abstraction and the concrete mismatch that prevents reuse.
 
 If repository evidence contradicts `spec.md`, STOP and report `PLAN_BLOCKED: repository contradicts spec`.
 
@@ -191,11 +203,19 @@ Rewrite `$IMPL_PLAN` (which was initialized from `plan-template.md` in Step 7).
 2.  **Technical Context & Stack Verification:** Fill the table with verified facts only.
     *   **Verified Against**: List the specific files you read during reconnaissance that influenced your decisions.
     *   If a fact cannot be verified, write "No [item] found in inspected manifests". Do not write vague text.
-3.  **Constitution Check:** Fill the table.
+3.  **Mechanism Evidence & Runtime Closure:** Fill one row for each material mechanism whose correctness depends on an existing project abstraction, runtime/deployment capability, external service, or concurrency scope.
+    *   Group Spec IDs only when they share the same mechanism and evidence.
+    *   Record the existing project mechanism and either reuse it or state the concrete mismatch that prevents reuse.
+    *   Record every runtime prerequisite and cite repository evidence. Library/API documentation alone is insufficient runtime evidence.
+    *   List every config, deployment, manifest, and test-harness path needed to establish the prerequisite. Every listed path that will change MUST also appear in the `pathmanifest`.
+    *   State operational scope as `process`, `host`, `cluster`, `external service`, or `not applicable`.
+    *   If no material mechanism needs closure, retain the table and write one `None` row with a short repository-evidence statement.
+    *   If a required prerequisite cannot be verified, select a repository-supported alternative or STOP and report `PLAN_BLOCKED: runtime prerequisite unverified: <mechanism>: <prerequisite>`. Do not mark the feature `planned` with an unresolved prerequisite.
+4.  **Constitution Check:** Fill the table.
     *   **Status**: Use `PASS`, `DESIGN-OK`, or `FAIL`.
     *   Never mark `PASS` for planned `[NEW]` files.
-4.  **Physical Project Structure:** Emit the `pathmanifest` block (see Step 10). Preserve the fenced-block syntax and canonical template comments that document machine-readable output. Remove copied self-check lists or non-canonical authoring residue.
-5.  **Structure & Path Decisions:**
+5.  **Physical Project Structure:** Emit the `pathmanifest` block (see Step 10). Preserve the fenced-block syntax and canonical template comments that document machine-readable output. Remove copied self-check lists or non-canonical authoring residue.
+6.  **Structure & Path Decisions:**
     *   **File Naming Convention Evidence**: Fill the table. For the `Rule Fired` column, apply these rules in order for multi-word new filenames:
         1.  Same-layer multi-word filename precedent.
         2.  Cross-layer multi-word filename precedent.
@@ -205,11 +225,11 @@ Rewrite `$IMPL_PLAN` (which was initialized from `plan-template.md` in Step 7).
     *   **Architectural Mapping**: Map logical roles / Spec IDs to physical files.
     *   **Interface Fidelity**: For every `IF-NNN`, preserve the exact method, externally visible path, mounted route prefix, input semantics, response shape and nullability, pagination/filter behavior, and failure statuses. Map each behavior to the physical boundary that directly realizes it. Do not add endpoints absent from `spec.md`.
     *   **Internal Component Diagram**: Draw physical/internal decomposition using quoted Mermaid labels.
-6.  **Mechanism Matrix:** Preserve this section's structure and explanatory text; do not add a Markdown mechanism table. Replace `<FEATURE_DIR>` and `<feature>` placeholders with the resolved repo-relative feature path. Mechanism rows remain machine state, not plan prose.
-7.  **Library Documentation Evidence:** For each library-specific implementation claim made in this plan (e.g., specific API usage, non-obvious configuration, framework-specific patterns), cite the evidence source (skill name, documentation source name, or user-provided reference). If no library-specific claims were made, write exactly: "No library-specific claims."
+7.  **Mechanism Matrix:** Preserve this section's structure and explanatory text; do not add a Markdown mechanism table. Replace `<FEATURE_DIR>` and `<feature>` placeholders with the resolved repo-relative feature path. Mechanism rows remain machine state, not plan prose.
+8.  **Library Documentation Evidence:** For each library-specific implementation claim made in this plan (e.g., specific API usage, non-obvious configuration, framework-specific patterns), cite the evidence source (skill name, documentation source name, or user-provided reference). If no library-specific claims were made, write exactly: "No library-specific claims."
 
     Note: Referencing `STACK-NNN` IDs from `spec.md` §6 is not itself a library-specific claim — those IDs map to `stack.md` entries. A library-specific claim is a concrete implementation detail (e.g., "use Mongoose middleware hooks", "configure Joi abortEarly option") that goes beyond simply naming the technology.
-8.  **Complexity Tracking:** Fill the table ONLY if Constitution Check has `FAIL` rows or justified deviations.
+9.  **Complexity Tracking:** Fill the table ONLY if Constitution Check has `FAIL` rows or justified deviations.
 
 **Prohibitions:**
 -   Do not duplicate §8 Information Model or §9 Interface Contracts from `spec.md`.
@@ -225,6 +245,7 @@ In the `Physical Project Structure` section of `plan.md`, emit a flat `pathmanif
 -   Mark files **`[MOD]`** if you saw them during reconnaissance.
 -   Mark files **`[NEW]`** if you are planning to create them.
 -   Mark files **`[DEL]`** if you are planning to delete them.
+-   Include every config, deployment, manifest, or test-harness file that must change to establish a runtime prerequisite selected in Mechanism Evidence & Runtime Closure.
 -   Do not list directories.
 
 ```pathmanifest
@@ -360,6 +381,9 @@ Report to chat:
 - [ ] Prior `plan-report.md` consumed if present
 - [ ] Scope Lock enforced: no invented requirements
 - [ ] Files listed in `Verified Against`
+- [ ] Existing project mechanisms reviewed; every parallel mechanism has a concrete non-reuse justification
+- [ ] Mechanism Evidence & Runtime Closure completed; runtime prerequisites have repository evidence and explicit operational scope
+- [ ] Every path needed to establish a selected runtime prerequisite appears in the pathmanifest
 - [ ] `pathmanifest` uses `[MOD]` for seen files, `[NEW]` for created, `[DEL]` for deleted
 - [ ] Mechanism rows emitted via `put-mechanisms` using templates; Mechanism Matrix section retains its structure, has no Markdown mechanism table, and contains no unresolved placeholders
 - [ ] `traceability.py lint` and `check-mechanisms` pass

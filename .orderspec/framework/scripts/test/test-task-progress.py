@@ -57,6 +57,16 @@ with tempfile.TemporaryDirectory(prefix="orderspec-task-progress-") as temp:
         "verification": {"status": "NOT_RUN", "evidence": "file updated"},
         "deviation": None,
     }
+
+    empty_change = dict(success, changed_files=[])
+    rc, data = run("mark", "--tasks", str(tasks), input_text=json.dumps(empty_change))
+    expect(
+        rc != 0
+        and "non-GATE task must report exactly its task path" in data["message"]
+        and "- [ ] T001" in tasks.read_text(encoding="utf-8"),
+        "ordinary task with empty changed_files stays unchecked",
+    )
+
     rc, data = run("mark", "--tasks", str(tasks), input_text=json.dumps(success))
     expect(rc == 0 and data["task_id"] == "T001", "mark accepts successful implementation task")
     expect("- [X] T001" in tasks.read_text(encoding="utf-8"), "mark writes uppercase X")
@@ -75,6 +85,16 @@ with tempfile.TemporaryDirectory(prefix="orderspec-task-progress-") as temp:
         changed_files=[],
         verification={"status": "PASS", "evidence": "tests passed"},
     )
+
+    gate_changed = dict(gate_success, changed_files=["tests/test_example.py"])
+    rc, data = run("mark", "--tasks", str(tasks), input_text=json.dumps(gate_changed))
+    expect(
+        rc != 0
+        and "GATE task must report no changed files" in data["message"]
+        and "- [ ] T003" in tasks.read_text(encoding="utf-8"),
+        "gate cannot hide file changes",
+    )
+
     rc, _ = run("mark", "--tasks", str(tasks), input_text=json.dumps(gate_success))
     expect(rc == 0 and "- [X] T003" in tasks.read_text(encoding="utf-8"), "gate task marks after pass evidence")
 

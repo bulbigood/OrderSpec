@@ -178,6 +178,18 @@ Check against `CON-NNN` in `spec.md`, `Technical Context & Stack Verification` i
 - Constitution `MUST` obligations reflected (e.g., route + validation files planned when constitution mandates them).
 Violation → Route (CRITICAL for constitution MUST; HIGH for direct CON violation; LOW/MEDIUM for unverified version claims).
 
+### P1-013 Mechanism Evidence & Runtime Closure
+For every material mechanism whose correctness depends on an existing project abstraction, runtime/deployment capability, external service, or concurrency scope, verify `Mechanism Evidence & Runtime Closure` against focused repository evidence:
+- The section and canonical table are present. Every material mechanism is represented; a `None` row is valid only when no material mechanism needs closure.
+- Relevant existing project abstractions were identified. A parallel implementation has a concrete mismatch that prevents reuse, not preference or silence.
+- Library/API documentation is used only for API semantics. Runtime readiness is supported by repository manifests, configuration, deployment files, or the test harness.
+- Every runtime prerequisite is explicit, and every file that must change to establish it appears in both `Required Paths` and the `pathmanifest`.
+- Operational scope is explicit (`process`, `host`, `cluster`, `external service`, or `not applicable`) and satisfies the spec's invariants, constraints, and deployment evidence.
+
+Examples: an ODM transaction API without evidence of a transaction-capable database topology is not closed; a process-local lock cannot satisfy a cluster-wide concurrency invariant; bypassing an observed shared pagination or serialization mechanism requires a concrete incompatibility.
+
+Missing section/table, unverified correctness prerequisite, missing prerequisite path, or scope mismatch → Route to `/order.plan` (CRITICAL when it invalidates an MVP/P1 invariant or atomicity guarantee; HIGH otherwise). Unjustified duplication of an existing project mechanism → Route to `/order.plan` (HIGH for contract-significant behavior; MEDIUM otherwise).
+
 ### P1-010 Spec-Rooted Defect
 If `plan.md` cannot be correct because `spec.md` is the root problem (contradictions, missing status codes needed by ACs, impossible constraints, measurable NFR without target), route upward.
 Route to `/order.spec` (CRITICAL if blocks MVP/P1; HIGH/MEDIUM otherwise). Do not "fix" the plan around a spec defect.

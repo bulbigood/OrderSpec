@@ -83,6 +83,7 @@ def parse_tasks(path: Path) -> tuple[list[dict[str, Any]], list[str]]:
                 "line_number": line_number,
                 "line": line,
                 "requires_verification": bool(VERIFICATION_WORDS_RE.search(parts[-1])),
+                "is_gate": parts[-1].strip().startswith("GATE:"),
             }
         )
 
@@ -138,6 +139,11 @@ def validate_success_result(result: dict[str, Any], record: dict[str, Any]) -> s
     for changed in changed_files:
         if changed != record["path"]:
             return f"worker changed forbidden path: {changed} (allowed: {record['path']})"
+    if record["is_gate"]:
+        if changed_files:
+            return "GATE task must report no changed files"
+    elif changed_files != [record["path"]]:
+        return f"non-GATE task must report exactly its task path: {record['path']}"
 
     verification = result.get("verification")
     if not isinstance(verification, dict):

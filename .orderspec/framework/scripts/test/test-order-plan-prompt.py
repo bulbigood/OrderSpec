@@ -4,7 +4,11 @@ import os
 class TestOrderPlanPrompt(unittest.TestCase):
     def setUp(self):
         self.prompt_path = ".orderspec/framework/prompts/order.plan.md"
+        self.check_prompt_path = ".orderspec/framework/prompts/order.plan-check.md"
+        self.template_path = ".orderspec/framework/templates/plan-template.md"
         self.assertTrue(os.path.exists(self.prompt_path), f"{self.prompt_path} not found")
+        self.assertTrue(os.path.exists(self.check_prompt_path), f"{self.check_prompt_path} not found")
+        self.assertTrue(os.path.exists(self.template_path), f"{self.template_path} not found")
 
     def test_context_bootstrap_present(self):
         with open(self.prompt_path, "r") as f:
@@ -35,6 +39,23 @@ class TestOrderPlanPrompt(unittest.TestCase):
             content = f.read()
         self.assertIn("-C \"$PWD\" --feature-dir \"$FEATURE_DIR\"", content)
         self.assertNotIn("init \"$FEATURE\"", content)
+
+    def test_mechanism_runtime_closure_contract(self):
+        with open(self.prompt_path, "r") as f:
+            plan_prompt = f.read()
+        with open(self.check_prompt_path, "r") as f:
+            check_prompt = f.read()
+        with open(self.template_path, "r") as f:
+            template = f.read()
+
+        for content in (plan_prompt, check_prompt, template):
+            self.assertIn("Mechanism Evidence & Runtime Closure", content)
+            self.assertIn("operational scope", content.lower())
+        self.assertIn("Library/API documentation alone is insufficient runtime evidence", plan_prompt)
+        self.assertIn("PLAN_BLOCKED: runtime prerequisite unverified", plan_prompt)
+        self.assertIn("P1-013 Mechanism Evidence & Runtime Closure", check_prompt)
+        self.assertIn("process-local lock cannot satisfy a cluster-wide", check_prompt)
+        self.assertIn("Existing Project Mechanism / Reuse Decision", template)
 
 if __name__ == '__main__':
     unittest.main()
