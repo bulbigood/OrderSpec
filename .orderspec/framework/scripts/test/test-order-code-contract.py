@@ -31,9 +31,9 @@ expect(
 expect(
     manifest["commands"]["order.code"]["feature_context"] == {
         "mode": "required",
-        "artifacts": ["plan", "tasks"],
+        "artifacts": ["tasks", "plan"],
     },
-    "order.code requires active feature plan and tasks",
+    "order.code loads active tasks before plan",
 )
 expect(
     resources["protocol.sub_agent_execution"]["usage"] == "apply"
@@ -55,8 +55,22 @@ expect(
     "order.code maps a single-agent-session constraint to local execution",
 )
 expect("task_progress.py mark" in code_prompt, "order.code delegates marker writes to deterministic script")
+expect(
+    "Marker rejection is terminal" in code_prompt
+    and "NEVER alter or retry" in code_prompt,
+    "order.code forbids marker-result laundering and retries",
+)
+expect(
+    "If it passes immediately, STOP" in normalized_code_prompt,
+    "order.code stops on green-first test tasks",
+)
+expect("`VERIFY:` tasks" in code_prompt, "order.code defines read-only command gates")
 expect("`**Verification**` line" in code_prompt, "order.code uses phase Verification prose")
 expect("task_contract_context.py" in code_prompt, "order.code resolves task contract context")
+expect(
+    "MUST NOT open, search, or preload full" in normalized_code_prompt,
+    "order.code forbids bypassing resolved spec excerpts",
+)
 expect(
     "Frozen Baseline and Pathmanifest Semantics" in code_prompt
     and "Do not run `check-plan`" in code_prompt,

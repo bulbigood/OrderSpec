@@ -300,13 +300,21 @@ test -e "$SELF_REPORT" && echo "SELF_REPORT_PRESENT" || echo "SELF_REPORT_ABSENT
 
 ### Step 7: Load Execution Context
 
-Read the following from `$FEATURE_DIR`:
+The following were already read through Step 1 and MUST be reused, not reopened:
 
 1. **REQUIRED**: `tasks.md` — phases, task lines (`T### [P?] [US?] | path | refs? | gloss`), checkpoints, GATE.
 2. **REQUIRED**: `plan.md` — tech stack, file structure (pathmanifest), build/test commands. Read `Environment Readiness` for runtime prerequisites, exact checks, recovery options, approval boundaries, and safe fallbacks.
-3. `spec.md` is available to the coordinator for resolving contract IDs and preparing targeted excerpts. Workers receive those excerpts through `contract_context`; they do not open `spec.md` unless it is explicitly listed by the resolver.
+3. `spec.md` is available only through `task_contract_context.py` resolution.
+   Coordinator and local executor MUST NOT open, search, or preload full
+   `spec.md` unless the task resolver explicitly lists it. Use returned exact
+   excerpts verbatim.
 
 Do NOT look for a hand-built Traceability Matrix or Files Touched table in `tasks.md` — those are derived artifacts; `order.tasks` does not author them. For file-disjointness verification (Step 9), use `plan.md` pathmanifest and task `path` fields directly.
+
+Before Step 8, state one execution-order receipt derived from `tasks.md`:
+`Task order loaded: {total} tasks; first unchecked {Tnnn|none}; {phase_count} phases.`
+This receipt is evidence of parsing, not permission to skip deterministic
+validation. Do not reread either artifact merely to produce it.
 
 ### Step 8: Validate `tasks.md` Format
 
@@ -380,7 +388,11 @@ Run phases strictly in order (hard sequential barriers). Within a phase, execute
   provide exact excerpts to support paths and MUST NOT be discarded merely
   because they do not own the mechanism row.
 - The packet contains the exact task line, imperative objective, resolver `to_read`, resolver `write_paths`, exact `contract_context` output, inline context excerpts, verification requirement, and stop conditions.
-- The coordinator may read command context, project contracts, feature artifacts, and relevant source files to prepare inline context. The worker receives only resolver-listed files and inline excerpts. The worker MUST NOT scan the repository or open files absent from resolver output.
+- The coordinator may reuse loaded `tasks.md`/`plan.md`, project contracts, and
+  resolver-listed source files to prepare inline context. It MUST NOT open
+  `spec.md` or extra source files outside resolver output. The worker receives
+  only resolver-listed files and inline excerpts. The worker MUST NOT scan the
+  repository or open files absent from resolver output.
 - In `DELEGATED`, the worker MUST touch only the task `path`, must not edit `[X]`, start another worker, or advance to another task. It returns the protocol result object.
 - In `LOCAL_PHASE`/`LOCAL_ALL`, the coordinator follows the same packet and result rules. It MUST NOT use local fallback as permission to broaden scope.
 - Tasks without `[P]` run one at a time in ID order. Continue only after successful result validation and deterministic marker update.
@@ -420,6 +432,13 @@ python3 .orderspec/framework/scripts/task_progress.py mark \
 
 `RESULT_FILE` contains exactly the worker result JSON. A non-zero marker exit is a STOP. Never edit the checkbox manually.
 
+Marker rejection is terminal for the current run. Preserve the rejected JSON
+and exact script error. NEVER alter or retry `changed_files`, `deviation`,
+verification evidence, or the task path to make the marker accept a result.
+In particular, never substitute the allowed path for an observed changed path,
+drop a deviation, or claim a file changed when it did not. Route the underlying
+task/plan defect and leave the task unchecked.
+
 Evidence rule: a test-writing, checkpoint, or GATE task is complete only
 after its declared verification command or red-state check produced an
 observable result. Do not mark such a task [X] from source inspection,
@@ -429,8 +448,16 @@ task unchecked and stop at that task with a precise route.
 
 - Touch only the file named in the task's `path` field. Need to change another file → that's a deviation (see Deviation Rule).
 - Never create a file as an empty stub to "fill later" — implement the task's real behavior now. If a task itself says to create a stub, that is its complete deliverable.
-- **Test tasks** (TDD): write the test, run it, **confirm it fails** before coding the corresponding implementation. If it passes immediately, flag it — the test may be vacuous.
+- **Test tasks** (TDD): write the test, run it, **confirm it fails for the
+  expected missing behavior** before coding the corresponding implementation.
+  If it passes immediately, STOP, leave it unchecked, and route to
+  `/order.tasks` for ordering/prerequisite repair. A green-first test is not
+  completion evidence.
 - **Verification/GATE tasks**: run the project's test command from `plan.md` verbatim; report pass/fail per asserted AC/INV ID named in the gloss. GATE tasks carry EMPTY refs.
+- **`VERIFY:` tasks**: read-only command gates like full lint/typecheck. They
+  MUST report `changed_files: []`. On failure, STOP; do not run autofix or edit
+  any file from the verification task. Route feature defects to `/order.tasks`
+  and pre-existing baseline defects to the user with exact evidence.
 - **Infra tasks** (barrels, fixtures, route wiring): carry EMPTY refs by design — execute the wiring/registration, no coverage expected.
 
 #### Checkpoint / STOP & VALIDATE (end of each story phase)
@@ -482,7 +509,10 @@ read-only check from `plan.md` when constitution capabilities permit it.
 
 #### Deviation Rule
 
-- **Minor mechanical fixes** (typo in a path with an obvious unique match, missing import) — apply, and log one line: `DEVIATION: Tnnn — what changed and why`.
+- **No in-run scope expansion**: a typo, missing import, formatting defect, or
+  other mechanical issue requiring any path outside the resolver's
+  `write_paths` is still a work-order defect. STOP; do not patch it and do not
+  rewrite the result object.
 - **Task decomposition defect**: required behavior and every physical path
   already exist in `plan.md`, but the current task/write whitelist omits a
   needed path or an earlier task omitted its planned obligation — STOP and route
@@ -497,7 +527,8 @@ read-only check from `plan.md` when constitution capabilities permit it.
   Classify it by the rules above: if the planned model path and obligation
   already require the fields, the defect is task decomposition; if not, it is
   plan mapping.
-- Collect all deviation lines for the Completion Report.
+- A worker result containing a deviation is rejected and remains unchecked.
+  Record the blocker in the Completion Report; never clear it to obtain `[X]`.
 
 ### Step 10: Post-Execution Coverage Check
 
@@ -545,10 +576,10 @@ python3 .orderspec/framework/scripts/traceability.py mark-consumed --report "$FE
 
 ## Progress Reporting (keep it lean)
 
-- After each **phase**: one line — `Phase N: T010–T014 done (1 deviation)`.
+- After each **phase**: one line — `Phase N: T010–T014 done`.
 - After a concurrent `[P]` group: one line naming the task IDs run together.
 - After each **checkpoint/GATE**: verification result with AC/INV IDs pass/fail.
-- No per-task narration beyond errors and deviations.
+- No per-task narration beyond errors and routed blockers.
 
 ---
 
@@ -563,7 +594,7 @@ Report to chat:
   scope, readiness result, and any user configuration step.
 - **Coverage check**: `check-mechanisms` exit code (MUST be 0); one-line summary if defects found.
 - **Verification**: checkpoint results per story; GATE result; final test command output summary (pass/fail counts).
-- **Deviations log**: all `DEVIATION:` lines (or "none").
+- **Deviation blockers**: rejected task ID/result and routing target, or "none".
 - **Environment blockers**: prerequisite, observed failure, user-approved recovery or fallback, and outcome (or "none").
 - **Library Documentation Evidence**: for each library-specific claim, cite the evidence source (skill name, docs source name, or user-provided reference). If a required source was unavailable, record that and the fallback applied.
 - **If halted early**: exact stopping point (phase/task), reason, and the recommended next command (`/order.code` to resume, or `/order.tasks` / `/order.plan` if the failure is a design gap).
@@ -588,6 +619,6 @@ Report to chat:
 - [ ] `task_context.py validate` and `task_contract_context.py validate` passed before execution
 - [ ] Resume treated applied `[NEW]`/`[DEL]` transitions as expected work-order state; no plan-authoring current-state check was run
 - [ ] `check-mechanisms` exited 0 (no coverage defects); defects routed to `/order.tasks` or `/order.spec`, not silently patched
-- [ ] Deviations logged and reported; no silent design decisions made
+- [ ] Deviations stopped and routed; no rejected result was rewritten or retried
 - [ ] Active feature status updated to `implementing`
 - [ ] Completion Report provided, including Library Documentation Evidence and manual/orchestrator recommendation to run `/order.code-check`

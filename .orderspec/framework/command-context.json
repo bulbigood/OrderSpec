@@ -318,8 +318,8 @@
       "feature_context": {
         "mode": "required",
         "artifacts": [
-          "plan",
-          "tasks"
+          "tasks",
+          "plan"
         ]
       }
     },

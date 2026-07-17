@@ -121,6 +121,11 @@ Execution marker rules:
   only one checkbox at a time through `.orderspec/framework/scripts/task_progress.py`.
 - A worker or coordinator MUST NOT hand-edit `[X]` markers.
 - A failed, blocked, or incomplete task remains unchecked.
+- `tasks.md` is the first feature artifact loaded by `/order.code`; `plan.md`
+  follows. Already loaded feature artifacts are reused, not reopened later.
+- A rejected `task_progress.py mark` call is terminal for that run. Runtime
+  agents MUST NOT alter result fields or retry to bypass path/deviation checks.
+- `VERIFY:` and `GATE:` tasks are read-only and report no changed files.
 
 ## 4. Frontmatter Rule
 

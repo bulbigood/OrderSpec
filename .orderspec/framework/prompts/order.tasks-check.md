@@ -164,6 +164,15 @@ Semantic findings (T1-xxx through T7-xxx) must be integrated into the report's F
 - **T4a**: Within each story phase, test tasks **precede** implementation. A test-after-implementation pair → **Route** to `/order.tasks` (HIGH for P1, MEDIUM otherwise).
 - **T4b**: Each story phase is closed by a **Checkpoint prose line** (per `/order.tasks` rules: "Checkpoint is prose, not a task"). Missing checkpoint → **Route** to `/order.tasks` (HIGH for P1, MEDIUM otherwise).
 - **T4c**: Test tasks state the expectation to **fail first** (red). Missing red-state note → **Route** to `/order.tasks` (MEDIUM).
+- **T4d**: Inspect Setup/Expand and earlier phases for behavior already
+  implemented before a later test-writing task that targets it. If that task
+  cannot produce its declared red state because its model/schema/service/route
+  prerequisite is already implemented, route to `/order.tasks` (HIGH for P1,
+  MEDIUM otherwise). File placement in an earlier phase does not override TDD.
+- **T4e**: A final command-only lint/typecheck task must use a `VERIFY:` gloss,
+  declare no automatic write behavior, and remain read-only. A task that says
+  "fix violations" under one arbitrary binding path is a scope defect; route
+  to `/order.tasks` (HIGH).
 
 ### T5. SC Buildability
 

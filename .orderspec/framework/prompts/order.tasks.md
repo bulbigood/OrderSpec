@@ -266,7 +266,10 @@ Rewrite `$TASKS_FILE` (which was initialized from `tasks-template.md` in Step 6)
 - **Phase 1 — Setup & Expand** (all changes non-breaking):
   - *if persistent storage*: additive migrations with rollback scripts (Spec § Data Model).
   - *if interfaces (API/CLI/UI)*: contract/route/DTO/command stubs (Spec § Contracts).
-  - passive model entities; feature flags only if `plan.md` defines them.
+  - passive model entities only when no later test-writing task is expected to
+    observe their absence. If a story test covers model/schema behavior, put
+    that test before the model/schema implementation; do not pre-implement the
+    behavior in Expand.
   - environment setup only when `plan.md` declares a repository-owned artifact
     such as a compose file, fixture, or configuration. Operator recovery actions
     remain approval-gated implementation preflight, not hidden tasks.
@@ -277,9 +280,15 @@ Rewrite `$TASKS_FILE` (which was initialized from `tasks-template.md` in Step 6)
   3. `EDGE-NNN` for this story.
   4. Emit a **Verification** prose line with the exact permitted test command and asserted AC/INV IDs, then a **Checkpoint** prose line: story independently functional and backwards-compatible. Neither line is a task; `/order.code` executes the declared Verification command at the phase barrier.
   Omit test tasks only if the user or constitution explicitly opts out.
-- **Final Phase — Contract**: start with a GATE task (run the test command verbatim; verify all `AC-*` pass, `INV-*` hold, `NFR-*` met; STOP on failure — contraction is irreversible). Then remove flags, delete deprecated code/routes, drop obsolete columns, lint/format, update docs.
+- **Final Phase — Contract**: start with a GATE task (run the test command verbatim; verify all `AC-*` pass, `INV-*` hold, `NFR-*` met; STOP on failure — contraction is irreversible). Then remove flags, delete deprecated code/routes, drop obsolete columns, update docs, and finish with read-only command gates such as lint/typecheck.
   **Greenfield rule**: if nothing pre-exists to deprecate, Contract only removes scaffolding/flags.
   **GATE task path**: the GATE task's `path` field MUST be a test file path listed in `plan.md` pathmanifest (e.g. `tests/integration/task.test.js`). The test command (e.g. `npm test`) goes in the gloss. This keeps `path` machine-valid against the manifest (check M8) without special-casing commands as paths.
+  **Verification-only command task**: prefix gloss with `VERIFY:` and use any
+  relevant path from the plan pathmanifest only for machine binding. This task
+  is read-only and reports `changed_files: []`. Its command MUST NOT use an
+  autofix/write option. On failure, `/order.code` stops; it never edits files
+  or disguises changes under the binding path. Formatting compliance must be
+  achieved by each earlier file-owning implementation task.
 
 **Task format (STRICT — pipe-delimited, machine-parsed).** `extract-trace` splits each task line on " | " (space-pipe-space). A line with fewer than 2 " | " separators is treated as a non-task line (infra prose) and contributes NO coverage. Emit EXACTLY:
 
@@ -289,7 +298,7 @@ Rewrite `$TASKS_FILE` (which was initialized from `tasks-template.md` in Step 6)
 
 1. "- [ ] T012 [P] [US1]" — checkbox + sequential ID + optional [P] + optional [USn].
 2. file path — one exact path from `plan.md`. No spaces. Raw path only — do NOT wrap it in backticks or any markdown. `extract-trace` matches the literal path; backticks make the field not match `plan.md` and silently drop the line's coverage.
-3. refs — OPTIONAL. Comma-separated spec IDs, NO SPACES (`REQ-001,AC-002`, never `REQ-001, AC-002`). An infrastructure task (barrel/index registration, route wiring, test fixtures, GATE/verification scaffolding) carries NO refs — write `... | path |  | gloss` (empty field 3) or omit field 3. This is LEGAL and contributes no coverage by design. The contract is "every DIRECT mechanism is covered by ≥1 task" — it is NOT "every task has a ref". NEVER invent a ref to give a task a home.
+3. refs — OPTIONAL. Comma-separated spec IDs, NO SPACES (`REQ-001,AC-002`, never `REQ-001, AC-002`). An infrastructure task (barrel/index registration, route wiring, test fixtures, GATE/`VERIFY:` scaffolding) carries NO refs — write `... | path |  | gloss` (empty field 3) or omit field 3. This is LEGAL and contributes no coverage by design. The contract is "every DIRECT mechanism is covered by ≥1 task" — it is NOT "every task has a ref". NEVER invent a ref to give a task a home.
   **AC refs belong on test-WRITING tasks** (the task that writes the test code exercising that AC), NOT on verification/GATE tasks. Verification/GATE tasks carry EMPTY refs and list asserted AC/INV IDs in the gloss. Coverage of an AC is proven by the test-writing task that creates its test, not by the verification task that runs the suite.
   A story-phase task may also have empty refs when no direct mechanism has this task's exact path in `primary_files` (for example, unit evidence tasks, controller support tasks, or wiring tasks). Do not invent or park a ref only to satisfy the `[USn]` marker; ref presence is required only on story tasks that own a direct mechanism path.
 4. gloss — ≤15-word paraphrase. Free text, never grepped (so prose like "see AC-999" is safe).
@@ -312,6 +321,7 @@ Rewrite `$TASKS_FILE` (which was initialized from `tasks-template.md` in Step 6)
 - BAD: `- [ ] T012 [US1] | src/a.js | REQ-001, AC-002 | ...` (space in refs → rejected)
 - BAD: `- [ ] T020 [US1] | src/x.js | REQ-003,REQ-004,REQ-005,REQ-006 | does everything` (4 refs → rejected)
 - BAD: `- [ ] T003 | src/models/index.js | REQ-001 | barrel` (`REQ-001`'s `primary_files` is the model file, NOT `index.js` → filler/mis-attributed ref → rejected rc=3; leave refs EMPTY instead)
+- OK:  `- [ ] T099 | package.json |  | VERIFY: run npm run lint; no autofix`
 
 `[USn]` is required on story-phase tasks (1:1 with `UJ-00n`), including valid no-ref support tasks; omitted in Setup/Expand and Contract. A no-ref story task is valid when its exact path is not a direct mechanism's `primary_files` path.
 For endpoint tasks, fold non-2xx semantics from Spec § API Contracts into the gloss (e.g. `404 if task never existed including soft-deleted`).
@@ -382,6 +392,10 @@ they are not substitutes for the resolved contract excerpts.
 - **No stub-then-implement**: never create a file with empty/stub methods early to fill later; its FIRST task carries real implementation. (Exception: contract boundaries `plan.md` explicitly marks as stubs.) A file appearing in two phases where the earlier says "stub"/"skeleton" is a defect.
 - **God-file split (resolves cap-vs-coverage pressure)**: when one `primary_files` carries MORE than 3 direct mechanisms (a "god file" like a central service), do NOT cram them into one task and do NOT park the overflow on verify/GATE tasks. Split into several IMPLEMENTATION tasks on the SAME path, each grouping ≤3 cohesive mechanisms by behavior (e.g. one task for create+list+get, another for update+soft-delete, another for atomic-audit+error-wrapping). These same-file tasks are sequential (NOT `[P]` — they share a file) and each carries the direct IDs it actually implements. This keeps every direct ID on the task that realizes it AND stays under the cap.
 - **Test-file split (mirror of god-file split, for test files)**: when one test `primary_files` carries MORE than 3 direct ACs, do NOT cram them into one task. Split into several TEST-WRITING tasks on the SAME test path, each carrying ≤3 ACs grouped by behavior (e.g. one task for create+list tests, another for update tests, another for soft-delete tests). These same-file test tasks are sequential (NOT `[P]` — they share a file) and each carries the AC IDs it actually exercises.
+- **Red-state prerequisite closure**: no Setup/Expand or earlier story task may
+  establish behavior that a later test-writing task is supposed to prove
+  missing. Move that test earlier or move implementation later. Every declared
+  test-writing task must have an executable expected red state.
 - **Barrel/index exception**: registering multiple same-phase entities into barrel/index files is ONE task listing all of them — not one per file.
 - **Cross-cutting test tasks**: tests spanning multiple UJs (e.g. shared unauthenticated-access tests) omit the `[USn]` marker. Place them in the phase of their primary UJ or in the Final Phase before GATE. They carry AC refs normally (≤3 per line). A cross-cutting AC (e.g. AC-018 covering both GET and PATCH 404) is covered by placing its ref on ONE test-writing task whose path equals the AC's `primary_files` — no duplication needed; double coverage is not penalized.
 - Task IDs MAY have gaps (e.g. T005, T010, T015) — gaps are legal and reduce churn when inserting tasks. Only duplicate IDs are rejected.

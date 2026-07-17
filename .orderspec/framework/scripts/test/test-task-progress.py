@@ -43,12 +43,28 @@ with tempfile.TemporaryDirectory(prefix="orderspec-task-progress-") as temp:
 - [ ] T001 | src/example.py | REQ-001 | add implementation
 - [ ] T002 | tests/test_example.py | AC-001 | run tests
 - [ ] T003 | tests/test_example.py |  | GATE: run tests
+- [ ] T004 | src/example.py |  | VERIFY: run lint
+- [ ] T005 [P] | src/a.py | REQ-002 | add independent A
+- [ ] T006 [P] | src/b.py | REQ-003 | add independent B
 """,
         encoding="utf-8",
     )
 
     rc, data = run("validate", "--tasks", str(tasks))
-    expect(rc == 0 and data["unchecked"] == 3 and data["first_unchecked"] == "T001", "validate reports task state")
+    expect(rc == 0 and data["unchecked"] == 6 and data["first_unchecked"] == "T001", "validate reports task state")
+
+    out_of_order = {
+        "task_id": "T002",
+        "status": "SUCCESS",
+        "changed_files": ["tests/test_example.py"],
+        "verification": {"status": "PASS", "evidence": "expected red state observed"},
+        "deviation": None,
+    }
+    rc, data = run("mark", "--tasks", str(tasks), input_text=json.dumps(out_of_order))
+    expect(
+        rc != 0 and data.get("terminal") is True and data["error"] == "out_of_order_mark",
+        "marker rejects skipping first unchecked task as terminal",
+    )
 
     success = {
         "task_id": "T001",
@@ -63,6 +79,7 @@ with tempfile.TemporaryDirectory(prefix="orderspec-task-progress-") as temp:
     expect(
         rc != 0
         and "non-GATE task must report exactly its task path" in data["message"]
+        and data.get("terminal") is True
         and "- [ ] T001" in tasks.read_text(encoding="utf-8"),
         "ordinary task with empty changed_files stays unchecked",
     )
@@ -79,6 +96,13 @@ with tempfile.TemporaryDirectory(prefix="orderspec-task-progress-") as temp:
     rc, _ = run("mark", "--tasks", str(tasks), input_text=json.dumps(no_verify))
     expect(rc != 0 and "- [ ] T002" in tasks.read_text(encoding="utf-8"), "test task requires verification")
 
+    test_success = dict(
+        no_verify,
+        verification={"status": "PASS", "evidence": "expected red state observed"},
+    )
+    rc, _ = run("mark", "--tasks", str(tasks), input_text=json.dumps(test_success))
+    expect(rc == 0 and "- [X] T002" in tasks.read_text(encoding="utf-8"), "verified test task marks in order")
+
     gate_success = dict(
         no_verify,
         task_id="T003",
@@ -90,7 +114,7 @@ with tempfile.TemporaryDirectory(prefix="orderspec-task-progress-") as temp:
     rc, data = run("mark", "--tasks", str(tasks), input_text=json.dumps(gate_changed))
     expect(
         rc != 0
-        and "GATE task must report no changed files" in data["message"]
+        and "GATE/VERIFY task must report no changed files" in data["message"]
         and "- [ ] T003" in tasks.read_text(encoding="utf-8"),
         "gate cannot hide file changes",
     )
@@ -100,5 +124,30 @@ with tempfile.TemporaryDirectory(prefix="orderspec-task-progress-") as temp:
 
     rc, _ = run("mark", "--tasks", str(tasks), input_text=json.dumps(gate_success))
     expect(rc != 0, "already completed task cannot be marked twice")
+
+    verify_success = dict(
+        gate_success,
+        task_id="T004",
+        changed_files=[],
+        verification={"status": "PASS", "evidence": "lint passed"},
+    )
+    rc, _ = run("mark", "--tasks", str(tasks), input_text=json.dumps(verify_success))
+    expect(rc == 0 and "- [X] T004" in tasks.read_text(encoding="utf-8"), "VERIFY task marks with no file changes")
+
+    parallel_second = dict(
+        success,
+        task_id="T006",
+        changed_files=["src/b.py"],
+    )
+    rc, _ = run("mark", "--tasks", str(tasks), input_text=json.dumps(parallel_second))
+    expect(rc == 0 and "- [X] T006" in tasks.read_text(encoding="utf-8"), "completed parallel sibling may mark first")
+
+    parallel_first = dict(
+        success,
+        task_id="T005",
+        changed_files=["src/a.py"],
+    )
+    rc, _ = run("mark", "--tasks", str(tasks), input_text=json.dumps(parallel_first))
+    expect(rc == 0 and "- [X] T005" in tasks.read_text(encoding="utf-8"), "remaining parallel sibling marks afterward")
 
 print("All task-progress tests passed")

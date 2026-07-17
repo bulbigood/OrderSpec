@@ -50,6 +50,8 @@ Rules:
 - `contract_context` MUST be copied verbatim from
   `task_contract_context.py`. It is the authoritative mapping from task refs to
   exact `spec.md` excerpts, mechanism rows, and current phase Goal/Verification.
+- Coordinator/local executor MUST NOT open or search full `spec.md` to augment
+  resolved excerpts unless `task_context.to_read` explicitly lists it.
 - Coordinator MUST prepare only the minimum relevant inline excerpts in
   `context`; excerpts are not permission to open additional files.
 - Worker MUST receive literal file paths only. Directories, globs, and
@@ -104,7 +106,7 @@ Worker result MUST have this shape:
 - matching `task_id`;
 - every changed file is in `task_context.write_paths`;
 - verification is `PASS` when task declares verification;
-- no `deviation` requiring a design decision.
+- `deviation` is null; any deviation blocks completion and must be routed.
 
 `FAILED`, `BLOCKED`, or `NEEDS_CONTEXT` leaves task unchecked. Worker output
 never changes `[X]` markers.
@@ -124,3 +126,9 @@ For each task, coordinator MUST:
 On worker failure, invalid result, unexpected changed path, or marker failure:
 stop before the next task. Preserve the task unchecked and report the exact
 task ID and stopping reason.
+
+`changed_files` MUST describe observed task-local filesystem changes, not the
+worker's intended changes. Coordinator MUST compare task-start and task-end
+state before calling the marker. It MUST NOT add the allowed path, remove a
+forbidden path, clear `deviation`, or otherwise edit and retry a rejected
+result. Marker rejection is terminal for the current run.

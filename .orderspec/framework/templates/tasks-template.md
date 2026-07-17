@@ -137,7 +137,7 @@ Phase 1 (Setup & Expand) → Phase 2 (US1 / MVP) → **STOP & VALIDATE** → Pha
 
 - [ ] T0XX | [test file path from plan.md pathmanifest] |  | GATE: run [test command from plan.md] — verify all AC-* pass, INV-* hold, NFR-* met; STOP on failure (contraction is irreversible). Empty refs — verification asserts, does not realize. Path MUST be a real test file from pathmanifest (not a command) so M8 passes.
 - [ ] T0XX Remove feature flags / scaffolding; delete deprecated code/routes; drop obsolete columns/tables (only if a legacy mechanism is being replaced)
-- [ ] T0XX Run linters and formatters (commands from plan.md); fix violations
+- [ ] T0XX | [relevant path from plan.md pathmanifest] |  | VERIFY: run [lint/typecheck command] without autofix; STOP on failure
 - [ ] T0XX Update technical docs / inline docstrings to match final state
 
 ---
@@ -148,7 +148,8 @@ Phase 1 (Setup & Expand) → Phase 2 (US1 / MVP) → **STOP & VALIDATE** → Pha
 - The `[P]` marker means file-disjoint and independent of adjacent marked tasks; safe to run concurrently OR sequentially. Absence of the marker = run sequentially. No "waves".
 - The `[USn]` marker traces a task to its user story.
 - Each task is self-contained: raw path + spec IDs + ≤15-word gloss, so the implementer need not re-open spec.md.
-- Tests within a story fail before their implementation.
+- Tests within a story fail before their implementation; earlier phases do not pre-implement tested behavior.
+- `GATE:` and `VERIFY:` tasks are read-only and report `changed_files: []`.
 - Commit after each task or logical group. Stop at any checkpoint to validate a story independently.
 - A direct ref belongs on the task whose path equals its `primary_files` (the task that realizes/exercises it), never parked on a barrel/verify/GATE task. This is machine-enforced: extract-trace rejects (rc=3) a ref whose primary_files does not contain that task's path. Infra tasks carry EMPTY refs.
 - Avoid: vague tasks, same-file `[P]` conflicts, cross-story dependencies that break independence, retrofitting a mechanism into already-written code, splitting many unrelated REQ/AC into one oversized task just to satisfy coverage.

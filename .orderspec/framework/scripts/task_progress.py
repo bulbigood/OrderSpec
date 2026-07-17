@@ -30,8 +30,22 @@ def emit(payload: dict[str, Any]) -> None:
     print(json.dumps(payload, ensure_ascii=False))
 
 
-def fail(message: str, *, code: str = "invalid_task_state", rc: int = 2) -> int:
-    emit({"ok": False, "error": code, "message": message})
+def fail(
+    message: str,
+    *,
+    code: str = "invalid_task_state",
+    rc: int = 2,
+    terminal: bool = False,
+) -> int:
+    payload: dict[str, Any] = {"ok": False, "error": code, "message": message}
+    if terminal:
+        payload.update(
+            {
+                "terminal": True,
+                "required_action": "STOP; preserve this result and leave the task unchecked; do not alter fields or retry",
+            }
+        )
+    emit(payload)
     return rc
 
 
@@ -50,9 +64,12 @@ def parse_tasks(path: Path) -> tuple[list[dict[str, Any]], list[str]]:
     errors: list[str] = []
     seen: set[str] = set()
     previous_number = -1
+    phase = None
 
     for line_number, raw in enumerate(lines, start=1):
         line = raw.rstrip("\r\n")
+        if line.startswith("## "):
+            phase = line[3:].strip()
         match = TASK_LINE_RE.match(line)
         if not match:
             continue
@@ -75,6 +92,7 @@ def parse_tasks(path: Path) -> tuple[list[dict[str, Any]], list[str]]:
         seen.add(task_id)
         previous_number = max(previous_number, number)
 
+        gloss = parts[-1].strip()
         records.append(
             {
                 "task_id": task_id,
@@ -82,8 +100,11 @@ def parse_tasks(path: Path) -> tuple[list[dict[str, Any]], list[str]]:
                 "path": task_path,
                 "line_number": line_number,
                 "line": line,
-                "requires_verification": bool(VERIFICATION_WORDS_RE.search(parts[-1])),
-                "is_gate": parts[-1].strip().startswith("GATE:"),
+                "phase": phase,
+                "is_parallel": bool(re.search(r"(?:^|\s)\[P\](?:\s|$)", match.group("rest"))),
+                "requires_verification": bool(VERIFICATION_WORDS_RE.search(gloss)),
+                "is_gate": gloss.startswith("GATE:"),
+                "is_verification_only": gloss.startswith(("GATE:", "VERIFY:")),
             }
         )
 
@@ -139,9 +160,9 @@ def validate_success_result(result: dict[str, Any], record: dict[str, Any]) -> s
     for changed in changed_files:
         if changed != record["path"]:
             return f"worker changed forbidden path: {changed} (allowed: {record['path']})"
-    if record["is_gate"]:
+    if record["is_verification_only"]:
         if changed_files:
-            return "GATE task must report no changed files"
+            return "GATE/VERIFY task must report no changed files"
     elif changed_files != [record["path"]]:
         return f"non-GATE task must report exactly its task path: {record['path']}"
 
@@ -200,9 +221,30 @@ def cmd_mark(args: argparse.Namespace) -> int:
     if record["status"] in {"x", "X"}:
         return fail(f"task already marked [X]: {task_id}", code="task_already_complete")
 
+    first_unchecked = next((item for item in records if item["status"] == " "), None)
+    if first_unchecked is not None and first_unchecked["task_id"] != task_id:
+        first_index = records.index(first_unchecked)
+        target_index = records.index(record)
+        skipped = records[first_index:target_index]
+        parallel_sibling = (
+            record["is_parallel"]
+            and record["phase"] == first_unchecked["phase"]
+            and all(item["status"] != " " or item["is_parallel"] for item in skipped)
+        )
+        if not parallel_sibling:
+            return fail(
+                f"out-of-order mark: {task_id}; first unchecked task is {first_unchecked['task_id']}",
+                code="out_of_order_mark",
+                terminal=True,
+            )
+
     validation_error = validate_success_result(result, record)
     if validation_error:
-        return fail(validation_error, code="worker_result_rejected")
+        return fail(
+            validation_error,
+            code="worker_result_rejected",
+            terminal=True,
+        )
 
     try:
         lines = tasks_path.read_text(encoding="utf-8").splitlines(keepends=True)
