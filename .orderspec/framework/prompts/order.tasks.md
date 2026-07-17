@@ -28,6 +28,7 @@ Core principles:
 - **Weak-LLM-proof**: each task is executable without re-reading the spec — it carries its file path and spec IDs, while `/order.code` resolves those IDs into exact contract excerpts before execution.
 - **Sequential by default**: structure is **Phases → Tasks**. Phases are hard sequential barriers; within a phase, tasks run top-to-bottom and that order MUST be correct on its own. `[P]` parallelism is an OPTIONAL annotation layered on top — never a precondition for correctness.
 - **Coverage is proven, not asserted**: you do NOT hand-build, hand-count, or hand-fill any traceability matrix. `traceability.py extract-trace` projects coverage from your task lines and is the SOLE arbiter of completeness. Your job is correct task lines; the tool decides if they cover everything.
+- **Environment actions are explicit**: preserve `plan.md` runtime prerequisites, readiness checks, recovery boundaries, and fallbacks. Never encode service startup, package installation, data reset, or another operator side effect as an implicit task.
 
 ---
 
@@ -175,6 +176,8 @@ Read the following inputs from `$FEATURE_DIR`:
 
 1.  **`spec.md`** — UJ priorities, AC, REQ, INV, EDGE, data model, contracts.
 2.  **`plan.md`** — file mapping, stack, NEW/MOD files, test/build commands.
+    Read `Environment Readiness` as the source for runtime prerequisites. Do not
+    replace its checks or recovery options with guesses.
 3.  **Coverage contract from `mechanisms.tsv`** — the IDs you must cover live here, not in your recollection of the spec:
 
 ```bash
@@ -237,6 +240,9 @@ This is ordering, not coverage bookkeeping — coverage is the tool's job in Ste
 3.  Place each buildable Success Criterion (load, security, performance, or other executable evidence) under its owning UJ or cross-cutting phase; post-launch/business KPI criteria need no task.
 4.  From `plan.md`, list every NEW/MOD file; assign each to the phase that first touches it.
 5.  Note the project's test command from `plan.md` (used verbatim in verification/GATE tasks).
+6.  Carry each required environment readiness check into the relevant phase
+    verification or implementation preflight. Add a task only when readiness
+    requires a repository artifact or code/config change listed in the plan.
 
 ### Step 9: Write `tasks.md`
 
@@ -248,6 +254,9 @@ Rewrite `$TASKS_FILE` (which was initialized from `tasks-template.md` in Step 6)
   - *if persistent storage*: additive migrations with rollback scripts (Spec § Data Model).
   - *if interfaces (API/CLI/UI)*: contract/route/DTO/command stubs (Spec § Contracts).
   - passive model entities; feature flags only if `plan.md` defines them.
+  - environment setup only when `plan.md` declares a repository-owned artifact
+    such as a compose file, fixture, or configuration. Operator recovery actions
+    remain approval-gated implementation preflight, not hidden tasks.
 - **Phase 2+ — Migrate**: US1 (P1, MVP) first, then one phase per remaining UJ in priority order.
   Within each story phase:
   1. Test-writing tasks first (carry that story's `AC-NNN` refs; MUST fail before implementation). Split into multiple sequential test tasks on the same file if ACs exceed the 3-ref cap (see test-file split rule).
@@ -466,6 +475,7 @@ Report to chat:
 - [ ] `validate --stage tasks` has no blocking findings
 - [ ] Every story task whose path owns a direct mechanism carries at least one valid spec ref; no-ref support tasks are allowed only on paths without direct mechanisms
 - [ ] Every buildable Success Criterion is represented by an executable task or verification path; KPI-only criteria are exempt
+- [ ] Environment readiness checks and recovery boundaries are preserved from `plan.md`; no implicit operator side effects are hidden in tasks
 - [ ] `task_context.py validate` passed; every task has a deterministic read whitelist
 - [ ] `task_contract_context.py validate` passed; every task ref resolves to exact spec excerpts and phase context
 - [ ] Active feature status updated to `tasks`

@@ -185,10 +185,11 @@ For every material mechanism whose correctness depends on an existing project ab
 - Library/API documentation is used only for API semantics. Runtime readiness is supported by repository manifests, configuration, deployment files, or the test harness.
 - Every runtime prerequisite is explicit, and every file that must change to establish it appears in both `Required Paths` and the `pathmanifest`.
 - Operational scope is explicit (`process`, `host`, `cluster`, `external service`, or `not applicable`) and satisfies the spec's invariants, constraints, and deployment evidence.
+- The `Environment Readiness` section is present. Each material prerequisite has an exact read-only check, expected result, repository evidence, bounded recovery option with side effect/scope and approval boundary, and safe fallback. A `None` row is valid only when no material prerequisite exists.
 
 Examples: an ODM transaction API without evidence of a transaction-capable database topology is not closed; a process-local lock cannot satisfy a cluster-wide concurrency invariant; bypassing an observed shared pagination or serialization mechanism requires a concrete incompatibility.
 
-Missing section/table, unverified correctness prerequisite, missing prerequisite path, or scope mismatch → Route to `/order.plan` (CRITICAL when it invalidates an MVP/P1 invariant or atomicity guarantee; HIGH otherwise). Unjustified duplication of an existing project mechanism → Route to `/order.plan` (HIGH for contract-significant behavior; MEDIUM otherwise).
+Missing section/table, unverified correctness prerequisite, missing prerequisite path, missing readiness check/recovery boundary/fallback, or scope mismatch → Route to `/order.plan` (CRITICAL when it invalidates an MVP/P1 invariant or atomicity guarantee; HIGH otherwise). Unjustified duplication of an existing project mechanism → Route to `/order.plan` (HIGH for contract-significant behavior; MEDIUM otherwise).
 
 ### P1-010 Spec-Rooted Defect
 If `plan.md` cannot be correct because `spec.md` is the root problem (contradictions, missing status codes needed by ACs, impossible constraints, measurable NFR without target), route upward.

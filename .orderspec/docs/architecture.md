@@ -105,6 +105,29 @@ Authoring commands may use read-only documentation lookup when allowed by projec
 
 Gate commands follow `constitution.md` literally.
 
+## Runtime environment blockers
+
+Environment recovery is split by authority:
+
+- `orderspec-rules.md` and `environment-block.md` define framework behavior:
+  detect the blocker, propose bounded options, ask for approval, recover, and
+  resume the same task only after the readiness check passes.
+- `constitution.md` defines whether the command may perform the relevant
+  diagnosis or recovery action. Mutating recovery is approval-gated and
+  default-denied.
+- `stack.md` records technologies and runtime topology; it is not a runbook.
+- Feature `plan.md` records concrete prerequisites, exact read-only checks,
+  repository evidence, recovery options, side effects, scope, and fallback.
+- `tasks.md` records only repository-owned setup changes and execution order.
+  It must not hide operator actions such as starting MongoDB or installing a
+  package.
+
+When `/order.code` encounters an unavailable prerequisite, it leaves the task
+unchecked, reports the decisive error, asks the user before any mutating
+action, reruns the declared check, and resumes only after success. Refusal or
+unavailability uses the plan's fallback; if none can satisfy the task,
+implementation stops and routes back to the owning artifact.
+
 ## Command context loading
 
 OrderSpec commands do not manually maintain long preload lists in prompts.

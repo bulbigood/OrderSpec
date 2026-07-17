@@ -27,6 +27,25 @@
 
 ---
 
+## Environment Readiness
+
+<!--
+Declare runtime prerequisites before implementation. This is operational
+planning, not feature behavior: do not copy it into spec.md.
+
+- Check MUST be read-only and exact.
+- Recovery MUST state side effect, scope, and approval requirement.
+- Safe fallback MUST say how implementation proceeds without recovery, or
+  explicitly say that the dependent task cannot proceed.
+- If no prerequisite exists, keep one `None` row with repository evidence.
+-->
+
+| Prerequisite / Applicable Tasks or Spec IDs | Scope | Read-only Check | Expected Result | Repository Evidence | Recovery Option, Side Effect, and Approval | Safe Fallback |
+|---------------------------------------------|-------|-----------------|-----------------|---------------------|---------------------------------------------|---------------|
+| [MongoDB / T001 / REQ-001] | [host / cluster / external service] | [`command`] | [observable result] | [`file`, setting, or test harness] | [`command`; starts local service; user approval required] | [mock / skip / stop with route] |
+
+---
+
 ## Mechanism Evidence & Runtime Closure
 
 <!--

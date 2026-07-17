@@ -114,6 +114,10 @@ def setup_base_files(
         WORK / ".orderspec" / "framework" / "protocols" / "sub-agent-rules.md",
         "# Sub-agent Rules\n",
     )
+    write(
+        WORK / ".orderspec" / "framework" / "protocols" / "environment-block.md",
+        "# Environment Block Protocol\n",
+    )
     write(WORK / ".orderspec" / "framework" / "schemas" / "task-context.schema.json", "{}\n")
 
 

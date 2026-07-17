@@ -697,6 +697,15 @@ DENIED unless the current chat contains explicit user approval for the exact ski
 ### Documentation lookup during authoring
 ALLOWED for read-only documentation lookup required by `.orderspec/framework/protocols/tooling-protocol.md` or `.orderspec/config/tooling.json` during authoring commands. This does not allow package installation, skill installation, project command execution, arbitrary network access, or gate-time network access.
 
+### Environment diagnosis during authoring
+ALLOWED for read-only readiness checks declared in `plan.md` and permitted by the current command's workflow.
+
+### Environment recovery during authoring
+ALLOWED only after explicit current-chat user approval for the exact action, and only for a recovery option declared in `plan.md` or explicitly approved as a bounded equivalent. The approval does not authorize a different command, scope, or environment.
+
+### Package installation, data reset, and production/shared-environment changes
+DENIED. These actions require a separate explicit project-contract amendment and must not be inferred from a runtime failure.
+
 ### MCP documentation lookup during gates
 DENIED unless explicitly allowed above. Gates follow this constitution literally.
 

@@ -29,6 +29,13 @@
       "usage": "apply",
       "authority": "framework"
     },
+    "protocol.environment_block": {
+      "path": ".orderspec/framework/protocols/environment-block.md",
+      "kind": "protocol",
+      "reason": "runtime prerequisite detection, approval, recovery, and fallback",
+      "usage": "apply",
+      "authority": "framework"
+    },
     "schema.frontmatter": {
       "path": ".orderspec/framework/schemas/frontmatter.yml",
       "kind": "schema",
@@ -220,6 +227,9 @@
       "required": [
         {
           "group": "project.contracts"
+        },
+        {
+          "ref": "protocol.environment_block"
         }
       ],
       "feature_context": {
@@ -233,6 +243,9 @@
       "required": [
         {
           "group": "project.contracts"
+        },
+        {
+          "ref": "protocol.environment_block"
         }
       ],
       "feature_context": {
@@ -247,6 +260,9 @@
       "required": [
         {
           "group": "project.contracts"
+        },
+        {
+          "ref": "protocol.environment_block"
         },
         {
           "ref": "schema.task_context"
@@ -266,6 +282,9 @@
           "group": "project.contracts"
         },
         {
+          "ref": "protocol.environment_block"
+        },
+        {
           "ref": "schema.task_context"
         }
       ],
@@ -282,6 +301,9 @@
       "required": [
         {
           "group": "project.contracts"
+        },
+        {
+          "ref": "protocol.environment_block"
         },
         {
           "ref": "protocol.sub_agent_execution"

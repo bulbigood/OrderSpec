@@ -32,6 +32,7 @@ You **MUST** consider the user input before proceeding (if not empty).
    eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
    ```
 3. **Scope Lock:** You execute `tasks.md`. Do not invent new requirements, endpoints, fields, or permissions. If execution strictly requires a new externally visible behavior not present in `spec.md`, STOP and report `CODE_BLOCKED: contract decision required`.
+4. **Environment Boundary:** Apply `environment-block.md`. The coordinator diagnoses runtime blockers and asks for approval before mutating recovery actions; workers never mutate the environment.
 
 ---
 
@@ -251,7 +252,7 @@ test -e "$SELF_REPORT" && echo "SELF_REPORT_PRESENT" || echo "SELF_REPORT_ABSENT
 Read the following from `$FEATURE_DIR`:
 
 1. **REQUIRED**: `tasks.md` — phases, task lines (`T### [P?] [US?] | path | refs? | gloss`), checkpoints, GATE.
-2. **REQUIRED**: `plan.md` — tech stack, file structure (pathmanifest), build/test commands.
+2. **REQUIRED**: `plan.md` — tech stack, file structure (pathmanifest), build/test commands. Read `Environment Readiness` for runtime prerequisites, exact checks, recovery options, approval boundaries, and safe fallbacks.
 3. `spec.md` is available to the coordinator for resolving contract IDs and preparing targeted excerpts. Workers receive those excerpts through `contract_context`; they do not open `spec.md` unless it is explicitly listed by the resolver.
 
 Do NOT look for a hand-built Traceability Matrix or Files Touched table in `tasks.md` — those are derived artifacts; `order.tasks` does not author them. For file-disjointness verification (Step 9), use `plan.md` pathmanifest and task `path` fields directly.
@@ -392,6 +393,28 @@ task unchecked and stop at that task with a precise route.
 - The GATE task is the first task of the Final Phase. Run the full test command from `plan.md` verbatim; verify all AC pass, INV hold, NFR targets met.
 - **On any failure: HALT. Never proceed to Contract** — contraction (deleting code, dropping columns, removing flags, removing scaffolding) is irreversible. Report what failed and stop.
 
+#### Environment Block Handling
+
+Before dispatching or executing a task that depends on a runtime prerequisite,
+the coordinator MUST apply `environment-block.md` and run the matching exact
+read-only check from `plan.md` when constitution capabilities permit it.
+
+- A passing check permits the task to proceed.
+- A denied, unavailable, or failing check is not permission to guess. Stop the
+  current task before code changes and before marking it `[X]`.
+- Report the shortest decisive error, affected prerequisite, proposed bounded
+  recovery option, exact action, side effect, scope, required approval, and
+  safe fallback. Ask the user before executing any mutating action.
+- Execute only the exact action approved in the current chat, then rerun the
+  check. Resume the same task only after it passes. Approval for one action
+  does not authorize another.
+- If the user refuses or requests default continuation, use the declared safe
+  fallback. If it cannot satisfy the task, leave it unchecked and stop with
+  `CODE_BLOCKED: environment prerequisite`.
+- If a worker reports an unanticipated environment blocker, do not retry it or
+  switch execution modes silently. Handle recovery as coordinator work, then
+  resume the same task according to the worker protocol.
+
 #### Failure Handling Summary
 
 | Level | On failure |
@@ -400,6 +423,7 @@ task unchecked and stop at that task with a precise route.
 | Task sub-agent (in a concurrent `[P]` group) | Wait for sibling sub-agents already dispatched; mark only successful tasks `[X]`; report failed ones; do not advance past the group |
 | Checkpoint | Stay in current story phase; fix forward; re-verify |
 | GATE | HALT everything; Contract phase is forbidden until GATE passes |
+| Environment prerequisite | Stop current task; ask approval for exact recovery; rerun check; resume only after pass |
 
 #### Deviation Rule
 
@@ -472,6 +496,7 @@ Report to chat:
 - **Coverage check**: `check-mechanisms` exit code (MUST be 0); one-line summary if defects found.
 - **Verification**: checkpoint results per story; GATE result; final test command output summary (pass/fail counts).
 - **Deviations log**: all `DEVIATION:` lines (or "none").
+- **Environment blockers**: prerequisite, observed failure, user-approved recovery or fallback, and outcome (or "none").
 - **Library Documentation Evidence**: for each library-specific claim, cite the evidence source (skill name, docs source name, or user-provided reference). If a required source was unavailable, record that and the fallback applied.
 - **If halted early**: exact stopping point (phase/task), reason, and the recommended next command (`/order.code` to resume, or `/order.tasks` / `/order.plan` if the failure is a design gap).
 - **Active feature status**: updated to `implementing` (or not, with reason).
@@ -491,6 +516,7 @@ Report to chat:
 - [ ] All tasks executed in phase + task-ID order; each successful marker written by `task_progress.py`, or a precise stopping point reported
 - [ ] `[P]` groups run concurrently ONLY after path-disjoint verification via `plan.md` pathmanifest; otherwise sequential
 - [ ] All story checkpoints passed; GATE passed before any Contract task ran
+- [ ] Environment prerequisites checked before dependent tasks; recovery actions were approval-gated and documented
 - [ ] `task_context.py validate` and `task_contract_context.py validate` passed before execution
 - [ ] `check-mechanisms` exited 0 (no coverage defects); defects routed to `/order.tasks` or `/order.spec`, not silently patched
 - [ ] Deviations logged and reported; no silent design decisions made

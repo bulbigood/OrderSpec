@@ -178,6 +178,7 @@ Only after consulting skills and docs sources, perform a focused repository scan
 -   Implementation mechanisms for Spec IDs.
 -   Existing project abstractions relevant to the feature (for example shared plugins, middleware, base models, transaction helpers, locks, serializers, and pagination helpers).
 -   Runtime and deployment capabilities required by candidate mechanisms (for example database topology, process count, external services, queues, and distributed coordination).
+-   Environment readiness for every material prerequisite: exact read-only check, expected result, repository evidence, bounded recovery option, approval/side-effect boundary, and safe fallback. Do not defer an obvious prerequisite to `/order.code`.
 
 For each material mechanism, distinguish three evidence classes:
 
@@ -211,11 +212,12 @@ Rewrite `$IMPL_PLAN` (which was initialized from `plan-template.md` in Step 7).
     *   State operational scope as `process`, `host`, `cluster`, `external service`, or `not applicable`.
     *   If no material mechanism needs closure, retain the table and write one `None` row with a short repository-evidence statement.
     *   If a required prerequisite cannot be verified, select a repository-supported alternative or STOP and report `PLAN_BLOCKED: runtime prerequisite unverified: <mechanism>: <prerequisite>`. Do not mark the feature `planned` with an unresolved prerequisite.
-4.  **Constitution Check:** Fill the table.
+4.  **Environment Readiness:** Fill the template's `Environment Readiness` table for every material runtime prerequisite. Include applicable task/spec IDs, an exact read-only check, expected result, repository evidence, bounded recovery options, required approval, side effect/scope, and safe fallback. If no prerequisite exists, write one `None` row with repository evidence. If a required prerequisite has no verified check and no safe fallback, STOP with `PLAN_BLOCKED: runtime prerequisite unverified`.
+5.  **Constitution Check:** Fill the table.
     *   **Status**: Use `PASS`, `DESIGN-OK`, or `FAIL`.
     *   Never mark `PASS` for planned `[NEW]` files.
-5.  **Physical Project Structure:** Emit the `pathmanifest` block (see Step 10). Preserve the fenced-block syntax and canonical template comments that document machine-readable output. Remove copied self-check lists or non-canonical authoring residue.
-6.  **Structure & Path Decisions:**
+6.  **Physical Project Structure:** Emit the `pathmanifest` block (see Step 10). Preserve the fenced-block syntax and canonical template comments that document machine-readable output. Remove copied self-check lists or non-canonical authoring residue.
+7.  **Structure & Path Decisions:**
     *   **File Naming Convention Evidence**: Fill the table. For the `Rule Fired` column, apply these rules in order for multi-word new filenames:
         1.  Same-layer multi-word filename precedent.
         2.  Cross-layer multi-word filename precedent.
@@ -225,11 +227,11 @@ Rewrite `$IMPL_PLAN` (which was initialized from `plan-template.md` in Step 7).
     *   **Architectural Mapping**: Map logical roles / Spec IDs to physical files.
     *   **Interface Fidelity**: For every `IF-NNN`, preserve the exact method, externally visible path, mounted route prefix, input semantics, response shape and nullability, pagination/filter behavior, and failure statuses. Map each behavior to the physical boundary that directly realizes it. Do not add endpoints absent from `spec.md`.
     *   **Internal Component Diagram**: Draw physical/internal decomposition using quoted Mermaid labels.
-7.  **Mechanism Matrix:** Preserve this section's structure and explanatory text; do not add a Markdown mechanism table. Replace `<FEATURE_DIR>` and `<feature>` placeholders with the resolved repo-relative feature path. Mechanism rows remain machine state, not plan prose.
-8.  **Library Documentation Evidence:** For each library-specific implementation claim made in this plan (e.g., specific API usage, non-obvious configuration, framework-specific patterns), cite the evidence source (skill name, documentation source name, or user-provided reference). If no library-specific claims were made, write exactly: "No library-specific claims."
+8.  **Mechanism Matrix:** Preserve this section's structure and explanatory text; do not add a Markdown mechanism table. Replace `<FEATURE_DIR>` and `<feature>` placeholders with the resolved repo-relative feature path. Mechanism rows remain machine state, not plan prose.
+9.  **Library Documentation Evidence:** For each library-specific implementation claim made in this plan (e.g., specific API usage, non-obvious configuration, framework-specific patterns), cite the evidence source (skill name, documentation source name, or user-provided reference). If no library-specific claims were made, write exactly: "No library-specific claims."
 
     Note: Referencing `STACK-NNN` IDs from `spec.md` §6 is not itself a library-specific claim — those IDs map to `stack.md` entries. A library-specific claim is a concrete implementation detail (e.g., "use Mongoose middleware hooks", "configure Joi abortEarly option") that goes beyond simply naming the technology.
-9.  **Complexity Tracking:** Fill the table ONLY if Constitution Check has `FAIL` rows or justified deviations.
+10. **Complexity Tracking:** Fill the table ONLY if Constitution Check has `FAIL` rows or justified deviations.
 
 **Prohibitions:**
 -   Do not duplicate §8 Information Model or §9 Interface Contracts from `spec.md`.

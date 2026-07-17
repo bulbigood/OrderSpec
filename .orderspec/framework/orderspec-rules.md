@@ -250,6 +250,26 @@ Network access, command execution, report delivery, or other side effects MUST b
 
 If extension execution is introduced later, it MUST be implemented through a deterministic script with explicit configuration, allowlisted commands, JSON output, and constitution-gated capability checks.
 
+## Environment Block Policy
+
+Runtime prerequisites are planned before implementation and handled through
+`.orderspec/framework/protocols/environment-block.md`.
+
+- `/order.plan` identifies prerequisites, exact read-only checks, repository
+  evidence, bounded recovery options, approval boundaries, and safe fallbacks.
+- `/order.tasks` preserves that boundary and does not hide operator actions in
+  disposable task lines.
+- `/order.code` stops the current task on an environment blocker, proposes a
+  bounded solution, asks for approval before mutation, executes only the exact
+  approved action, reruns the check, and resumes only after success.
+- Workers report environment blockers to the coordinator and never mutate
+  services, packages, credentials, data, or deployment environments.
+
+No service start/stop/restart, package installation, network action, data
+reset, migration, or production/shared-environment change may be inferred
+from an error. Capability silence remains denial; current-chat approval does
+not amend `spec.md`, `plan.md`, `tasks.md`, or project contracts.
+
 ## Deterministic Script Authority
 
 Framework scripts under `.orderspec/framework/scripts/` are deterministic framework utilities.

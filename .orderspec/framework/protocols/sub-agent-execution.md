@@ -56,6 +56,9 @@ Rules:
   repository-wide searches are invalid.
 - `verification.command` is allowed only when the command is declared by the
   task/plan and permitted by project governance.
+- Environment recovery belongs to the coordinator. A worker that encounters
+  an unavailable runtime prerequisite MUST return `BLOCKED`; it MUST NOT ask
+  for approval or mutate the environment.
 - Network access, package installation, git mutation, new sub-agents, and
   unrelated commands are forbidden.
 

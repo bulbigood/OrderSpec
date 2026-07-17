@@ -15,7 +15,7 @@ description: Create or amend four project-level contract documents — stack.md,
 | `stack.md` | `.orderspec/contracts/` | `STACK-NNN` | Technologies, versions, purpose |
 | `architecture.md` | `.orderspec/contracts/` | `ARCH-NNN` | Layers, dependency rules |
 | `conventions.md` | `.orderspec/contracts/` | `CONV-NNN` | Error handling, serialization, validation patterns |
-| `constitution.md` | `.orderspec/contracts/` | named headings | Governance principles + capability grants for gates |
+| `constitution.md` | `.orderspec/contracts/` | named headings | Governance principles + capability grants for gates and approval-gated environment recovery |
 
 These are **stable, shared, project-wide**. They are NOT feature specs. They survive refactors. `spec.md` and `plan.md` cite them by ID. All four live under `.orderspec/contracts/` — no OrderSpec artifact is written to the repository root.
 
@@ -698,6 +698,7 @@ Conventions grow organically through future **amend** calls, not through bootstr
 - `architecture.md`: layers are listed. At least one dependency rule exists.
 - `conventions.md`: file exists, structure is valid.
 - `constitution.md`: no `[BRACKET]` placeholders remain (except `[TEST_COMMAND]` if user chose option B/C — that is `[UNRESOLVED]` and must be listed in the report). Every principle uses MUST or SHOULD. Every capability is explicitly ALLOWED or DENIED — no vague wording.
+- `constitution.md` explicitly governs read-only environment diagnosis and approval-gated recovery. It MUST NOT grant implicit service startup, package installation, data reset, or production/shared-environment changes.
 
 ### Step 6 — Write and report manually only in emergency fallback
 
