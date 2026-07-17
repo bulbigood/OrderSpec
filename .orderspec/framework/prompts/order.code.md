@@ -104,21 +104,24 @@ Determine execution strategy before writing any file. State the selected mode in
 
 Execution modes:
 
-1. **DELEGATED** — user input permits delegation and runtime explicitly exposes
-   sub-agent dispatch and wait. Dispatch every unchecked task according to Step 9.
-2. **LOCAL_PHASE** — local execution was explicitly requested, or dispatch is
-   unavailable. Coordinator executes every unchecked task in the first
-   incomplete phase sequentially, then stops at the phase barrier. This is not
-   a block.
-3. **LOCAL_ALL** — local execution was explicitly requested, or dispatch is
-   unavailable, and `$ARGUMENTS` contains `--all`. Coordinator executes every
-   unchecked task in every remaining phase sequentially.
+1. **DELEGATED** — explicitly requested delegation and runtime explicitly
+   exposes sub-agent dispatch and wait. Dispatch every unchecked task according
+   to Step 9.
+2. **LOCAL_PHASE** — `$ARGUMENTS` contains `--phase`. Coordinator executes
+   every unchecked task in the first incomplete phase sequentially, then stops
+   at the phase barrier. This is not a block.
+3. **LOCAL_ALL** — default. Coordinator executes every unchecked task in every
+   remaining phase sequentially.
 
 Additional controls:
 
 - **RESUME** — `$ARGUMENTS` is empty or contains `--resume`; skip tasks already marked `[X]` in every selected execution mode.
-- **`--local` / `--no-subagents`** — force local execution. Do not inspect,
+- **`--local` / `--no-subagents`** — force `LOCAL_ALL`. Do not inspect,
   configure, dispatch, or wait for a worker.
+- **`--delegated`** — request `DELEGATED`; use it only when dispatch is
+  available.
+- **`--phase`** — select `LOCAL_PHASE`.
+- **`--all`** — compatibility alias for default `LOCAL_ALL`.
 - **Explicit natural-language local constraint** — instructions such as “do not
   use sub-agents”, “without delegation”, “single agent”, or requiring all work
   to remain in one/single agent session are equivalent to `--local`, including
@@ -131,13 +134,15 @@ Mode precedence:
 
 1. Resolve command context and paths.
 2. Parse explicit user execution constraints before capability detection.
-3. If local execution is requested, select `LOCAL_ALL` with `--all`, otherwise
-   `LOCAL_PHASE`. Do not inspect dispatch capability or resolve a worker.
-4. Otherwise detect actual dispatch capability in the current runtime; do not
-   infer it from `agents.json` or adapter detection.
-5. Select `DELEGATED` when dispatch is available. Otherwise select `LOCAL_ALL`
-   with `--all`, or `LOCAL_PHASE` without it.
-6. State mode before the first task mutation. User prohibition of delegation
+3. If local execution is requested, select `LOCAL_ALL`. Do not inspect dispatch
+   capability or resolve a worker.
+4. If `--phase` is present, select `LOCAL_PHASE`. Do not inspect dispatch
+   capability or resolve a worker.
+5. If `--delegated` is present, detect actual dispatch capability in the current
+   runtime; do not infer it from `agents.json` or adapter detection. Select
+   `DELEGATED` only when dispatch is available; otherwise select `LOCAL_ALL`.
+6. Otherwise select `LOCAL_ALL`.
+7. State mode before the first task mutation. User prohibition of delegation
    always overrides runtime capability and worker defaults.
 
 ### Step 3.5: Worker Resolution
