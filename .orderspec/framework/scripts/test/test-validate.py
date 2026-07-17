@@ -315,6 +315,7 @@ write_spec("""- **REQ-001** user can log in
 """)
 (SPECS / "plan.md").write_text("""```pathmanifest
 src/models/user.py  [NEW]
+tests/unit/user.test.py  [NEW]
 ```
 """)
 put_mechanisms(
@@ -387,6 +388,7 @@ write_spec("""- **REQ-001** user can log in
 """)
 (SPECS / "plan.md").write_text("""```pathmanifest
 src/models/user.py  [NEW]
+tests/unit/user.test.py  [NEW]
 ```
 """)
 put_mechanisms(

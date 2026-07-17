@@ -27,7 +27,7 @@ DISPOSITION_MAP = {
     "M21": "Route", "M22": "Informational", "M23": "Route", "M24": "Route",
     "M25": "Route", "M28": "Route", "M29": "Route", "M30": "Route",
     "M31": "Route", "M32": "Route", "M33": "Route", "M34": "Route",
-    "M35": "Route", "M36": "Route"
+    "M35": "Route", "M36": "Route", "M37": "Route"
 }
 
 def _load_specids(feature=None):
