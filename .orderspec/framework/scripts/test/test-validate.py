@@ -306,6 +306,36 @@ if rc == 1 and "M16" in out:
 else:
     no("validate M16", f"rc={rc} out={out} err={err}")
 
+# V4b: tasks stage accepts an applied [NEW] transition from the frozen baseline
+reset_feature()
+write_spec("""- **REQ-001** user can log in
+- **UJ-001** Login journey
+  Covers: REQ-001
+""")
+(WORK / "src" / "models").mkdir(parents=True, exist_ok=True)
+(WORK / "src" / "models" / "user.py").write_text("class User: pass\n")
+(SPECS / "plan.md").write_text("""```pathmanifest
+src/models/user.py  [NEW]
+tests/unit/user.test.py  [NEW]
+```
+""")
+put_mechanisms(
+    f"REQ-001{TAB}direct{TAB}login model{TAB}src/models/user.py{TAB}unit",
+)
+(SPECS / "tasks.md").write_text("""- [X] T001 [US1] | src/models/user.py | REQ-001 | user model
+""")
+rc, out, err = run_trace("validate", "--stage", "tasks", F)
+if rc == 0 and "M10" not in out:
+    ok("validate: tasks stage accepts applied [NEW] baseline transition")
+else:
+    no("validate tasks applied transition", f"rc={rc} out={out} err={err}")
+
+rc, out, err = run_trace("validate", "--stage", "plan", F)
+if rc == 1 and "M10" in out:
+    ok("validate: plan stage still rejects existing [NEW] baseline path")
+else:
+    no("validate plan baseline M10", f"rc={rc} out={out} err={err}")
+
 # V_CONFIG_B_2: documented primary file outside plan.md or manifest → M26
 reset_feature()
 write_spec("""- **REQ-001** user can log in

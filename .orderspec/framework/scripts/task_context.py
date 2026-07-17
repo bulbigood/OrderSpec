@@ -19,6 +19,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 from common import get_repo_root  # noqa: E402
 from task_progress import parse_tasks  # noqa: E402
+from trace_constants import _SPEC_ID_RE  # noqa: E402
 from trace_parse import _parse_pathmanifest  # noqa: E402
 
 
@@ -164,8 +165,12 @@ def validate_payload(
         if not isinstance(entry, dict):
             errors.append(f"task {task_id} context must be an object")
             continue
-        if set(entry) != {"read", "target_state"}:
-            errors.append(f"task {task_id} context must contain only read and target_state")
+        allowed_keys = {"read", "target_state", "contract_refs"}
+        if not {"read", "target_state"}.issubset(entry) or not set(entry).issubset(allowed_keys):
+            errors.append(
+                f"task {task_id} context must contain read and target_state; "
+                "optional contract_refs is the only additional field"
+            )
             continue
         target_state = entry.get("target_state")
         if target_state not in {"new", "mod", "del"}:
@@ -179,6 +184,18 @@ def validate_payload(
             errors.append(f"task {task_id} context read contains duplicate paths")
         if any(not safe_relative_path(path) for path in read_paths):
             errors.append(f"task {task_id} context read contains an unsafe path")
+
+        contract_refs = entry.get("contract_refs", [])
+        if not isinstance(contract_refs, list) or not all(
+            isinstance(spec_id, str) and _SPEC_ID_RE.match(spec_id)
+            for spec_id in contract_refs
+        ):
+            errors.append(
+                f"task {task_id} contract_refs must be an array of canonical spec IDs"
+            )
+            continue
+        if len(contract_refs) != len(set(contract_refs)):
+            errors.append(f"task {task_id} contract_refs contains duplicate IDs")
 
         record = next(record for record in records if record["task_id"] == task_id)
         task_path = record["path"]
@@ -216,7 +233,11 @@ def validate_payload(
                 missing_required.append(path)
                 errors.append(f"task {task_id} read file does not exist: {path}")
 
-        normalized[task_id] = {"read": read_paths, "target_state": target_state}
+        normalized[task_id] = {
+            "read": read_paths,
+            "target_state": target_state,
+            "contract_refs": contract_refs,
+        }
 
     return normalized, errors, sorted(set(missing_required))
 

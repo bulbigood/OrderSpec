@@ -162,6 +162,21 @@ Task-writing evidence belongs to `/order.tasks` and `/order.tasks-check`; this
 gate MUST NOT inspect or modify `tasks.md`, and a generic GATE task is not
 evidence for the plan-stage topology check.
 
+### P1-014 Cross-Boundary Completeness
+
+For each behavior, follow required data and interface values through every
+physical boundary named by the plan: persistence/schema, service, controller or
+serializer, route/export wiring, and tests. Every behavior-bearing manifest path
+must have an exact bounded obligation and relevant Spec IDs in Architectural
+Mapping, even when it is not the mechanism row's single `primary_files` owner.
+
+Route to `/order.plan` when a later planned task would require an earlier model,
+schema, DTO, serializer, or route to gain contract-required fields or operations
+that its planned obligation omitted. Generic path duties such as "create schema"
+or "add audit support" do not prove completeness when `spec.md` defines exact
+fields, snapshots, identifiers, response values, or failure behavior. Severity
+is HIGH for P1/MVP paths, MEDIUM otherwise.
+
 ### P1-008 Physical Grounding & Naming
 Use focused reconnaissance (hard cap ~10 files: one manifest, route registration, exemplars per touched layer, barrel/index files, test exemplar).
 Verify:

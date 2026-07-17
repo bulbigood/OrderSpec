@@ -20,6 +20,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
 from common import get_repo_root  # noqa: E402
+from task_context import read_context_block  # noqa: E402
 from task_progress import parse_tasks  # noqa: E402
 
 
@@ -60,6 +61,22 @@ def task_refs(task_line: str) -> list[str]:
         if value not in result:
             result.append(value)
     return result
+
+
+def task_context_refs(tasks_path: Path, task_id: str) -> list[str]:
+    payload, _ = read_context_block(tasks_path)
+    if not isinstance(payload, dict):
+        return []
+    tasks = payload.get("tasks")
+    if not isinstance(tasks, dict):
+        return []
+    entry = tasks.get(task_id)
+    if not isinstance(entry, dict):
+        return []
+    refs = entry.get("contract_refs", [])
+    if not isinstance(refs, list):
+        return []
+    return [value for value in refs if isinstance(value, str)]
 
 
 def load_spec_blocks(spec_path: Path) -> dict[str, str]:
@@ -153,18 +170,24 @@ def resolve(feature_dir: Path, task_id: str, repo_root: Path) -> tuple[int, dict
             "validation_errors": [f"spec.md not found: {spec_path}"],
         }
 
-    refs = task_refs(record["line"])
+    coverage_refs = task_refs(record["line"])
+    extra_refs = task_context_refs(tasks_path, task_id)
+    refs = list(dict.fromkeys([*coverage_refs, *extra_refs]))
     spec_blocks = load_spec_blocks(spec_path)
     mechanisms = load_mechanisms(mechanisms_path)
 
     missing_refs = [spec_id for spec_id in refs if spec_id not in spec_blocks]
-    missing_mechanisms = [spec_id for spec_id in refs if spec_id not in mechanisms]
+    missing_mechanisms = [
+        spec_id for spec_id in coverage_refs if spec_id not in mechanisms
+    ]
 
     payload = {
         "ok": not missing_refs and not missing_mechanisms,
         "task_id": task_id,
         "task_line": record["line"],
         "refs": refs,
+        "coverage_refs": coverage_refs,
+        "contract_refs": extra_refs,
         "phase_context": phase_context(tasks_path, record["line_number"]),
         "spec_excerpts": [
             {

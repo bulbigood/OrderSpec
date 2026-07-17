@@ -57,5 +57,16 @@ class TestOrderPlanPrompt(unittest.TestCase):
         self.assertIn("process-local lock cannot satisfy a cluster-wide", check_prompt)
         self.assertIn("Existing Project Mechanism / Reuse Decision", template)
 
+    def test_work_order_baseline_and_cross_boundary_contract(self):
+        with open(self.prompt_path, "r") as f:
+            plan_prompt = f.read()
+        with open(self.check_prompt_path, "r") as f:
+            check_prompt = f.read()
+
+        self.assertIn("PLAN_STOPPED: implementation baseline is active", plan_prompt)
+        self.assertIn("Never absorb", plan_prompt)
+        self.assertIn("Cross-boundary completeness", plan_prompt)
+        self.assertIn("P1-014 Cross-Boundary Completeness", check_prompt)
+
 if __name__ == '__main__':
     unittest.main()

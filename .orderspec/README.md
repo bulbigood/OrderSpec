@@ -50,10 +50,19 @@ OrderSpec splits each feature into three documents with distinct roles:
 | Document | Role | Stability |
 |----------|------|-----------|
 | `spec.md` | **WHAT** + logical contract | **Stable. The source of truth.** |
-| `plan.md` | **WHERE / HOW** — mapping onto physical code | **Regenerated** to match the current repository state |
+| `plan.md` | **WHERE / HOW** — mapping onto physical code | **Baseline** for one generated work order; regenerated before a new work order |
 | `tasks.md` | **ORDER** — execution sequence | **Disposable. A one-shot work order** |
 
-The key insight: **`plan.md` depends on the state of the repository; `spec.md` does not.**
+The key insight: **`plan.md` depends on the repository state at planning time;
+`spec.md` does not.** Once `tasks.md` is generated, that plan is the immutable
+implementation baseline for the work order. Planned `[NEW]` files becoming
+present and `[DEL]` files becoming absent are successful application of the
+plan, not repository drift and not a reason to rewrite the manifest.
+
+Regenerate `plan.md` when external repository movement or a real mapping defect
+invalidates it. Regenerating the plan invalidates the derived `tasks.md`; both
+must be checked again before implementation. Never regenerate a partially
+executed plan merely to relabel applied `[NEW]` entries as `[MOD]`.
 
 Command context makes feature dependencies explicit. For an active feature,
 `/order.plan` requires `spec.md`, `/order.tasks` requires `spec.md` and

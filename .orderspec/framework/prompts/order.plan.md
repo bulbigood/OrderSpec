@@ -16,15 +16,20 @@ You **MUST** consider the user input before proceeding if not empty.
 
 ## Role of This Artifact
 
-`plan.md` answers **WHERE and HOW**: it maps the stable contract in `spec.md` onto the **current physical state of the repository**.
+`plan.md` answers **WHERE and HOW**: it maps the stable contract in `spec.md`
+onto the physical repository state observed at planning time. That state is the
+baseline for one derived `tasks.md` work order.
 
 Properties:
-- **Regenerable**: derived from `spec.md` + actual repository state. If the repo changes, re-run this command.
+- **Regenerable before a work order**: derived from `spec.md` + actual
+  repository state. Once `tasks.md` is generated, implementation applying
+  `[NEW]`/`[DEL]` transitions does not stale or relabel the plan.
 - **Non-duplicating**: reference stable Spec IDs (`REQ-`, `IF-`, `AC-`, `INV-`, `EDGE-`, `NFR-`, `CON-`) instead of copying contract text.
 - **Concrete**: exact repo-relative files, verified stack facts, and physical implementation mapping.
 - **Mechanism-aware**: implementation mechanism decisions are written to machine state (`.state/mechanisms.tsv`) via scripts, not mirrored as Markdown tables in `plan.md`.
 
-`spec.md` remains the source of truth for **WHAT**. `plan.md` is a repo snapshot for **WHERE/HOW**.
+`spec.md` remains the source of truth for **WHAT**. `plan.md` is a planning
+baseline for **WHERE/HOW**, not a live inventory rewritten after each task.
 
 ---
 
@@ -87,6 +92,23 @@ PLAN_STOPPED: plan.md already exists
   - To regenerate from scratch: /order.plan --force
   - To apply specific changes: /order.plan "describe the change"
 ```
+
+If `tasks.md` exists, inspect task markers before selecting Regenerate or
+Refine. Any `[X]` marker means implementation has started and the plan is a
+locked work-order baseline. Do not regenerate it merely because planned
+`[NEW]` paths now exist or `[DEL]` paths are gone. With only `--force` and no
+specific mapping defect, STOP:
+
+```text
+PLAN_STOPPED: implementation baseline is active
+  Applied pathmanifest transitions are not plan drift.
+  Continue with /order.code --resume, or describe the actual mapping defect.
+```
+
+A specific, evidenced mapping defect may be refined. Report that changing the
+plan invalidates `tasks.md`; `/order.plan-check`, `/order.tasks --force`, and
+`/order.tasks-check` are required before implementation continues. Never absorb
+partial implementation into `[NEW]` to `[MOD]` relabeling as the fix itself.
 
 ### Step 4: Upstream Gate Guard
 
@@ -179,6 +201,11 @@ Only after consulting skills and docs sources, perform a focused repository scan
 -   Existing project abstractions relevant to the feature (for example shared plugins, middleware, base models, transaction helpers, locks, serializers, and pagination helpers).
 -   Runtime and deployment capabilities required by candidate mechanisms (for example database topology, process count, external services, queues, and distributed coordination).
 -   Environment readiness for every material prerequisite: exact read-only check, expected result, repository evidence, bounded recovery option, approval/side-effect boundary, and safe fallback. Do not defer an obvious prerequisite to `/order.code`.
+-   Cross-boundary completeness for every planned behavior: persistence/schema,
+    service, controller/serializer, route, export/wiring, and test boundaries
+    that must cooperate. A later task MUST NOT discover that an earlier model,
+    schema, DTO, or route lacks fields or operations already required by
+    `spec.md`.
 
 For each material mechanism, distinguish three evidence classes:
 
@@ -225,6 +252,13 @@ Rewrite `$IMPL_PLAN` (which was initialized from `plan-template.md` in Step 7).
         4.  Ecosystem default.
         If rule 1 fails, explicitly write: "No same-layer precedent; rule fired: N; chosen convention: ...".
     *   **Architectural Mapping**: Map logical roles / Spec IDs to physical files.
+        For every behavior-bearing `[NEW]`/`[MOD]` path, record its complete
+        bounded obligation and relevant Spec IDs, including supporting paths
+        that are not the single `primary_files` owner in `mechanisms.tsv`.
+        Trace each required data field and interface value through persistence,
+        mutation, serialization, routing, and tests. Generic labels such as
+        "task schema" or "audit support" are insufficient when the spec names
+        exact fields or snapshots.
     *   **Interface Fidelity**: For every `IF-NNN`, preserve the exact method, externally visible path, mounted route prefix, input semantics, response shape and nullability, pagination/filter behavior, and failure statuses. Map each behavior to the physical boundary that directly realizes it. Do not add endpoints absent from `spec.md`.
     *   **Internal Component Diagram**: Draw physical/internal decomposition using quoted Mermaid labels.
 8.  **Mechanism Matrix:** Preserve this section's structure and explanatory text; do not add a Markdown mechanism table. Replace `<FEATURE_DIR>` and `<feature>` placeholders with the resolved repo-relative feature path. Mechanism rows remain machine state, not plan prose.
@@ -264,7 +298,9 @@ Before emitting rows, verify two bindings:
 1. primary_files is the boundary that directly realizes the mechanism, not a
    nearby coordinator. For example, audit-log immutability belongs to the
    write boundary that blocks updates/deletes, not merely to an audit-create
-   service.
+   service. It is a single traceability owner, not an exhaustive dependency
+   list. Supporting boundaries still require exact obligations and Spec IDs in
+   Architectural Mapping and the pathmanifest.
 2. test_type matches the evidence topology: unit mechanisms require a unit
    test path in the manifest; integration mechanisms require an integration
    test path. If the repository has no suitable path, add it to the plan
@@ -384,6 +420,8 @@ Report to chat:
 - [ ] Scope Lock enforced: no invented requirements
 - [ ] Files listed in `Verified Against`
 - [ ] Existing project mechanisms reviewed; every parallel mechanism has a concrete non-reuse justification
+- [ ] Every behavior-bearing path has an exact bounded obligation and relevant Spec IDs; persistence-to-interface dependencies are complete before tasking
+- [ ] Existing tasks with `[X]` were not absorbed by relabeling applied `[NEW]`/`[DEL]` transitions
 - [ ] Mechanism Evidence & Runtime Closure completed; runtime prerequisites have repository evidence and explicit operational scope
 - [ ] Every path needed to establish a selected runtime prerequisite appears in the pathmanifest
 - [ ] `pathmanifest` uses `[MOD]` for seen files, `[NEW]` for created, `[DEL]` for deleted

@@ -46,6 +46,31 @@ expect("LOCAL_PHASE" in code_prompt and "LOCAL_ALL" in code_prompt, "order.code 
 expect("task_progress.py mark" in code_prompt, "order.code delegates marker writes to deterministic script")
 expect("`**Verification**` line" in code_prompt, "order.code uses phase Verification prose")
 expect("task_contract_context.py" in code_prompt, "order.code resolves task contract context")
+expect(
+    "Frozen Baseline and Pathmanifest Semantics" in code_prompt
+    and "Do not run `check-plan`" in code_prompt,
+    "order.code preserves plan baseline during resume",
+)
+expect(
+    "Task decomposition defect" in code_prompt
+    and "Plan mapping defect" in code_prompt,
+    "order.code routes task and plan defects separately",
+)
+expect("`contract_refs`" in code_prompt, "order.code forwards support-path contract refs")
+
+tasks_prompt = (FRAMEWORK / "prompts" / "order.tasks.md").read_text(encoding="utf-8")
+task_context_schema = json.loads(
+    (FRAMEWORK / "schemas" / "task-context.schema.json").read_text(encoding="utf-8")
+)
+expect(
+    "mandatory for behavior-bearing support tasks" in tasks_prompt,
+    "order.tasks supplies exact contract context to support paths",
+)
+expect(
+    "contract_refs"
+    in task_context_schema["properties"]["tasks"]["additionalProperties"]["properties"],
+    "task context schema permits support-path contract refs",
+)
 
 protocol = (FRAMEWORK / "protocols" / "sub-agent-execution.md").read_text(encoding="utf-8")
 expect("task_context" in protocol and "to_read" in protocol, "protocol consumes resolver task context")
@@ -56,5 +81,6 @@ expect("NEEDS_CONTEXT" in protocol and "changed_files" in protocol, "protocol de
 rules = (FRAMEWORK / "orderspec-rules.md").read_text(encoding="utf-8")
 expect("task_progress.py" in rules, "framework rules define marker ownership")
 expect("task-context" in rules and "task_context.py" in rules, "framework rules define task context authority")
+expect("Plan/work-order baseline rules" in rules, "framework rules freeze work-order baseline")
 
 print("All order-code contract tests passed")

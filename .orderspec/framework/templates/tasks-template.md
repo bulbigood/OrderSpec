@@ -46,7 +46,9 @@ the task path's `[NEW]`/`[MOD]`/`[DEL]` status in `plan.md`. Include a `mod` or
 `del` write target and only the exact source/config/test files required by that
 task. New write targets are not readable until created. Paths must be literal
 files, not directories or globs. The resolver validates existence, path safety,
-task coverage, and output order.
+task coverage, and output order. Optional `contract_refs` carries exact spec IDs
+needed by support paths without claiming traceability ownership on the task
+line.
 
 <!--
   IMPORTANT: Tasks below are SAMPLE placeholders. The /order.tasks command MUST

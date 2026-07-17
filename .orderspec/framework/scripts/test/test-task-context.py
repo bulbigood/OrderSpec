@@ -89,6 +89,36 @@ with tempfile.TemporaryDirectory(prefix="orderspec-task-context-") as temp:
     rc, data = run(root, "validate", "--feature-dir", str(feature))
     expect(rc == 0 and data["total"] == 2, "validate accepts complete task context")
 
+    context_with_refs = json.loads(block)
+    context_with_refs["tasks"]["T002"]["contract_refs"] = ["REQ-001", "IF-002"]
+    write_tasks(
+        feature,
+        json.dumps(context_with_refs),
+        "- [ ] T001 | src/existing.py |  | update existing implementation\n"
+        "- [ ] T002 | src/new.py |  | create new implementation",
+    )
+    rc, _ = run(root, "validate", "--feature-dir", str(feature))
+    expect(rc == 0, "validate accepts optional canonical contract_refs")
+
+    context_with_refs["tasks"]["T002"]["contract_refs"] = ["REQ-1"]
+    write_tasks(
+        feature,
+        json.dumps(context_with_refs),
+        "- [ ] T001 | src/existing.py |  | update existing implementation\n"
+        "- [ ] T002 | src/new.py |  | create new implementation",
+    )
+    rc, data = run(root, "validate", "--feature-dir", str(feature))
+    expect(
+        rc != 0 and any("contract_refs" in error for error in data["validation_errors"]),
+        "validate rejects malformed contract_refs",
+    )
+    write_tasks(
+        feature,
+        block,
+        "- [ ] T001 | src/existing.py |  | update existing implementation\n"
+        "- [ ] T002 | src/new.py |  | create new implementation",
+    )
+
     canonical_tasks = (feature / "tasks.md").read_text(encoding="utf-8")
     moved_heading = canonical_tasks.replace(
         "## Task Context (Machine-Readable)", "## Moved Task Context", 1

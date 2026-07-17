@@ -97,6 +97,23 @@ No OrderSpec-generated artifact is written to the repository root. Everything li
 | `.orderspec/features/*/plan.md` | `/order.plan` | Technical plan. |
 | `.orderspec/features/*/tasks.md` | `/order.tasks` | Task content and order. During `/order.code`, execution checkboxes may change only through `task_progress.py`; task content remains frozen. |
 
+Plan/work-order baseline rules:
+
+- `/order.plan` maps the repository state observed at planning time. Its
+  `[NEW]`, `[MOD]`, and `[DEL]` tags are transition intent, not assertions that
+  must remain true after implementation starts.
+- Once `/order.tasks` derives a work order, `plan.md` and task content are
+  frozen for `/order.code`, including resume runs. Existing `[NEW]` paths and
+  absent `[DEL]` paths may be expected effects of completed or interrupted
+  tasks.
+- Expected application of a pathmanifest transition MUST NOT trigger
+  replanning. External repository drift or a real mapping defect may trigger
+  replanning, but the derived `tasks.md` is then invalid and MUST be regenerated
+  and checked before `/order.code` continues.
+- `/order.code` MUST NOT run plan-authoring current-state checks such as
+  `check-plan` or `validate --stage plan`. Those checks validate the planning
+  baseline and would misclassify applied transitions during resume.
+
 Execution marker rules:
 
 - `/order.tasks` owns task content, ordering, paths, refs, and phase structure.
@@ -155,6 +172,11 @@ declaration of per-task worker inputs. `/order.tasks` owns that block;
 `task_context.py` is its sole resolver and validator; `/order.code` MUST use
 resolver output verbatim. `plan.md` pathmanifest remains the source for task
 write-path planning and validation, not a second worker read whitelist.
+
+Task-line refs own mechanical traceability coverage. Optional task-context
+`contract_refs` carry additional exact spec excerpts required by support paths;
+they do not create coverage. `/order.tasks` MUST provide them when a task cannot
+be executed faithfully from its task-line refs and phase context alone.
 
 Workers MUST receive only resolver-listed literal files and coordinator inline
 excerpts. They MUST NOT scan the repository or open files absent from resolver

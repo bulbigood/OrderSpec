@@ -855,9 +855,14 @@ def cmd_validate(args):
 
     if stage in {"plan", "tasks"}:
         _check_plan_refs(plan, defined_ids, add)
-        _check_plan_manifest(plan, add)
         for check, severity, location, message in check_mechanisms_findings(feature):
             add(check, severity, location, message)
+
+    # M10 validates the repository baseline observed by /order.plan. During
+    # tasking, especially after partial implementation, applied [NEW]/[DEL]
+    # transitions are expected work-order state rather than plan drift.
+    if stage == "plan":
+        _check_plan_manifest(plan, add)
 
     if stage == "tasks":
         tasks_text = tasks.read_text(encoding="utf-8")

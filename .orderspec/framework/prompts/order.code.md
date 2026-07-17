@@ -18,11 +18,32 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 `order.code` **executes** — it makes no design decisions. All decisions live in `spec.md` (WHAT) and `plan.md` (HOW); `tasks.md` defines ORDER.
 
-- **Tasks are self-contained**: each task carries its file path, spec IDs, and a ≤15-word paraphrase. Execute from the task line; open `spec.md` ONLY if a paraphrase is insufficient to act — never preload it.
+- **Tasks are self-contained**: each task carries its file path, coverage refs,
+  optional support-path `contract_refs`, and a ≤15-word paraphrase. Execute
+  from the resolved packet; never preload `spec.md`.
 - **Delegation is conditional**: in `DELEGATED`, every unchecked task MUST use its own sub-agent. In local fallback, coordinator executes the same bounded task packet itself. Coordinator always validates results, updates `[X]` markers through the deterministic script, and reports.
 - **Sequential by default, `[P]` is a hint**: tasks execute top-to-bottom in ID order. `[P]` means a task is file-disjoint from adjacent `[P]` tasks, so their sub-agents MAY run concurrently. Sequential execution remains the fallback for any task that is not proven safe to parallelize.
 - **Resumable**: tasks marked `[X]` are done — skip them, never redo or "improve". A re-run continues from the first unchecked task. Never remove `[X]` markers.
 - **No silent deviations**: if a task cannot be executed as written (missing path, contradiction with `plan.md`, broken dependency), apply the Deviation Rule below — do not improvise.
+
+### Frozen Baseline and Pathmanifest Semantics
+
+For this work order, `plan.md` is the planning baseline, not a live filesystem
+inventory. Its tags describe transitions from that baseline:
+
+- `[NEW]` means implementation is expected to create the path. Presence after a
+  completed task is success. Presence for the first unchecked task may be an
+  interrupted partial write; inspect, complete, verify, and mark that task.
+- `[DEL]` means implementation is expected to remove the path. Absence after a
+  completed task is success. Absence for the first unchecked task may be an
+  interrupted partial deletion; verify the task outcome before marking it.
+- `[MOD]` means the baseline path existed and remains a modification target.
+
+Never relabel `[NEW]` to `[MOD]`, regenerate `plan.md`, or report plan drift only
+because earlier tasks applied these transitions. Do not run `check-plan` or
+`validate --stage plan` from `/order.code`; those are plan-authoring baseline
+checks. A contradiction is an actual disagreement in required behavior,
+physical mapping, or task prerequisites—not an expected manifest transition.
 
 ## Global Execution Rules
 
@@ -324,6 +345,10 @@ Run phases strictly in order (hard sequential barriers). Within a phase, execute
     --feature-dir "$FEATURE_DIR" --task-id "$TASK_ID" --json
   ```
 - The resolver output is authoritative. The coordinator MUST pass its `to_read` entries verbatim and its `write_paths` verbatim. The coordinator MUST NOT construct, expand, reorder, or replace this file list.
+- Pass `contract_context` exactly as returned, including task-context
+  `contract_refs`. Field-3 refs prove traceability ownership; `contract_refs`
+  provide exact excerpts to support paths and MUST NOT be discarded merely
+  because they do not own the mechanism row.
 - The packet contains the exact task line, imperative objective, resolver `to_read`, resolver `write_paths`, exact `contract_context` output, inline context excerpts, verification requirement, and stop conditions.
 - The coordinator may read command context, project contracts, feature artifacts, and relevant source files to prepare inline context. The worker receives only resolver-listed files and inline excerpts. The worker MUST NOT scan the repository or open files absent from resolver output.
 - In `DELEGATED`, the worker MUST touch only the task `path`, must not edit `[X]`, start another worker, or advance to another task. It returns the protocol result object.
@@ -428,7 +453,20 @@ read-only check from `plan.md` when constitution capabilities permit it.
 #### Deviation Rule
 
 - **Minor mechanical fixes** (typo in a path with an obvious unique match, missing import) — apply, and log one line: `DEVIATION: Tnnn — what changed and why`.
-- **Anything requiring a design decision** (new file not in `plan.md`, contract change, schema change) — do NOT decide. Stop and report: the fix belongs in spec/plan/tasks, not here.
+- **Task decomposition defect**: required behavior and every physical path
+  already exist in `plan.md`, but the current task/write whitelist omits a
+  needed path or an earlier task omitted its planned obligation — STOP and route
+  to `/order.tasks`.
+- **Plan mapping defect**: a required physical boundary or mechanism is absent
+  or wrong in `plan.md` — STOP and route to `/order.plan`, then regenerate
+  `tasks.md`.
+- **Contract defect**: required externally visible behavior is absent or
+  contradictory in `spec.md` — STOP and route to `/order.spec`, then rebuild
+  downstream artifacts.
+- Do not call a schema edit a plan defect merely because it is a schema edit.
+  Classify it by the rules above: if the planned model path and obligation
+  already require the fields, the defect is task decomposition; if not, it is
+  plan mapping.
 - Collect all deviation lines for the Completion Report.
 
 ### Step 10: Post-Execution Coverage Check
@@ -518,6 +556,7 @@ Report to chat:
 - [ ] All story checkpoints passed; GATE passed before any Contract task ran
 - [ ] Environment prerequisites checked before dependent tasks; recovery actions were approval-gated and documented
 - [ ] `task_context.py validate` and `task_contract_context.py validate` passed before execution
+- [ ] Resume treated applied `[NEW]`/`[DEL]` transitions as expected work-order state; no plan-authoring current-state check was run
 - [ ] `check-mechanisms` exited 0 (no coverage defects); defects routed to `/order.tasks` or `/order.spec`, not silently patched
 - [ ] Deviations logged and reported; no silent design decisions made
 - [ ] Active feature status updated to `implementing`

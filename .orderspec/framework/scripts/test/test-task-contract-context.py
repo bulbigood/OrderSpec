@@ -79,12 +79,48 @@ with tempfile.TemporaryDirectory(prefix="orderspec-task-contract-context-") as t
         "resolve returns current phase Goal and Verification",
     )
 
+    (feature / "tasks.md").write_text(
+        "# Tasks\n\n"
+        "**Format (STRICT — pipe-delimited, machine-parsed)**\n\n"
+        "## Task Context (Machine-Readable)\n\n"
+        "```task-context\n"
+        '{"version": 1, "tasks": {"T001": {"read": [], "target_state": "new", '
+        '"contract_refs": ["AC-001"]}}}\n'
+        "```\n\n"
+        "---\n\n"
+        "## Phase 1: Migrate\n\n"
+        "**Goal**: Preserve ownership.\n\n"
+        "**Verification**: Run focused tests.\n\n"
+        "- [ ] T001 | src/task.js | REQ-001 | implement ownership\n",
+        encoding="utf-8",
+    )
+    rc, data = run(root, "resolve", "--feature-dir", str(feature), "--task-id", "T001")
+    expect(rc == 0, "resolve accepts task-context contract refs")
+    expect(data["coverage_refs"] == ["REQ-001"], "coverage refs remain task-line refs")
+    expect(data["contract_refs"] == ["AC-001"], "support contract refs remain distinct")
+    expect(data["refs"] == ["REQ-001", "AC-001"], "resolve merges refs in stable order")
+
     (state / "mechanisms.tsv").write_text(
         "#orderspec mechanisms v1\n"
         "spec_id\tcoverage_kind\tmechanism\tprimary_files\ttest_type\n"
         "REQ-001\tdirect\towner field\tsrc/task.js\tunit\n",
         encoding="utf-8",
     )
+    rc, data = run(root, "resolve", "--feature-dir", str(feature), "--task-id", "T001")
+    expect(
+        rc == 0 and data["missing_mechanisms"] == [],
+        "context-only refs do not claim mechanism coverage",
+    )
+
+    (feature / "tasks.md").write_text(
+        "# Tasks\n\n"
+        "## Phase 1: Migrate\n\n"
+        "**Goal**: Preserve ownership.\n\n"
+        "**Verification**: Run focused tests.\n\n"
+        "- [ ] T001 | src/task.js | REQ-001,AC-001 | implement ownership\n",
+        encoding="utf-8",
+    )
+
     rc, data = run(root, "resolve", "--feature-dir", str(feature), "--task-id", "T001")
     expect(rc != 0 and data["error"] == "missing_mechanisms", "missing mechanism row blocks resolution")
 

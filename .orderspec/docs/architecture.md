@@ -7,21 +7,26 @@ OrderSpec splits each feature into three documents with distinct roles and disti
 | Document | Role | Stability |
 |----------|------|-----------|
 | `spec.md` | **WHAT** + logical contract | **Stable. The source of truth.** |
-| `plan.md` | **WHERE / HOW** — mapping onto physical code, stack, gates | **Regenerated** to match the current repository state |
+| `plan.md` | **WHERE / HOW** — mapping onto physical code, stack, gates | **Baseline** for one generated work order; regenerated before a new work order |
 | `tasks.md` | **ORDER** — execution sequence | **Disposable. A one-shot work order** |
 
 The key insight:
 
-> **`plan.md` depends on the state of the repository; `spec.md` does not.**
+> **`plan.md` depends on repository state at planning time; `spec.md` does not.**
 
-During implementation, `tasks.md` content remains frozen. Its checkboxes are
-execution progress, not task design: `/order.code` may mark one successful task
-at a time through `task_progress.py`, while `/order.tasks` remains owner of task
-content and ordering.
+During implementation, `plan.md` and `tasks.md` content remain frozen. Task
+checkboxes are execution progress, not task design: `/order.code` may mark one
+successful task at a time through `task_progress.py`, while `/order.plan` and
+`/order.tasks` remain owners of their artifact content.
 
 A spec is a contract about behavior. It should survive refactors, renames, and merges.
 
-A plan is a snapshot of how to realize that contract against the code as it exists right now, so it is regenerated whenever the codebase moves underneath it.
+A plan is a snapshot of how to realize that contract against the code as it
+exists when the work order is planned. Its path tags describe intended
+transitions from that baseline. Therefore an applied `[NEW]` or `[DEL]`
+transition does not stale the plan. External movement or a discovered mapping
+defect requires replanning and regeneration of derived tasks before code
+execution continues.
 
 Tasks are pure throwaway: generate, execute, discard.
 

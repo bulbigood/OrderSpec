@@ -177,6 +177,17 @@ Semantic findings (T1-xxx through T7-xxx) must be integrated into the report's F
 
 - **T7a**: Where tasks cannot be made faithful because the **root defect lives upstream** — a wrong/inadequate/mis-classified plan mechanism, or a spec ambiguity → **Route** to `/order.plan` or `/order.spec` describing the suspected root. Do NOT patch tasks around it. Severity inherits MVP-scope (CRITICAL if blocks P1 story).
 
+### T8. Cross-Boundary Prerequisite Closure
+
+- **T8a**: For each behavior-bearing support task with empty or insufficient
+  field-3 refs, require minimal `contract_refs` in task-context so the worker
+  receives exact contract excerpts. Missing context is `/order.tasks` (HIGH for
+  P1/MVP, MEDIUM otherwise).
+- **T8b**: Verify required model fields, schema operations, exports, routes,
+  serializer values, and fixtures are established before their first consumer.
+  If plan mapping is complete but task sequencing/content omits the prerequisite,
+  route to `/order.tasks`. If plan mapping omitted it, route to `/order.plan`.
+
 ## Auto-Fix vs Route Boundary
 
 - **Auto-fix** ONLY when ALL hold: (a) mechanical/structural per E-M-C/test-first rules, (b) exactly one valid form, (c) does NOT change scope or what a task *does*, (d) obvious/reversible. Examples: task numbering, test/impl ordering swap, inserting required Contract GATE, moving destructive step after GATE, fixing a `[US#]` tag resolvable from context, correcting an obvious path typo.

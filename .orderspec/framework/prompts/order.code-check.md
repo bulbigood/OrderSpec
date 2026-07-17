@@ -31,7 +31,9 @@ The verification target is:
 OrderSpec lifecycle matters:
 
 - `spec.md` is source of truth and is not regenerated from code;
-- `plan.md` is repository-dependent and may be regenerated before or after implementation;
+- `plan.md` is repository-dependent but remains the frozen baseline for its
+  derived work order; it is not regenerated merely because implementation
+  applied `[NEW]`/`[DEL]` transitions;
 - `tasks.md` is disposable execution order and may be absent after implementation;
 - `[NEW]` means “expected to be created”, not “must remain absent”. An existing `[NEW]` file after `/order.code` is normally success, not a plan defect;
 - `.state/*.tsv` is generated evidence. Do not hand-edit or rebuild it in this gate.

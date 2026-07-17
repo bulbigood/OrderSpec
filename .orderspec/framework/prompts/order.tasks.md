@@ -18,6 +18,10 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 `tasks.md` answers **ORDER**: a disposable, mechanically executable checklist that sequences the work as **Expand → Migrate → Contract** (E-M-C).
 
+It is derived from the planning baseline. Generating it freezes `plan.md` and
+task content for the implementation run; checkbox changes do not change that
+baseline.
+
 - **Expand** — additive, non-breaking changes (scaffolding, stubs, additive migrations).
 - **Migrate** — behavior implemented story by story, each independently verifiable.
 - **Contract** — irreversible cleanup (remove flags, deprecated code, obsolete schema).
@@ -239,6 +243,10 @@ This is ordering, not coverage bookkeeping — coverage is the tool's job in Ste
 2.  Place each `AC/EDGE/INV` under a UJ (or Setup/Contract if cross-cutting).
 3.  Place each buildable Success Criterion (load, security, performance, or other executable evidence) under its owning UJ or cross-cutting phase; post-launch/business KPI criteria need no task.
 4.  From `plan.md`, list every NEW/MOD file; assign each to the phase that first touches it.
+    For each behavior-bearing path, copy its exact bounded obligation and
+    relevant Spec IDs from Architectural Mapping. If the mapping does not say
+    which required fields, operations, or interface values the path must
+    establish, STOP and route to `/order.plan`; do not infer them later.
 5.  Note the project's test command from `plan.md` (used verbatim in verification/GATE tasks).
 6.  Carry each required environment readiness check into the relevant phase
     verification or implementation preflight. Add a task only when readiness
@@ -315,7 +323,7 @@ horizontal rule and before `## Execution Order`:
 {
   "version": 1,
   "tasks": {
-    "T001": {"read": ["src/existing.py", "src/shared.py"], "target_state": "mod"}
+    "T001": {"read": ["src/existing.py", "src/shared.py"], "target_state": "mod", "contract_refs": ["REQ-001"]}
   }
 }
 ```
@@ -335,6 +343,16 @@ before it exists on disk; sequential execution guarantees it is available when
 the later task runs. If a required dependency cannot be stated as an exact
 file, route the defect to `/order.plan`; do not leave worker context implicit.
 
+`contract_refs` is optional and does not participate in traceability coverage.
+Use it when a task's field-3 refs do not supply every exact contract excerpt the
+worker needs. This is mandatory for behavior-bearing support tasks with empty
+field-3 refs and for cross-boundary tasks whose traceability mechanism is owned
+by another file. Include the smallest relevant canonical Spec ID set. For
+example, a model task that must persist audit `actorId`, identifiers, and
+`before`/`after` snapshots receives the IDs that define those values even when
+the service is the mechanism's `primary_files` owner. Do not use
+`contract_refs` to fake coverage; field 3 remains the only coverage source.
+
 `task_context.py` owns parsing, fixed-position validation, file-existence
 checks, and resolver output. `/order.code` consumes its output verbatim. Do not
 hand-author a second whitelist in a prompt, packet, or coordinator note.
@@ -352,6 +370,10 @@ they are not substitutes for the resolved contract excerpts.
 **Granularity rules (semantic — yours; the tool only enforces the 3-ref cap):**
 
 - **One task = one file** (or one atomic, independently verifiable change). More than one file → split.
+- **Prerequisite closure**: before emitting a task, verify every contract-required
+  model field, schema operation, export, route, serializer value, and test
+  fixture it needs is established by this or an earlier task. A later service
+  task discovering an incomplete earlier schema is a task decomposition defect.
 - **No stub-then-implement**: never create a file with empty/stub methods early to fill later; its FIRST task carries real implementation. (Exception: contract boundaries `plan.md` explicitly marks as stubs.) A file appearing in two phases where the earlier says "stub"/"skeleton" is a defect.
 - **God-file split (resolves cap-vs-coverage pressure)**: when one `primary_files` carries MORE than 3 direct mechanisms (a "god file" like a central service), do NOT cram them into one task and do NOT park the overflow on verify/GATE tasks. Split into several IMPLEMENTATION tasks on the SAME path, each grouping ≤3 cohesive mechanisms by behavior (e.g. one task for create+list+get, another for update+soft-delete, another for atomic-audit+error-wrapping). These same-file tasks are sequential (NOT `[P]` — they share a file) and each carries the direct IDs it actually implements. This keeps every direct ID on the task that realizes it AND stays under the cap.
 - **Test-file split (mirror of god-file split, for test files)**: when one test `primary_files` carries MORE than 3 direct ACs, do NOT cram them into one task. Split into several TEST-WRITING tasks on the SAME test path, each carrying ≤3 ACs grouped by behavior (e.g. one task for create+list tests, another for update tests, another for soft-delete tests). These same-file test tasks are sequential (NOT `[P]` — they share a file) and each carries the AC IDs it actually exercises.
@@ -480,5 +502,6 @@ Report to chat:
 - [ ] Environment readiness checks and recovery boundaries are preserved from `plan.md`; no implicit operator side effects are hidden in tasks
 - [ ] `task_context.py validate` passed; every task has a deterministic read whitelist
 - [ ] `task_contract_context.py validate` passed; every task ref resolves to exact spec excerpts and phase context
+- [ ] Every behavior-bearing support task has minimal `contract_refs`; cross-boundary prerequisites are established before consumers
 - [ ] Active feature status updated to `tasks`
 - [ ] Completion Report provided, including manual/orchestrator recommendation to run `/order.tasks-check`
