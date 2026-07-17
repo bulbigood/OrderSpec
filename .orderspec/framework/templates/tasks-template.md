@@ -59,6 +59,10 @@ line.
   FORMAT RULE: every task line is pipe-delimited — `T### [markers] | path | refs? | gloss`.
   The path is a RAW plan.md path with NO backticks. refs is OPTIONAL — infra tasks (barrel/wiring/fixture/GATE) carry EMPTY refs. A declared ref MUST be a direct
   mechanism whose primary_files contains that task's path (else rc=3). Never invent a ref to home a task. Coverage is proven by `traceability.py extract-trace`, NOT by any hand-written table.
+  Every test-writing task's OWN gloss MUST say it is expected to fail before
+  implementation; the section heading is not enough. Every command-only lint
+  or typecheck task MUST start with VERIFY:, forbid autofix/writes, and stop on
+  failure.
 
   DO NOT author a Traceability Matrix or a Files Touched table in the generated
   tasks.md. Coverage is derived by extract-trace into .state/traceability.tsv.
@@ -96,7 +100,7 @@ Phase 1 (Setup & Expand) → Phase 2 (US1 / MVP) → **STOP & VALIDATE** → Pha
 
 ### Tests (Write First, Verify Failure)
 
-- [ ] T004 [US1] | tests/[file].ext | AC-001,AC-002 | integration tests for the US1 happy-path endpoints
+- [ ] T004 [US1] | tests/[file].ext | AC-001,AC-002 | expect failure before implementation: test US1 happy-path endpoints
 
 ### Implementation
 
@@ -116,7 +120,7 @@ Phase 1 (Setup & Expand) → Phase 2 (US1 / MVP) → **STOP & VALIDATE** → Pha
 
 ### Tests (Write First, Verify Failure)
 
-- [ ] T010 [US2] | tests/[file].ext | AC-003 | integration test for US2 behavior
+- [ ] T010 [US2] | tests/[file].ext | AC-003 | expect failure before implementation: test US2 behavior
 
 ### Implementation
 
@@ -148,7 +152,7 @@ Phase 1 (Setup & Expand) → Phase 2 (US1 / MVP) → **STOP & VALIDATE** → Pha
 - The `[P]` marker means file-disjoint and independent of adjacent marked tasks; safe to run concurrently OR sequentially. Absence of the marker = run sequentially. No "waves".
 - The `[USn]` marker traces a task to its user story.
 - Each task is self-contained: raw path + spec IDs + ≤15-word gloss, so the implementer need not re-open spec.md.
-- Tests within a story fail before their implementation; earlier phases do not pre-implement tested behavior.
+- Every test task's own gloss states expected failure before implementation; earlier phases do not pre-implement tested behavior.
 - `GATE:` and `VERIFY:` tasks are read-only and report `changed_files: []`.
 - Commit after each task or logical group. Stop at any checkpoint to validate a story independently.
 - A direct ref belongs on the task whose path equals its `primary_files` (the task that realizes/exercises it), never parked on a barrel/verify/GATE task. This is machine-enforced: extract-trace rejects (rc=3) a ref whose primary_files does not contain that task's path. Infra tasks carry EMPTY refs.

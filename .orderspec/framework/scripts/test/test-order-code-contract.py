@@ -84,12 +84,28 @@ expect(
 expect("`contract_refs`" in code_prompt, "order.code forwards support-path contract refs")
 
 tasks_prompt = (FRAMEWORK / "prompts" / "order.tasks.md").read_text(encoding="utf-8")
+tasks_template = (FRAMEWORK / "templates" / "tasks-template.md").read_text(encoding="utf-8")
 task_context_schema = json.loads(
     (FRAMEWORK / "schemas" / "task-context.schema.json").read_text(encoding="utf-8")
 )
 expect(
     "mandatory for behavior-bearing support tasks" in tasks_prompt,
     "order.tasks supplies exact contract context to support paths",
+)
+expect(
+    "Every test-writing task's own gloss MUST state the expected red result" in tasks_prompt
+    and "expect failure before implementation:" in tasks_template,
+    "order.tasks makes red-first expectation task-local in prompt and template",
+)
+expect(
+    "command-only lint/typecheck task MUST begin with `VERIFY:`" in tasks_prompt
+    and "forbid autofix/writes" in tasks_template,
+    "order.tasks makes final command verification explicitly read-only",
+)
+expect(
+    "then `render`" not in tasks_prompt
+    and "`render` produces" not in tasks_prompt,
+    "order.tasks does not invoke removed traceability render command",
 )
 expect(
     "contract_refs"

@@ -275,7 +275,7 @@ Rewrite `$TASKS_FILE` (which was initialized from `tasks-template.md` in Step 6)
     remain approval-gated implementation preflight, not hidden tasks.
 - **Phase 2+ — Migrate**: US1 (P1, MVP) first, then one phase per remaining UJ in priority order.
   Within each story phase:
-  1. Test-writing tasks first (carry that story's `AC-NNN` refs; MUST fail before implementation). Split into multiple sequential test tasks on the same file if ACs exceed the 3-ref cap (see test-file split rule).
+  1. Test-writing tasks first (carry that story's `AC-NNN` refs; MUST fail before implementation). Every test-writing task's own gloss MUST state the expected red result, for example `expect failure before implementation: ...`. A phase heading or surrounding prose does not satisfy this task-local instruction. Split into multiple sequential test tasks on the same file if ACs exceed the 3-ref cap (see test-file split rule).
   2. Data layer → service logic → wiring to contracts.
   3. `EDGE-NNN` for this story.
   4. Emit a **Verification** prose line with the exact permitted test command and asserted AC/INV IDs, then a **Checkpoint** prose line: story independently functional and backwards-compatible. Neither line is a task; `/order.code` executes the declared Verification command at the phase barrier.
@@ -301,7 +301,7 @@ Rewrite `$TASKS_FILE` (which was initialized from `tasks-template.md` in Step 6)
 3. refs — OPTIONAL. Comma-separated spec IDs, NO SPACES (`REQ-001,AC-002`, never `REQ-001, AC-002`). An infrastructure task (barrel/index registration, route wiring, test fixtures, GATE/`VERIFY:` scaffolding) carries NO refs — write `... | path |  | gloss` (empty field 3) or omit field 3. This is LEGAL and contributes no coverage by design. The contract is "every DIRECT mechanism is covered by ≥1 task" — it is NOT "every task has a ref". NEVER invent a ref to give a task a home.
   **AC refs belong on test-WRITING tasks** (the task that writes the test code exercising that AC), NOT on verification/GATE tasks. Verification/GATE tasks carry EMPTY refs and list asserted AC/INV IDs in the gloss. Coverage of an AC is proven by the test-writing task that creates its test, not by the verification task that runs the suite.
   A story-phase task may also have empty refs when no direct mechanism has this task's exact path in `primary_files` (for example, unit evidence tasks, controller support tasks, or wiring tasks). Do not invent or park a ref only to satisfy the `[USn]` marker; ref presence is required only on story tasks that own a direct mechanism path.
-4. gloss — ≤15-word paraphrase. Free text, never grepped (so prose like "see AC-999" is safe).
+4. gloss — ≤15-word paraphrase. Free text, never grepped (so prose like "see AC-999" is safe). Every test-writing task MUST include an explicit red-first instruction in this field, such as `expect failure before implementation: ...`; do not rely on its section heading. A command-only lint/typecheck task MUST begin with `VERIFY:`, forbid automatic writes/autofix, and route or stop on violations.
 
 **Constraints the tool ENFORCES** (any violation fails `extract-trace` with rc=3, file untouched):
 
@@ -315,7 +315,7 @@ Rewrite `$TASKS_FILE` (which was initialized from `tasks-template.md` in Step 6)
 **Examples:**
 
 - OK:  `- [ ] T012 [P] [US1] | src/models/user.py | REQ-001 | user has unique email, hashed password`
-- OK:  `- [ ] T015 [US1] | tests/test_auth.py | AC-002 | invalid credentials return 401`
+- OK:  `- [ ] T015 [US1] | tests/test_auth.py | AC-002 | expect failure before implementation: invalid credentials return 401`
 - OK:  `- [ ] T003 | src/models/index.js |  | register new model in barrel` (empty refs, LEGAL infra task)
 - BAD: `- [ ] Create User model` (no ID/path/refs; not a task line)
 - BAD: `- [ ] T012 [US1] | src/a.js | REQ-001, AC-002 | ...` (space in refs → rejected)
@@ -380,7 +380,7 @@ they are not substitutes for the resolved contract excerpts.
 
 **Prose to fill by hand** (NOT machine state): the Execution Order line (Phase 1 → US1 → STOP & VALIDATE → US2.. → GATE → Contract), and each story phase's Goal and Verification lines (from Spec § Acceptance Criteria).
 
-> Do **NOT** hand-write a Traceability Matrix or a Files Touched table in `tasks.md`. Those are derived: `extract-trace` projects coverage into `traceability.tsv`, and `render` produces the human-readable mirror. A hand-built matrix is exactly the drift this system removes — if the template contains such placeholder sections, leave them empty or delete them.
+> Do **NOT** hand-write a Traceability Matrix or a Files Touched table in `tasks.md`. `extract-trace` projects coverage into the machine-readable `traceability.tsv`; no hand-authored mirror is required. A hand-built matrix is exactly the drift this system removes — if the template contains such placeholder sections, leave them empty or delete them.
 
 **Granularity rules (semantic — yours; the tool only enforces the 3-ref cap):**
 
@@ -395,7 +395,8 @@ they are not substitutes for the resolved contract excerpts.
 - **Red-state prerequisite closure**: no Setup/Expand or earlier story task may
   establish behavior that a later test-writing task is supposed to prove
   missing. Move that test earlier or move implementation later. Every declared
-  test-writing task must have an executable expected red state.
+  test-writing task must have an executable expected red state and state that
+  expectation in its own gloss.
 - **Barrel/index exception**: registering multiple same-phase entities into barrel/index files is ONE task listing all of them — not one per file.
 - **Cross-cutting test tasks**: tests spanning multiple UJs (e.g. shared unauthenticated-access tests) omit the `[USn]` marker. Place them in the phase of their primary UJ or in the Final Phase before GATE. They carry AC refs normally (≤3 per line). A cross-cutting AC (e.g. AC-018 covering both GET and PATCH 404) is covered by placing its ref on ONE test-writing task whose path equals the AC's `primary_files` — no duplication needed; double coverage is not penalized.
 - Task IDs MAY have gaps (e.g. T005, T010, T015) — gaps are legal and reduce churn when inserting tasks. Only duplicate IDs are rejected.
@@ -429,7 +430,7 @@ python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$F
 - Each task's prerequisites precede it.
 - US1 alone is a viable, independently testable MVP.
 
-If you change any task line, re-run `extract-trace` (then `render`).
+If you change any task line, re-run `extract-trace`.
 
 ### Step 11: Validate Tasks
 
@@ -513,6 +514,8 @@ Report to chat:
 - [ ] No hand-built matrix: no Traceability Matrix or Files Touched table authored by hand in `tasks.md`
 - [ ] Sequential backbone correct with all `[P]` marks stripped; `[P]` only on provably file-disjoint, independent, adjacent tasks; no stub-then-implement
 - [ ] No per-story verification tasks (Checkpoint is prose, not a task); final GATE task has empty refs
+- [ ] Every test-writing task's own gloss explicitly states expected failure before implementation; headings/prose are insufficient
+- [ ] Every final command-only lint/typecheck task starts with `VERIFY:`, forbids automatic writes/autofix, and stops or routes violations
 - [ ] AC refs on test-writing tasks only (not on verification/GATE); cross-cutting test tasks omit `[USn]`
 - [ ] Placement validated: all `plan.md` files touched, no path outside `plan.md`, no same-file conflict within an adjacent `[P]` group
 - [ ] `validate --stage tasks` has no blocking findings
