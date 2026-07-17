@@ -43,6 +43,16 @@ expect(
 
 code_prompt = (FRAMEWORK / "prompts" / "order.code.md").read_text(encoding="utf-8")
 expect("LOCAL_PHASE" in code_prompt and "LOCAL_ALL" in code_prompt, "order.code documents local fallback modes")
+expect(
+    "`--local` / `--no-subagents`" in code_prompt
+    and "User prohibition of delegation" in code_prompt,
+    "order.code gives explicit user local execution priority over dispatch capability",
+)
+expect(
+    "keep all work in one agent session" in code_prompt
+    and "Do not inspect dispatch capability or resolve a worker" in code_prompt,
+    "order.code maps a single-agent-session constraint to local execution",
+)
 expect("task_progress.py mark" in code_prompt, "order.code delegates marker writes to deterministic script")
 expect("`**Verification**` line" in code_prompt, "order.code uses phase Verification prose")
 expect("task_contract_context.py" in code_prompt, "order.code resolves task contract context")
@@ -77,6 +87,13 @@ expect("task_context" in protocol and "to_read" in protocol, "protocol consumes 
 expect("MUST be copied verbatim" in protocol, "protocol forbids coordinator whitelist edits")
 expect("contract_context" in protocol and "task_contract_context.py" in protocol, "protocol carries exact contract context")
 expect("NEEDS_CONTEXT" in protocol and "changed_files" in protocol, "protocol defines bounded worker result")
+
+subagent_rules = (FRAMEWORK / "protocols" / "sub-agent-rules.md").read_text(encoding="utf-8")
+expect(
+    "If delegation is prohibited" in subagent_rules
+    and "Do not inspect, configure" in subagent_rules,
+    "sub-agent rules skip worker resolution when user prohibits delegation",
+)
 
 rules = (FRAMEWORK / "orderspec-rules.md").read_text(encoding="utf-8")
 expect("task_progress.py" in rules, "framework rules define marker ownership")

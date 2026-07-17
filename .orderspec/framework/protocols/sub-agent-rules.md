@@ -33,9 +33,11 @@ scope: project | global
 The request is command-owned. Tasks, specs, and plans must not contain
 agent-specific syntax merely to select a worker.
 
-`/order.code` uses this default request unless its user input explicitly
-overrides it. `medium` is the default for a newly configured worker; an
-existing valid worker reports and keeps its own configured level.
+`/order.code` uses this default request only when its user input permits
+delegation. Explicit instructions to avoid sub-agents, use one agent, or keep
+all work in one agent session select the command's local mode and skip worker
+resolution entirely. `medium` is the default for a newly configured worker;
+an existing valid worker reports and keeps its own configured level.
 
 ```yaml
 caller: order.code
@@ -50,25 +52,28 @@ current runtime's adapter to decide whether that name exists and is valid.
 
 ## Selection algorithm
 
-1. Resolve actual runtime dispatch capability. Do not infer it from adapter
+1. Resolve explicit user execution constraints. If delegation is prohibited,
+   use the command's documented local mode. Do not inspect, configure,
+   dispatch, or wait for a worker.
+2. Resolve actual runtime dispatch capability. Do not infer it from adapter
    detection or `agents.json`.
-2. Identify the current runtime agent and select its registered adapter. Do
+3. Identify the current runtime agent and select its registered adapter. Do
    not guess an agent from the list of enabled agents when multiple agents are
    present.
-3. Resolve the request's preferred name. If no name is supplied, use the
+4. Resolve the request's preferred name. If no name is supplied, use the
    adapter's documented default or its built-in execution worker.
-4. Ask the adapter to inspect that name. The adapter owns discovery rules,
+5. Ask the adapter to inspect that name. The adapter owns discovery rules,
    valid fields, built-in names, and configuration paths.
-5. Use the worker only when the adapter reports `configured: true` and
+6. Use the worker only when the adapter reports `configured: true` and
    `valid: true`. Built-in workers are valid only when the adapter explicitly
    reports them.
-6. If the worker is missing or invalid, do not dispatch. Ask the operator to
+7. If the worker is missing or invalid, do not dispatch. Ask the operator to
    choose a worker name and reasoning effort, then invoke the adapter's
    explicit configuration operation. Never silently invent a name, model, or
    reasoning level.
-7. Re-run inspection after configuration. Continue only after the requested
+8. Re-run inspection after configuration. Continue only after the requested
    worker is reported ready.
-8. Use the resolved worker for every dispatch in the current command. A later
+9. Use the resolved worker for every dispatch in the current command. A later
    command may resolve a different role or worker.
 
 If dispatch is unavailable, use the command's documented local fallback. Do

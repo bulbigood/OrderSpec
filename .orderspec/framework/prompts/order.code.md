@@ -3,7 +3,7 @@ orderspec:
   artifact: command_prompt
   command: order.code
   phase: implement
-description: Execute every tasks.md task phase by phase, delegating when available and using bounded local fallback otherwise.
+description: Execute every tasks.md task phase by phase, delegating only when user constraints permit it and using bounded local execution otherwise.
 ---
 
 ## User Input
@@ -21,7 +21,12 @@ You **MUST** consider the user input before proceeding (if not empty).
 - **Tasks are self-contained**: each task carries its file path, coverage refs,
   optional support-path `contract_refs`, and a ≤15-word paraphrase. Execute
   from the resolved packet; never preload `spec.md`.
-- **Delegation is conditional**: in `DELEGATED`, every unchecked task MUST use its own sub-agent. In local fallback, coordinator executes the same bounded task packet itself. Coordinator always validates results, updates `[X]` markers through the deterministic script, and reports.
+- **Delegation is conditional and user-controllable**: explicit user instructions
+  to avoid sub-agents or keep all work in one agent session MUST select local
+  execution, even when dispatch is available. Otherwise, in `DELEGATED`, every
+  unchecked task uses its own sub-agent. In local execution, coordinator runs
+  the same bounded task packet itself. Coordinator always validates results,
+  updates `[X]` markers through the deterministic script, and reports.
 - **Sequential by default, `[P]` is a hint**: tasks execute top-to-bottom in ID order. `[P]` means a task is file-disjoint from adjacent `[P]` tasks, so their sub-agents MAY run concurrently. Sequential execution remains the fallback for any task that is not proven safe to parallelize.
 - **Resumable**: tasks marked `[X]` are done — skip them, never redo or "improve". A re-run continues from the first unchecked task. Never remove `[X]` markers.
 - **No silent deviations**: if a task cannot be executed as written (missing path, contradiction with `plan.md`, broken dependency), apply the Deviation Rule below — do not improvise.
@@ -99,23 +104,41 @@ Determine execution strategy before writing any file. State the selected mode in
 
 Execution modes:
 
-1. **DELEGATED** — runtime explicitly exposes sub-agent dispatch and wait. Dispatch every unchecked task according to Step 9.
-2. **LOCAL_PHASE** — dispatch is unavailable. Coordinator executes every unchecked task in the first incomplete phase sequentially, then stops at the phase barrier. This is the default fallback and is not a block.
-3. **LOCAL_ALL** — dispatch is unavailable and `$ARGUMENTS` contains `--all`. Coordinator executes every unchecked task in every remaining phase sequentially.
+1. **DELEGATED** — user input permits delegation and runtime explicitly exposes
+   sub-agent dispatch and wait. Dispatch every unchecked task according to Step 9.
+2. **LOCAL_PHASE** — local execution was explicitly requested, or dispatch is
+   unavailable. Coordinator executes every unchecked task in the first
+   incomplete phase sequentially, then stops at the phase barrier. This is not
+   a block.
+3. **LOCAL_ALL** — local execution was explicitly requested, or dispatch is
+   unavailable, and `$ARGUMENTS` contains `--all`. Coordinator executes every
+   unchecked task in every remaining phase sequentially.
 
 Additional controls:
 
 - **RESUME** — `$ARGUMENTS` is empty or contains `--resume`; skip tasks already marked `[X]` in every selected execution mode.
+- **`--local` / `--no-subagents`** — force local execution. Do not inspect,
+  configure, dispatch, or wait for a worker.
+- **Explicit natural-language local constraint** — instructions such as “do not
+  use sub-agents”, “without delegation”, “single agent”, or requiring all work
+  to remain in one/single agent session are equivalent to `--local`, including
+  equivalent wording in another language. A request for one run alone does not
+  imply local execution unless it also constrains the agent/session boundary.
 - **`--force`** — upstream gate override only. It never selects an execution mode and must be recorded in the Completion Report.
 - Missing `tasks.md` remains a hard stop handled by Step 4. It is not a fallback case.
 
 Mode precedence:
 
 1. Resolve command context and paths.
-2. Run the upstream gate.
-3. Detect actual dispatch capability in the current runtime; do not infer it from `agents.json` or adapter detection.
-4. Select `DELEGATED`, otherwise `LOCAL_PHASE`, unless `--all` selects `LOCAL_ALL`.
-5. State mode before the first task mutation.
+2. Parse explicit user execution constraints before capability detection.
+3. If local execution is requested, select `LOCAL_ALL` with `--all`, otherwise
+   `LOCAL_PHASE`. Do not inspect dispatch capability or resolve a worker.
+4. Otherwise detect actual dispatch capability in the current runtime; do not
+   infer it from `agents.json` or adapter detection.
+5. Select `DELEGATED` when dispatch is available. Otherwise select `LOCAL_ALL`
+   with `--all`, or `LOCAL_PHASE` without it.
+6. State mode before the first task mutation. User prohibition of delegation
+   always overrides runtime capability and worker defaults.
 
 ### Step 3.5: Worker Resolution
 
@@ -129,7 +152,9 @@ reasoning_effort: medium
 scope: project
 ```
 
-User input may override `preferred_name`, `reasoning_effort`, or `scope`.
+User input may override the execution mode, `preferred_name`,
+`reasoning_effort`, or `scope`. An explicit local constraint is resolved in
+Step 3 and skips this worker request entirely.
 
 If the selected mode is `DELEGATED`:
 

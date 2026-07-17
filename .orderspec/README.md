@@ -149,7 +149,9 @@ python3 .orderspec/framework/scripts/agents_sync.py sync
 When `/order.code` delegates work, it resolves a worker through the current
 agent adapter. Missing or invalid workers are reported before dispatch; the
 operator chooses the worker name and reasoning level. Project scope is the
-default. Inspect or configure workers explicitly:
+default. Use `/order.code --all --local` (or `--no-subagents`) to execute in
+one agent session without worker inspection or dispatch. Inspect or configure
+workers explicitly:
 
 ```bash
 python3 .orderspec/framework/scripts/agents_sync.py subagents inspect \

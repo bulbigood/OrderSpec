@@ -57,7 +57,9 @@ Prompt synchronization is not sub-agent dispatch. The adapter interface records
 agent detection and prompt/skill delivery; it does not claim that the current
 runtime can create or wait for child agents. `/order.code` checks actual runtime
 dispatch capability and selects `DELEGATED`, `LOCAL_PHASE`, or explicit
-`LOCAL_ALL` fallback. Worker selection follows
+`LOCAL_ALL` fallback. `--local`, `--no-subagents`, or an explicit instruction
+to keep work in one agent session selects local execution before capability
+detection; no worker is inspected or configured. Worker selection follows
 `.orderspec/framework/protocols/sub-agent-rules.md`.
 
 Codex custom workers live in project-scoped `.codex/agents/*.toml` by default.
