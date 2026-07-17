@@ -42,6 +42,7 @@ expect(
 )
 
 code_prompt = (FRAMEWORK / "prompts" / "order.code.md").read_text(encoding="utf-8")
+normalized_code_prompt = " ".join(code_prompt.split())
 expect("LOCAL_PHASE" in code_prompt and "LOCAL_ALL" in code_prompt, "order.code documents local fallback modes")
 expect(
     "`--local` / `--no-subagents`" in code_prompt
@@ -49,8 +50,8 @@ expect(
     "order.code gives explicit user local execution priority over dispatch capability",
 )
 expect(
-    "keep all work in one agent session" in code_prompt
-    and "Do not inspect dispatch capability or resolve a worker" in code_prompt,
+    "keep all work in one agent session" in normalized_code_prompt
+    and "Do not inspect dispatch capability or resolve a worker" in normalized_code_prompt,
     "order.code maps a single-agent-session constraint to local execution",
 )
 expect("task_progress.py mark" in code_prompt, "order.code delegates marker writes to deterministic script")

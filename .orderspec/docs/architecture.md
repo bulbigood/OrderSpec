@@ -71,15 +71,7 @@ The rule is:
 
 A gate does not silently rewrite a spec to resolve ambiguity. It does not pick a winner in a merge conflict. It does not improvise scope. It emits findings and routes fixes to the command that owns the artifact.
 
-Allowed gate writes are intentionally narrow:
-
-- mechanical glossary normalization;
-- unambiguous stale-ID reference fixes;
-- other explicitly allowed, meaning-preserving corrections.
-
-Anything that touches meaning, behavior, scope, architecture, implementation strategy, or code is routed.
-
-`code-check` is stricter: it does not edit code. It reads, optionally gathers evidence permitted by the constitution, and reports.
+Gates never edit the artifact they inspect. Their writes are limited to the gate report and explicitly defined workflow state. Every defect is routed to the command that owns the artifact.
 
 This is what makes OrderSpec safe under a weak model: the model is never trusted to silently "improve" your contract.
 
@@ -99,7 +91,6 @@ The constitution defines:
 - whether gates may run build, compile, or lint commands;
 - whether gates may use network access;
 - whether documentation lookup is allowed during gates;
-- whether mechanical auto-fixes are allowed;
 - external rules integration policy.
 
 The default policy is restrictive:

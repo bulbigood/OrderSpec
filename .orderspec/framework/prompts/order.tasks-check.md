@@ -139,14 +139,14 @@ Semantic findings (T1-xxx through T7-xxx) must be integrated into the report's F
 - `ID`: T{n}-NNN (prefix by pass)
 - `Source`: "semantic"
 - `Severity`: CRITICAL/HIGH/MEDIUM/LOW
-- `Disposition`: "Route" (or "Auto-fixed" for mechanical/structural fixes)
+- `Disposition`: "Route"
 - `Location`: task ID, section, or path
 - `Summary`: concise description
 
 ### T1. No New Decisions (faithfulness to plan)
 
 - **T1a**: Any task introducing a design decision **absent from spec and plan** (file, mechanism, library, schema field, endpoint not derivable upstream) → **Route** (CRITICAL if MVP/P1, else HIGH). The gate never silently keeps or deletes an invented decision.
-- **T1b**: Any task referencing a plan mechanism/file/path **not in the current plan** (prose mention, not field-3 ref) → obvious typo → **Auto-fix** (correct the reference); genuinely absent → **Route** (HIGH).
+- **T1b**: Any task referencing a plan mechanism/file/path **not in the current plan** (prose mention, not field-3 ref) → **Route** to `/order.tasks` (HIGH).
 
 ### T2. Operational Granularity (NOT a coverage or cap check)
 
@@ -155,15 +155,15 @@ Semantic findings (T1-xxx through T7-xxx) must be integrated into the report's F
 
 ### T3. E-M-C Ordering
 
-- **T3a**: Phase 1 (Expand) tasks are **additive only** (read descriptions). A destructive step in Expand → **Auto-fix** (move to correct phase) when unambiguous; else **Route** (HIGH if MVP/P1).
-- **T3b**: Story phases follow UJ priority order from spec (P1 before P2). Out-of-order with a single correct ordering → **Auto-fix** (reorder).
-- **T3c**: The Contract phase begins with a GATE task; no destructive task precedes it. Missing GATE → **Auto-fix** (insert it). Destructive task ahead → **Auto-fix** (move after GATE) if unambiguous; else **Route** (CRITICAL if ambiguous placement on MVP path).
+- **T3a**: Phase 1 (Expand) tasks are **additive only** (read descriptions). A destructive step in Expand → **Route** to `/order.tasks` (HIGH if MVP/P1, MEDIUM otherwise).
+- **T3b**: Story phases follow UJ priority order from spec (P1 before P2). Out-of-order phases → **Route** to `/order.tasks` (HIGH if P1 ordering is affected, MEDIUM otherwise).
+- **T3c**: The Contract phase begins with a GATE task; no destructive task precedes it. Missing GATE or a destructive task before it → **Route** to `/order.tasks` (CRITICAL if it blocks the MVP/P1 path, HIGH otherwise).
 
 ### T4. Test-First Discipline
 
-- **T4a**: Within each story phase, test tasks **precede** implementation. A clear test-after-impl pair → **Auto-fix** (swap order). HIGH if in a P1 story.
-- **T4b**: Each story phase is closed by a **Checkpoint prose line** (per `/order.tasks` rules: "Checkpoint is prose, not a task"). Missing → **Auto-fix** (insert prose line). Do NOT insert per-story verification TASKS — those are owned by `/order.tasks`.
-- **T4c**: Test tasks state the expectation to **fail first** (red). Missing red-state note → **Auto-fix** (add it) where intent is clear.
+- **T4a**: Within each story phase, test tasks **precede** implementation. A test-after-implementation pair → **Route** to `/order.tasks` (HIGH for P1, MEDIUM otherwise).
+- **T4b**: Each story phase is closed by a **Checkpoint prose line** (per `/order.tasks` rules: "Checkpoint is prose, not a task"). Missing checkpoint → **Route** to `/order.tasks` (HIGH for P1, MEDIUM otherwise).
+- **T4c**: Test tasks state the expectation to **fail first** (red). Missing red-state note → **Route** to `/order.tasks` (MEDIUM).
 
 ### T5. SC Buildability
 
@@ -187,14 +187,6 @@ Semantic findings (T1-xxx through T7-xxx) must be integrated into the report's F
   serializer values, and fixtures are established before their first consumer.
   If plan mapping is complete but task sequencing/content omits the prerequisite,
   route to `/order.tasks`. If plan mapping omitted it, route to `/order.plan`.
-
-## Auto-Fix vs Route Boundary
-
-- **Auto-fix** ONLY when ALL hold: (a) mechanical/structural per E-M-C/test-first rules, (b) exactly one valid form, (c) does NOT change scope or what a task *does*, (d) obvious/reversible. Examples: task numbering, test/impl ordering swap, inserting required Contract GATE, moving destructive step after GATE, fixing a `[US#]` tag resolvable from context, correcting an obvious path typo.
-- **Route** for everything that creates or changes task content.
-- **When in doubt, Route — never Auto-fix.**
-- **You never touch field-3 refs.** Adding/removing/changing a task's spec-ID list is ref-attribution owned by `/order.tasks`.
-- **Auto-fix touches task lines only**, never derived sections or the tool-owned `traceability.tsv`.
 
 ## Report Generation
 
@@ -226,7 +218,6 @@ You MUST fill this template file in place. Do not invent report sections, table 
 - `{gate_title}`: `Tasks Check`
 - `{target_doc}`: `tasks.md`
 - `{gate_focus}`: `ordering, faithfulness, test-first discipline`
-- `{auto_fixed_rows}`: one row per auto-fix applied this run. Format: `| ID | What was changed in tasks.md | Why meaning-preserving |`. `(none)` if none. NEVER a row that adds/alters refs.
 - `{routing_blocks}`: insert routing blocks for all findings with disposition `Route`
 - `{deferred_rows}`: `(none)` — tasks-check defers nothing
 - `{findings_rows}`: combine mechanical findings (from `findings` array) with semantic findings (T1-T7). Each row: `| ID | Source | Severity | Disposition | Location | Summary |`
@@ -238,7 +229,6 @@ You MUST fill this template file in place. Do not invent report sections, table 
 **Metrics Section**:
 - `{inventory_summary}`: formatted string from `inventory` object, e.g. `REQ=10 · NFR=2 · SC=3 · ... · Total=64`
 - `{critical_count}`, `{high_count}`, `{medium_count}`, `{low_count}`: counts from combined findings
-- `{auto_fixed_count}`: count of auto-fixes applied this run
 - `{routing_count}`: count of findings with disposition `Route`
 - `{deferred_count}`: `0`
 - `{exit_code}`: from `summary.exit_code`
@@ -271,15 +261,12 @@ Use `/order.spec` for spec-rooted defects (contract contradiction, missing decis
 
 MVP/P1 scope is determined by user journeys marked P1 in `spec.md`.
 
-Auto-fixes applied and LOW notes are compatible with PASS.
-
 ## Completion Response
 
 After writing the report, respond in chat with:
 - Verdict (BLOCK, ROUTING_REQUIRED, or PASS)
 - Report path
 - Number of findings by severity
-- Number of auto-fixes applied
 - Number of routing blocks
 - Manual/orchestrator next action:
   - PASS → human or orchestrator may start `/order.code`

@@ -709,9 +709,6 @@ DENIED. These actions require a separate explicit project-contract amendment and
 ### MCP documentation lookup during gates
 DENIED unless explicitly allowed above. Gates follow this constitution literally.
 
-### Mechanical auto-fixes by gates
-ALLOWED for glossary-term normalization and unambiguous stale-ID references only. Anything touching meaning or scope MUST be routed to the owning command, never applied.
-
 ## External Rules Integration
 
 Policy: `{external_rules_policy}`

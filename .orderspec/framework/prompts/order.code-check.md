@@ -45,7 +45,7 @@ This gate inspects code semantics. Artifact-to-artifact drift belongs to `/order
 1. Pure inspector for implementation artifacts. Never edit `spec.md`, `plan.md`, `tasks.md`, `.state/*.tsv`, source code, or tests.
 2. Report writing is the only feature-artifact write: always overwrite `$FEATURE_DIR/code-report.md`, including `PASS`, `BLOCK`, and `ROUTING_REQUIRED`.
 3. Active-feature status may be updated only through `active_feature.py`: `verified` after `PASS`, `blocked` after `BLOCK` or `ROUTING_REQUIRED`.
-4. Every finding is `Route`. This gate has no code auto-fix channel.
+4. Every finding is `Route` to the command that owns the defective artifact.
 5. Default assumption is code defect. Route to `/order.spec` or `/order.plan` only when the contract or mapping is the real root. Route artifact disagreement to `/order.sync-check`.
 6. Never overrule objective evidence. A failing permitted test, build failure, missing implementation, or violated invariant remains a finding at its evidence-driven severity.
 7. Capability silence means denial. Never run tests, builds, compilers, linters, network calls, MCP calls, or package commands unless the constitution explicitly grants that exact capability.
@@ -301,9 +301,6 @@ Use this body structure:
 **Suite**: green N/N | red F failing | not run (constitution) | none
 
 {STATIC mode banner, when applicable}
-
-### Auto-Fixed
-(none — code-check never auto-fixes)
 
 ### Routing Required
 {all routing blocks, grouped by /order.code, /order.spec, /order.plan, /order.tasks, /order.sync-check}

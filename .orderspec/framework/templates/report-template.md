@@ -21,11 +21,6 @@ orderspec:
 
 **Verdict**: {VERDICT}
 
-### Auto-Fixed (applied automatically — mechanical / meaning-preserving only)
-| ID | What was changed | Why meaning-preserving |
-|----|------------------|------------------------|
-| {auto_fixed_rows} |
-
 ### Routing Required (owned by {owner_cmd} — gate did NOT modify content)
 {routing_blocks}
 
@@ -62,6 +57,6 @@ orderspec:
 ### Metrics
 - Inventory: {inventory_summary}
 - Findings by severity: CRITICAL={critical_count} · HIGH={high_count} · MEDIUM={medium_count} · LOW={low_count}
-- Auto-fixed: {auto_fixed_count} · Routing required: {routing_count} · Deferred to Plan: {deferred_count}
+- Routing required: {routing_count} · Deferred to Plan: {deferred_count}
 - Script exit code: {exit_code} · verdict floor applied: {floor_status}
 - Report file: {report_path}

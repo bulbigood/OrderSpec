@@ -169,7 +169,6 @@ Map the JSON output from `traceability.py validate` to the template variables:
 - `{gate_title}`: `Spec Check`
 - `{target_doc}`: `spec.md`
 - `{gate_focus}`: `completeness, consistency, testability`
-- `{auto_fixed_rows}`: `(none)` — gates do not auto-fix
 - `{routing_blocks}`: insert routing blocks for all findings with disposition `Route`
 - `{deferred_rows}`: `(none)` — spec-check defers nothing to plan
 - `{findings_rows}`: combine mechanical findings (from `findings` array) with semantic findings (S1-xxx). Each row: `| ID | Source | Severity | Disposition | Location | Summary |`
@@ -181,7 +180,6 @@ Map the JSON output from `traceability.py validate` to the template variables:
 **Metrics Section**:
 - `{inventory_summary}`: formatted string from `inventory` object, e.g. `REQ=10 · NFR=2 · SC=3 · ... · Total=64`
 - `{critical_count}`, `{high_count}`, `{medium_count}`, `{low_count}`: counts from combined findings
-- `{auto_fixed_count}`: `0`
 - `{routing_count}`: count of findings with disposition `Route`
 - `{deferred_count}`: `0`
 - `{exit_code}`: from `summary.exit_code`

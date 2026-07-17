@@ -246,7 +246,6 @@ Map the JSON output from `traceability.py validate --stage plan` to the template
 - `{gate_title}`: `Plan Check`
 - `{target_doc}`: `plan.md`
 - `{gate_focus}`: `physical mapping, mechanism completeness, role purity`
-- `{auto_fixed_rows}`: `(none)` — gates do not auto-fix
 - `{routing_blocks}`: insert routing blocks for all findings with disposition `Route`
 - `{deferred_rows}`: `(none)` — plan-check defers nothing
 - `{findings_rows}`: combine mechanical findings (from `findings` array) with semantic findings (P1-xxx). Each row: `| ID | Source | Severity | Disposition | Location | Summary |`
@@ -258,7 +257,6 @@ Map the JSON output from `traceability.py validate --stage plan` to the template
 **Metrics Section**:
 - `{inventory_summary}`: formatted string from `inventory` object, e.g. `REQ=10 · NFR=2 · SC=3 · ... · Total=64`
 - `{critical_count}`, `{high_count}`, `{medium_count}`, `{low_count}`: counts from combined findings
-- `{auto_fixed_count}`: `0`
 - `{routing_count}`: count of findings with disposition `Route`
 - `{deferred_count}`: `0`
 - `{exit_code}`: from `summary.exit_code`
