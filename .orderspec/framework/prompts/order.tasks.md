@@ -84,10 +84,21 @@ TASKS_STOPPED: no active feature
 
 ### Step 3: Mode Detection
 
+Before selecting a mode, inspect the self-gate report. This check is read-only
+and MUST happen before any `tasks.md`-existence stop.
+
+```bash
+eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
+SELF_REPORT="$FEATURE_DIR/tasks-report.md"
+test -e "$SELF_REPORT" && echo "SELF_REPORT_PRESENT" || echo "SELF_REPORT_ABSENT"
+```
+
+If `SELF_REPORT_PRESENT`, read it before mode selection.
+
 Determine mode before writing any file. State the mode in chat.
 
 1.  **Regenerate** — active `plan.md` exists, and `tasks.md` needs to be recreated.
-2.  **Refine** — active `tasks.md` exists, and `$ARGUMENTS` requests specific changes.
+2.  **Refine** — active `tasks.md` exists and either `$ARGUMENTS` requests specific changes, or the prior `tasks-report.md` has a `⛔ BLOCK` or `🔀 ROUTING` finding targeting `/order.tasks`. A blocking self-gate selects Refine even when `$ARGUMENTS` is empty.
 3.  **Refresh** — `tasks.md` already exists and `$ARGUMENTS` is empty → STOP:
 
 ```text
@@ -153,13 +164,7 @@ To derive tasks anyway (NOT recommended), re-run with --force.
 
 ### Step 5: Self Gate Report Intake
 
-Check for a prior `/order.tasks-check` report.
-
-```bash
-eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
-SELF_REPORT="$FEATURE_DIR/tasks-report.md"
-test -e "$SELF_REPORT" && echo "SELF_REPORT_PRESENT" || echo "SELF_REPORT_ABSENT"
-```
+Use self-gate result read in Step 3. Do not perform a second check.
 
 -   **ABSENT** → Proceed.
 -   **PRESENT (✅ PASS)** → Ignore report; proceed with `$ARGUMENTS`.

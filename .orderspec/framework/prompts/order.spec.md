@@ -134,9 +134,10 @@ Do not confuse lifecycle states:
 
 After successful `/order.spec`, active feature state status is `specified`.
 
-## Mode Detection
+## Target Resolution and Mode Inputs
 
-Determine mode before writing any managed file.
+Do not determine mode before target feature resolution and Self Gate Report
+Intake. Both are read-only and happen before any managed-file write.
 
 Read-only operations allowed during mode detection:
 
@@ -151,7 +152,7 @@ Read-only operations allowed during mode detection:
 
 Do not create directories, copy templates, write `spec.md`, update active feature state, or run traceability writers during mode detection.
 
-### Modes
+### Candidate modes
 
 1. **Create** — no active non-template `spec.md`, or user passed `--new`.
 2. **Refine** — active non-template `spec.md` exists and the request changes, adds, removes, narrows, broadens, or clarifies its contract.
@@ -163,8 +164,6 @@ Explicit flags override auto-detection:
 |---|---|
 | `--new` | create |
 | `--split` | decompose |
-
-State the detected mode in one line before proceeding.
 
 ### Active feature read-only resolution
 
@@ -242,6 +241,17 @@ If present:
   2. Do not silently compensate for findings owned by other commands.
   3. List upstream/downstream-owned findings in the completion report.
   4. Treat `$ARGUMENTS` as additional guidance, not a replacement for the report.
+
+### Mode selection
+
+Determine mode now, before writing any managed file. State selected mode in one
+line before proceeding.
+
+If `spec-report.md` has a `BLOCK` or `ROUTING REQUIRED` finding targeting
+`/order.spec`, select **Refine** even when `$ARGUMENTS` is empty. Otherwise,
+select among Create, Refine, and Decompose using candidate modes, explicit
+flags, and refine-vs-create heuristics above. Explicit `--new` and `--split`
+retain precedence.
 
 If a BLOCK/ROUTING REQUIRED report was used to modify `spec.md`, then after successful write, ID projection, and validation, replace the old report with a `CONSUMED_STALE` marker that states:
 
