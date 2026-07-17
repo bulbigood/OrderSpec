@@ -567,55 +567,120 @@ def _check_m11(spec, plan, tasks, have_plan, have_tasks, add):
         add("M11", "MEDIUM", "plan.md/tasks.md", "plan.md modified after tasks.md")
 
 
+def _category_heading_blocks(spec_text):
+    """Return normalized Markdown heading blocks for category detection.
+
+    Feature specs can use numbered or unnumbered headings and may place a
+    category at different heading levels. Category detection must follow the
+    heading title, not a fixed section number.
+    """
+    lines = spec_text.splitlines()
+    headings = []
+    for index, line in enumerate(lines):
+        match = re.match(r"^\s*(#{1,6})\s+(.+?)\s*$", line)
+        if not match:
+            continue
+
+        title = re.sub(r"\s+#+\s*$", "", match.group(2)).strip()
+        title = re.sub(r"^\d+(?:\.\d+)*[.)]?\s+", "", title).strip()
+        headings.append((index, len(match.group(1)), title.lower()))
+
+    blocks = []
+    for position, (start, level, title) in enumerate(headings):
+        end = len(lines)
+        for next_start, next_level, _ in headings[position + 1:]:
+            if next_level <= level:
+                end = next_start
+                break
+        body = "\n".join(lines[start + 1:end])
+        blocks.append((level, title, body))
+    return blocks
+
+
+def _category_body_has_content(body):
+    """Return whether a category block contains meaningful non-heading text."""
+    body = re.sub(r"<!--.*?-->", "", body, flags=re.DOTALL)
+    for line in body.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if re.match(r"^\|[\s\-:|]+\|$", stripped):
+            continue
+        return True
+    return False
+
+
 def _compute_categories(spec_text):
-    res = {}
-    checks = {
-        "Functional Requirements": "## 4.",
-        "Non-Functional Requirements": "## 5.",
-        "Project Constraints Applied": "## 6.",
-        "Architecture & Behaviour": "## 7.",
-        "Information Model": "## 8.",
-        "Interface Contracts": "## 9.",
-        "Invariants": "## 10.",
-        "Edge Cases": "## 11.",
-        "Acceptance Criteria & User Journeys": "## 12.",
-        "Open Questions": "## 13.",
-        "Decisions": "## 14.",
-        "Assumptions": "## 15.",
+    """Compute coverage categories from semantic headings, not section numbers.
+
+    Older specs use headings such as ``## 3. Requirements`` while the current
+    template uses ``## 4. Functional Requirements`` and nested
+    ``### Success Criteria``. Both forms are valid and must produce the same
+    taxonomy. ID-backed categories are accepted as a fallback when content was
+    authored without a dedicated heading.
+    """
+    blocks = _category_heading_blocks(spec_text)
+    headings = [(title, body) for _, title, body in blocks]
+
+    def has_heading(predicate):
+        return any(predicate(title) and _category_body_has_content(body) for title, body in headings)
+
+    def has_id(prefix):
+        return bool(re.search(rf"^\s*-\s*\*\*{prefix}-\d{{3}}\*\*:", spec_text, re.MULTILINE))
+
+    category_matchers = {
+        "Functional Requirements": lambda title: (
+            title == "requirements"
+            or (
+                "functional requirements" in title
+                and not title.startswith("non-functional requirements")
+            )
+        ),
+        "Non-Functional Requirements": lambda title: (
+            "non-functional requirements" in title
+            or title.startswith("nfr")
+        ),
+        "Project Constraints Applied": lambda title: "project constraints" in title,
+        "Architecture & Behaviour": lambda title: (
+            "architecture" in title or "behaviour" in title or "behavior" in title
+        ),
+        "Information Model": lambda title: "information model" in title,
+        "Interface Contracts": lambda title: "interface contracts" in title,
+        "Invariants": lambda title: "invariant" in title,
+        "Edge Cases": lambda title: "edge case" in title,
+        "Acceptance Criteria & User Journeys": lambda title: (
+            "acceptance criteria" in title or "user journey" in title
+        ),
+        "Open Questions": lambda title: "open question" in title,
+        "Decisions": lambda title: "decision" in title,
+        "Assumptions": lambda title: "assumption" in title,
+        "Success Criteria": lambda title: "success criteria" in title,
+        "Glossary": lambda title: title == "glossary",
+        "Changelog": lambda title: title == "changelog",
     }
-    for name, prefix in checks.items():
-        sec = _extract_section(spec_text, prefix)
-        if not sec:
-            res[name] = "missing"
-        else:
-            lines = [l for l in sec.splitlines() if l.strip() and not l.startswith("#")]
-            lines = [l for l in lines if not re.match(r"^\|[\s\-:|]+\|$", l)]
-            res[name] = "present" if len(lines) > 0 else "empty"
 
-    if _extract_section(spec_text, "### Success Criteria"):
-        res["Success Criteria"] = "present"
-    else:
-        res["Success Criteria"] = "missing"
+    id_fallbacks = {
+        "Functional Requirements": "REQ",
+        "Non-Functional Requirements": "NFR",
+        "Interface Contracts": "IF",
+        "Invariants": "INV",
+        "Edge Cases": "EDGE",
+        "Acceptance Criteria & User Journeys": "UJ|AC",
+        "Open Questions": "Q",
+        "Decisions": "DEC",
+        "Assumptions": "ASM",
+        "Success Criteria": "SC",
+    }
 
-    # Search for Glossary by heading content, not by fixed section number
-    # This handles specs where Glossary appears in different positions (e.g., §3, §16, §17)
-    glossary_found = False
-    for line in spec_text.splitlines():
-        if re.match(r"^##\s+\d+\.\s+Glossary\s*$", line, re.IGNORECASE):
-            glossary_found = True
-            break
-    
-    if glossary_found or _extract_section(spec_text, "## 3. Glossary") or _extract_section(spec_text, "## 16. Glossary") or _extract_section(spec_text, "## 17. Glossary"):
-        res["Glossary"] = "present"
-    else:
-        res["Glossary"] = "missing"
+    result = {}
+    for name, predicate in category_matchers.items():
+        present = has_heading(predicate)
+        fallback = id_fallbacks.get(name)
+        if not present and fallback:
+            present = any(has_id(prefix) for prefix in fallback.split("|"))
+        result[name] = "present" if present else "missing"
 
-    if _extract_section(spec_text, "## 16. Changelog") or _extract_section(spec_text, "## 17. Changelog"):
-        res["Changelog"] = "present"
-    else:
-        res["Changelog"] = "missing"
-
-    return res
+    return result
 
 
 def _compute_journey_matrix(section_12_text, ac_inline_covers):
@@ -624,48 +689,62 @@ def _compute_journey_matrix(section_12_text, ac_inline_covers):
     uj_covers = []
     uj_priority = ""
     uj_acs = []
-    
-    for line in section_12_text.splitlines():
-        m_uj = re.match(r"^\s*- \*\*(UJ-\d{3})\*\*:?\s*(.*)", line)
-        if m_uj:
-            if current_uj:
-                traces = any(any(r.startswith("REQ-") for r in covers) for covers in [ac_inline_covers.get(ac, []) for ac in uj_acs])
-                matrix.append({
-                    "uj_id": current_uj,
-                    "priority": uj_priority,
-                    "covers_reqs": uj_covers,
-                    "acs": uj_acs,
-                    "acs_trace_to_reqs": traces,
-                    "status": "ok"
-                })
-            current_uj = m_uj.group(1)
-            uj_covers = []
-            uj_priority = ""
-            uj_acs = []
-            
-        if current_uj:
-            m_prio = re.search(r"Priority:\s*(P\d)", line)
-            if m_prio:
-                uj_priority = m_prio.group(1)
-            m_cov = re.search(r"\*\*Covers\*\*:\s*(.*)", line)
-            if m_cov:
-                _all_refs = [f"{m[0]}-{m[1]}" for m in ID_RE.findall(m_cov.group(1))]
-                uj_covers = [r for r in _all_refs if r.startswith("REQ-")]
-            
-            m_ac = re.match(r"^\s*- \*\*(AC-\d{3})\*\*", line)
-            if m_ac:
-                uj_acs.append(m_ac.group(1))
 
-    if current_uj:
-        traces = any(any(r.startswith("REQ-") for r in covers) for covers in [ac_inline_covers.get(ac, []) for ac in uj_acs])
+    def flush_current():
+        nonlocal current_uj, uj_covers, uj_priority, uj_acs
+        if not current_uj:
+            return
+        traces = any(
+            any(r.startswith("REQ-") for r in ac_inline_covers.get(ac, []))
+            for ac in uj_acs
+        )
         matrix.append({
             "uj_id": current_uj,
             "priority": uj_priority,
             "covers_reqs": uj_covers,
             "acs": uj_acs,
             "acs_trace_to_reqs": traces,
-            "status": "ok"
+            "status": "ok",
         })
+        current_uj = None
+        uj_covers = []
+        uj_priority = ""
+        uj_acs = []
+
+    for line in section_12_text.splitlines():
+        heading = re.match(r"^\s*(#{1,6})\s+", line)
+        if current_uj and heading and len(heading.group(1)) <= 2:
+            # A separate top-level section usually contains UJs in §11 and
+            # ACs in §12. Do not attach all later ACs to the last UJ when no
+            # explicit nesting or mapping exists.
+            flush_current()
+
+        m_uj = re.match(r"^\s*- \*\*(UJ-\d{3})\*\*:?\s*(.*)", line)
+        if m_uj:
+            flush_current()
+            current_uj = m_uj.group(1)
+            uj_covers = []
+            uj_priority = ""
+            uj_acs = []
+
+        if current_uj:
+            m_prio = re.search(r"Priority\s*:\s*(P\d)", line, re.IGNORECASE)
+            if not m_prio:
+                m_prio = re.search(r"\|\s*Priority\s*\|\s*(P\d)", line, re.IGNORECASE)
+            if m_prio:
+                uj_priority = m_prio.group(1)
+            m_cov = re.search(r"^\s*(?:\*\*)?Covers(?:\*\*)?\s*:\s*(.*?)\s*$", line, re.IGNORECASE)
+            if not m_cov:
+                m_cov = re.search(r"^\s*\|\s*Covers\s*\|\s*(.*?)\s*\|\s*$", line, re.IGNORECASE)
+            if m_cov:
+                _all_refs = [f"{m[0]}-{m[1]}" for m in ID_RE.findall(m_cov.group(1))]
+                uj_covers = [r for r in _all_refs if r.startswith("REQ-")]
+
+            m_ac = re.match(r"^\s*- \*\*(AC-\d{3})\*\*", line)
+            if m_ac:
+                uj_acs.append(m_ac.group(1))
+
+    flush_current()
     return matrix
 
 
@@ -740,23 +819,25 @@ def cmd_validate(args):
     section_8 = _extract_section(spec_text, "## 8.")
     section_9 = _extract_section(spec_text, "## 9.")
     section_10 = _extract_section(spec_text, "## 10.")
+    section_11 = _extract_section(spec_text, "## 11.")
     section_12 = _extract_section(spec_text, "## 12.")
+    acceptance_sections = "\n".join(section for section in (section_11, section_12) if section)
 
     if_records = _extract_if_records(section_9) if section_9 else {}
     _check_m18(if_records, add)
 
-    ac_inline_covers = _extract_ac_inline_covers(section_12) if section_12 else {}
+    ac_inline_covers = _extract_ac_inline_covers(acceptance_sections) if acceptance_sections else {}
 
     if_to_acs = {}
     for ac_id, covers_list in ac_inline_covers.items():
         for ref in covers_list:
             if_to_acs.setdefault(ref, set()).add(ac_id)
 
-    _check_m19(if_records, if_to_acs, section_12, add)
-    _check_m29(if_records, if_to_acs, section_12, add)
+    _check_m19(if_records, if_to_acs, acceptance_sections, add)
+    _check_m29(if_records, if_to_acs, acceptance_sections, add)
     _check_m20(if_records, if_to_acs, add)
     _check_m21(if_records, defined_ids, add)
-    _check_m22(section_12, section_8, add)
+    _check_m22(acceptance_sections, section_8, add)
 
     grid_rows = _extract_grid_rows(section_10) if section_10 else []
     _check_m23(grid_rows, anchor_ids, add)
@@ -877,7 +958,7 @@ def cmd_validate(args):
         cats["Acceptance Criteria & User Journeys"] = f"present \u2014 {inv.get('UJ', 0)} UJ, {inv.get('AC', 0)} AC"
 
     # compute matrices
-    uj_matrix = _compute_journey_matrix(section_12, ac_inline_covers) if section_12 else []
+    uj_matrix = _compute_journey_matrix(acceptance_sections, ac_inline_covers) if acceptance_sections else []
     if_matrix = _compute_if_matrix(if_records, if_to_acs) if if_records else []
 
     # extract contradiction grid
