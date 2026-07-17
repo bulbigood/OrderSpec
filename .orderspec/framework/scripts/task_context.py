@@ -24,6 +24,8 @@ from trace_parse import _parse_pathmanifest  # noqa: E402
 
 CONTEXT_OPEN = "```task-context"
 CONTEXT_CLOSE = "```"
+CONTEXT_HEADING = "## Task Context (Machine-Readable)"
+FORMAT_PREFIX = "**Format (STRICT"
 CONTEXT_VERSION = 1
 GLOB_CHARS = set("*?[]")
 
@@ -70,6 +72,33 @@ def read_context_block(tasks_path: Path) -> tuple[dict[str, Any] | None, list[st
     except OSError as exc:
         return None, [f"cannot read tasks file: {exc}"]
 
+    heading_indexes = [
+        index for index, line in enumerate(lines) if line.strip() == CONTEXT_HEADING
+    ]
+    position_errors: list[str] = []
+    if len(heading_indexes) != 1:
+        position_errors.append(
+            f"tasks.md must contain exactly one {CONTEXT_HEADING!r} heading; found {len(heading_indexes)}"
+        )
+    else:
+        format_index = next(
+            (index for index, line in enumerate(lines) if line.strip().startswith(FORMAT_PREFIX)),
+            None,
+        )
+        separator_index = next(
+            (index for index, line in enumerate(lines) if line.strip() == "---"),
+            None,
+        )
+        heading_index = heading_indexes[0]
+        if (
+            format_index is None
+            or separator_index is None
+            or not format_index < heading_index < separator_index
+        ):
+            position_errors.append(
+                "task-context section must remain after Format rules and before the first horizontal rule"
+            )
+
     blocks: list[list[str]] = []
     index = 0
     while index < len(lines):
@@ -87,15 +116,18 @@ def read_context_block(tasks_path: Path) -> tuple[dict[str, Any] | None, list[st
         index += 1
 
     if len(blocks) != 1:
-        return None, [f"tasks.md must contain exactly one task-context block; found {len(blocks)}"]
+        return None, [
+            *position_errors,
+            f"tasks.md must contain exactly one task-context block; found {len(blocks)}",
+        ]
 
     try:
         value = json.loads("\n".join(blocks[0]))
     except json.JSONDecodeError as exc:
-        return None, [f"task-context is invalid JSON: {exc}"]
+        return None, [*position_errors, f"task-context is invalid JSON: {exc}"]
     if not isinstance(value, dict):
-        return None, ["task-context must be a JSON object"]
-    return value, []
+        return None, [*position_errors, "task-context must be a JSON object"]
+    return value, position_errors
 
 
 def validate_payload(

@@ -19,10 +19,17 @@
 - The `[P]` marker is OPTIONAL: present only when the task is file-disjoint and independent of adjacent marked tasks. Sequential top-to-bottom order is always correct on its own. There are no "waves".
 - The `[USn]` marker maps 1:1 to UJ-NNN in spec (US1 ↔ UJ-001); present on story-phase tasks only, omitted in Setup/Expand and Contract.
 
+<!--
+  LAYOUT CONTRACT: Keep this section exactly here: after the Format rules and
+  immediately before the first horizontal rule / Execution Order section.
+  Replace only the JSON inside the single task-context fence. Do not move or
+  duplicate this heading or fence.
+-->
 ## Task Context (Machine-Readable)
 
-`/order.tasks` MUST replace this block with exactly one entry for every task.
-It is the single source of truth for task read context. `/order.code` MUST NOT
+`/order.tasks` MUST replace only the JSON payload in this fence with exactly one
+entry for every task. Keep this heading and fence at this fixed location. It is
+the single source of truth for task read context. `/order.code` MUST NOT
 invent or edit per-task file lists; it resolves this block through
 `task_context.py` before each task.
 

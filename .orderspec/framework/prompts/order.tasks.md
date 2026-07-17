@@ -305,8 +305,10 @@ For endpoint tasks, fold non-2xx semantics from Spec § API Contracts into the g
 
 ### Task Context Block
 
-After composing all task lines, replace the template's `task-context` block
-with exactly one machine-readable JSON block:
+After composing all task lines, replace only the JSON payload in the template's
+fixed-position `task-context` block with exactly one machine-readable JSON
+block. The heading and fence stay in their template position, before the first
+horizontal rule and before `## Execution Order`:
 
 ````text
 ```task-context
@@ -333,9 +335,9 @@ before it exists on disk; sequential execution guarantees it is available when
 the later task runs. If a required dependency cannot be stated as an exact
 file, route the defect to `/order.plan`; do not leave worker context implicit.
 
-`task_context.py` owns parsing, validation, file-existence checks, and resolver
-output. `/order.code` consumes its output verbatim. Do not hand-author a
-second whitelist in a prompt, packet, or coordinator note.
+`task_context.py` owns parsing, fixed-position validation, file-existence
+checks, and resolver output. `/order.code` consumes its output verbatim. Do not
+hand-author a second whitelist in a prompt, packet, or coordinator note.
 
 `task_contract_context.py` owns deterministic resolution of task refs to exact
 ID blocks from `spec.md`, relevant `mechanisms.tsv` rows, and the current phase

@@ -38,7 +38,15 @@ def expect(condition: bool, message: str) -> None:
 def write_tasks(feature: Path, block: str, lines: str) -> Path:
     tasks = feature / "tasks.md"
     tasks.write_text(
-        f"# Tasks\n\n{lines}\n\n## Task Context\n\n```task-context\n{block}\n```\n",
+        "# Tasks\n\n"
+        "**Format (STRICT — pipe-delimited, machine-parsed)**\n\n"
+        "## Task Context (Machine-Readable)\n\n"
+        "```task-context\n"
+        f"{block}\n"
+        "```\n\n"
+        "---\n\n"
+        "## Execution Order\n\n"
+        f"{lines}\n",
         encoding="utf-8",
     )
     return tasks
@@ -80,6 +88,18 @@ with tempfile.TemporaryDirectory(prefix="orderspec-task-context-") as temp:
 
     rc, data = run(root, "validate", "--feature-dir", str(feature))
     expect(rc == 0 and data["total"] == 2, "validate accepts complete task context")
+
+    canonical_tasks = (feature / "tasks.md").read_text(encoding="utf-8")
+    moved_heading = canonical_tasks.replace(
+        "## Task Context (Machine-Readable)", "## Moved Task Context", 1
+    ) + "\n## Task Context (Machine-Readable)\n"
+    (feature / "tasks.md").write_text(moved_heading, encoding="utf-8")
+    rc, data = run(root, "validate", "--feature-dir", str(feature))
+    expect(
+        rc != 0 and any("before the first horizontal rule" in error for error in data["validation_errors"]),
+        "moved task-context heading is rejected",
+    )
+    (feature / "tasks.md").write_text(canonical_tasks, encoding="utf-8")
 
     rc, data = run(root, "resolve", "--feature-dir", str(feature), "--task-id", "T001")
     expect(rc == 0, "resolve accepts valid task")
