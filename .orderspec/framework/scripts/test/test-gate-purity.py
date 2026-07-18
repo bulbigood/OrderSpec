@@ -15,7 +15,7 @@ CHECK_SURFACES = [
     FRAMEWORK_DIR / "prompts" / "order.code-check.md",
     FRAMEWORK_DIR / "templates" / "report-template.md",
     FRAMEWORK_DIR / "scripts" / "bootstrap_contracts.py",
-    ORDERSPEC_DIR / "docs" / "architecture.md",
+    FRAMEWORK_DIR / "docs" / "architecture.md",
 ]
 
 FORBIDDEN_MUTATION_TERMS = (

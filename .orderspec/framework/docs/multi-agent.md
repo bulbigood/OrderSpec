@@ -40,32 +40,47 @@ Multi-agent configuration and sync state lives in:
 
 This file is generated and maintained by `.orderspec/framework/scripts/agents_sync.py`. It records which agents are enabled, their detection info, and sync state (last sync timestamp, copied/skipped prompts).
 
-## Adding a new agent adapter
+## Worker selection and configuration
 
-1. Create a new file in `.orderspec/framework/adapters/` implementing the `AgentAdapter` interface from `base.py`.
-2. Register it in `registry.py`.
-3. The adapter must implement four core methods: `detect`, `sync_skills_dir`, `sync_prompts`, `read_rules`.
-4. If the agent has named worker configuration, implement `subagent_policy`,
-   `inspect_subagents`, and `configure_subagent`; otherwise report runtime-only
-   worker management through the base implementation.
+Prompt synchronization is separate from sub-agent dispatch. `/order.code`
+checks the current runtime's actual dispatch capability, then selects delegated
+execution, phase-local execution, or an explicit all-local fallback.
+`/order.code --all --local` and `--no-subagents` keep work in the current agent
+session and skip worker inspection.
 
-The framework core remains agent-agnostic. All agent-specific logic lives in adapters.
+Inspect a selected worker before dispatch:
 
-### Worker selection and task boundary
+```bash
+python3 .orderspec/framework/scripts/agents_sync.py subagents inspect \
+  --agent codex --name worker --json
+```
 
-Prompt synchronization is not sub-agent dispatch. The adapter interface records
-agent detection and prompt/skill delivery; it does not claim that the current
-runtime can create or wait for child agents. `/order.code` checks actual runtime
-dispatch capability and selects `DELEGATED`, `LOCAL_PHASE`, or explicit
-`LOCAL_ALL` fallback. `--local`, `--no-subagents`, or an explicit instruction
-to keep work in one agent session selects local execution before capability
-detection; no worker is inspected or configured. Worker selection follows
+Create a missing worker through the adapter's default policy, or configure one
+explicitly:
+
+```bash
+python3 .orderspec/framework/scripts/agents_sync.py subagents ensure \
+  --agent codex --name worker --json
+
+python3 .orderspec/framework/scripts/agents_sync.py subagents configure \
+  --agent codex \
+  --name worker \
+  --reasoning high \
+  --scope project \
+  --model <model-id> \
+  --json
+```
+
+For Codex, the built-in `worker` inherits the parent session's model and
+reasoning settings. A project-scoped custom definition is written to
+`.codex/agents/worker.toml` and takes precedence. Omit `--model` when inherited
+model selection is desired. Global worker configuration is available only
+when explicitly selected with `--scope global`.
+
+Worker selection follows
 `.orderspec/framework/protocols/sub-agent-rules.md`.
 
-Codex custom workers live in project-scoped `.codex/agents/*.toml` by default.
-The adapter validates the TOML schema and `name` field, recognizes built-ins,
-and writes a definition only after explicit operator choice. Global
-`~/.codex/agents/` configuration is available only when explicitly selected.
+### Task boundary
 
 Worker execution follows:
 
@@ -83,7 +98,19 @@ task_progress.py marks one [X]
 
 The packet and result contract lives in
 `.orderspec/framework/protocols/sub-agent-execution.md`. The worker receives
-the rendered packet, not the protocol file or the whole OrderSpec context.
+one rendered packet with finite read/write paths and exact contract excerpts,
+not the protocol file or the whole OrderSpec context.
+
+## Adding a new agent adapter
+
+1. Create a new file in `.orderspec/framework/adapters/` implementing the `AgentAdapter` interface from `base.py`.
+2. Register it in `registry.py`.
+3. The adapter must implement four core methods: `detect`, `sync_skills_dir`, `sync_prompts`, `read_rules`.
+4. If the agent has named worker configuration, implement `subagent_policy`,
+   `inspect_subagents`, and `configure_subagent`; otherwise report runtime-only
+   worker management through the base implementation.
+
+The framework core remains agent-agnostic. All agent-specific logic lives in adapters.
 
 ## External rules integration policy
 

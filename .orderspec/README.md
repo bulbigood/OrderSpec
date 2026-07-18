@@ -1,42 +1,38 @@
 # OrderSpec
 
-**Spec-driven development for relatively weak LLMs — built for engineers, hardened for teams.**
+**Spec-driven development for relatively weak LLMs — built for engineers,
+hardened for teams.**
 
-> **Adaptation status:** OrderSpec supports multiple AI agents simultaneously:
->
-> - ✅ [Kilo Code](https://kilo.ai/) (`.kilo/` new format + `.kilocode/` legacy)
-> - ✅ [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`.claude/` + `CLAUDE.md`)
-> - ✅ [Codex](https://openai.com/codex/) (repository skills in `.agents/skills/`)
->
-> Setup is still explicit: copy the OrderSpec `.orderspec/` directory into your project, then run the agent sync command.
+OrderSpec treats a feature specification as a contract and moves mechanical
+resolution, validation, state management, and synchronization into
+deterministic scripts. The AI agent performs narrow semantic work inside
+explicit boundaries.
 
-## Design principles
+Supported agent adapters:
 
-- **Specs are the single source of truth.** Code, plans, and generated
-  views are derived from specs — never the other way around.
-- **Weak-model-first.** Every design choice must survive the question:
-  "how does this behave when the model is not very smart?"
-- **Deterministic core.** Mechanical work belongs to scripts; the AI
-  agent is semantic glue between deterministic parts.
-- **Gates detect and route; owners fix.** A gate is an inspector,
-  not an author.
-- **Default-deny capabilities.** Commands and gates only do what
-  project governance permits.
-- **Stable truth, disposable derivatives.** Specs are stable; plans,
-  tasks, and generated views are regenerated, never hand-patched.
-- **No orphans.** Every file traces back to a spec element; every
-  requirement traces forward to code and tests.
-- **Drift is a defect.** Divergence between specs and code is caught
-  mechanically, not by human vigilance.
-- **Platform-agnostic specs.** Switch technologies or even languages
-  without rewriting the specs.
-- **Agent-agnostic core.** Agent-specific logic lives in adapters,
-  not in the core.
-- **Readable by humans and machines.** Prose for people, structured
-  data for tools — one document serves both, with no lossy conversion
-  between them.
+- [Kilo Code](https://kilo.ai/) (`.kilo/` and legacy `.kilocode/`)
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`.claude/` and `CLAUDE.md`)
+- [Codex](https://openai.com/codex/) (repository skills in `.agents/skills/`)
 
-## The pipeline
+## Documentation
+
+Framework documentation is bundled under [`.orderspec/framework/docs/`](framework/docs/).
+It is framework-owned, read-only material, not generated project state.
+
+| Document | Read it when you need to understand… |
+|---|---|
+| [Getting Started](framework/docs/getting-started.md) | installation, agent sync, bootstrap, the feature workflow, gates, or brownfield extraction |
+| [Architecture](framework/docs/architecture.md) | artifact ownership and lifecycles, gates, governance, command context, feedback, rollback, or repository layout |
+| [Multi-Agent Support](framework/docs/multi-agent.md) | adapters, prompt/skill delivery, worker selection and configuration, or adding an agent |
+| [Philosophy](framework/docs/philosophy.md) | design principles, weak-model-first reasoning, or comparison with spec-kit and OpenSpec |
+| [Reference](framework/docs/reference.md) | supported customization, direct script commands, tests, limitations, or roadmap |
+
+**For AI agents:** this README is only an entry point. Before changing the
+framework or executing a non-trivial OrderSpec workflow, read the document(s)
+whose purpose matches the task. Framework behavior is defined by
+`framework/orderspec-rules.md` and command context, not by this overview.
+
+## Core model
 
 ```text
 /order.bootstrap
@@ -45,221 +41,61 @@
    WHAT           WHERE/HOW        ORDER            IMPLEMENT
 ```
 
-OrderSpec splits each feature into three documents with distinct roles:
+Each feature uses three artifacts with separate owners and lifecycles:
 
-| Document | Role | Stability |
-|----------|------|-----------|
-| `spec.md` | **WHAT** + logical contract | **Stable. The source of truth.** |
-| `plan.md` | **WHERE / HOW** — mapping onto physical code | **Baseline** for one generated work order; regenerated before a new work order |
-| `tasks.md` | **ORDER** — execution sequence | **Disposable. A one-shot work order** |
+| Document | Role | Lifecycle |
+|---|---|---|
+| `spec.md` | logical **WHAT** contract | stable source of truth |
+| `plan.md` | physical **WHERE/HOW** mapping | baseline for one work order |
+| `tasks.md` | execution **ORDER** | disposable work order |
 
-The key insight: **`plan.md` depends on the repository state at planning time;
-`spec.md` does not.** Once `tasks.md` is generated, that plan is the immutable
-implementation baseline for the work order. Planned `[NEW]` files becoming
-present and `[DEL]` files becoming absent are successful application of the
-plan, not repository drift and not a reason to rewrite the manifest.
-
-Regenerate `plan.md` when external repository movement or a real mapping defect
-invalidates it. Regenerating the plan invalidates the derived `tasks.md`; both
-must be checked again before implementation. Never regenerate a partially
-executed plan merely to relabel applied `[NEW]` entries as `[MOD]`.
-
-Command context makes feature dependencies explicit. For an active feature,
-`/order.plan` requires `spec.md`, `/order.tasks` requires `spec.md` and
-`plan.md`, and `/order.code` requires `plan.md` and `tasks.md`. `/order.spec`
-also receives the framework `spec-template.md` through command context.
-
-During `/order.code`, `task_context.py` resolves the literal source-file
-whitelist for each task. `task_contract_context.py` separately resolves task
-refs to exact `spec.md` ID excerpts, `mechanisms.tsv` rows, and story-phase
-Goal/Verification context. Workers receive this contract context in their
-packet and do not infer requirements from task glosses or repository scans.
-
-`/order.tasks` Refine patches the existing work order instead of regenerating
-it. Completed task lines and context are mechanically protected. `/order.code`
-can reconcile already-satisfied unchecked tasks from positive evidence, and
-persists upstream defect feedback for the owning stage. When a safe Git-backed
-baseline was captured, `/order.code --reset` previews and rolls back only
-planned paths before clearing progress markers.
-
-Each phase can be followed by an optional verification gate (`/order.spec-check`, `/order.plan-check`, etc.) that checks the previous artifact before you proceed.
-
-## Why OrderSpec exists
-
-Most spec-driven tooling assumes a strong model that can hold a whole feature in its head, reason about contracts, and write correct code in one pass.
-
-In practice, many teams run cheaper or smaller models — and those models drift, hallucinate scope, skip acceptance criteria, confuse instructions with data, and silently desync documents from code.
-
-OrderSpec is designed for exactly that environment.
-
-Every design choice answers the same question:
-
-> **How does this behave when the model is not very smart?**
-
-The answer: **Mechanical work goes to deterministic scripts. Judgment is narrow and routed. Gates detect and delegate — they never improvise.**
-
-## Comparison with spec-kit and OpenSpec
-
-The three frameworks share a pipeline shape but believe different things about the world.
-
-> **spec-kit** believes the spec is scaffolding for a capable model. The document exists to get the model productive; the model is trusted to fill the gaps and write the code.
-
-> **OpenSpec** believes the spec is a proposal to be reviewed. The center of gravity is the change proposal and its review loop — alignment between humans on what to build before building it.
-
-> **OrderSpec** believes the spec is a contract that a weak model must not be allowed to break. The document is the source of truth; the model is a fallible executor.
-
-| | spec-kit | OpenSpec | OrderSpec |
-|---|---|---|---|
-| Core belief | spec = scaffolding for a smart model | spec = proposal to review | spec = contract a weak model must not break |
-| Optimized for | capable models | human alignment | relatively weak models |
-| Document roles | spec / plan / tasks | proposal / spec / tasks | spec contract / repo-mapped plan / disposable tasks |
-| Gate behavior | generation-centric | review-centric | pure inspectors: detect + route |
-| Mechanical work | often in-model | often in-model | deterministic scripts |
-
-In one line: **spec-kit and OpenSpec assume the model is smart; OrderSpec assumes it is not, and pushes every judgment call to either a script or a human-owned command.**
-
-## How gates behave
-
-> **Gates detect and route. Owners fix.**
-
-A gate is a constrained inspector. It does not silently rewrite a spec to resolve ambiguity. It does not pick a winner in a merge conflict. It does not improvise scope. It emits findings and routes fixes to the command that owns the artifact.
-
-This is what makes OrderSpec safe under a weak model: the model is never trusted to silently "improve" your contract.
+The plan is derived from the specification, project contracts, and repository
+state. Tasks are derived from the plan. Code is executed from bounded task
+packets. Optional `*-check` gates inspect artifacts and route defects to the
+command that owns them; gates do not repair inspected artifacts.
 
 ## Requirements
 
-- **Python 3** — framework scripts are written in Python
-- **Shell access** — to run framework utilities
-- **At least one supported AI agent** — Kilo Code, Claude Code, or Codex
+- Python 3
+- shell access
+- at least one supported AI agent
 
-No package manager, no `uv`, no installer, no framework daemon required.
+No package manager, installer, or framework daemon is required.
 
-## Quick Start
+## Quick start
 
-First, copy .orderspec/ to the root of your project.
-Then sync OrderSpec with your AI agent and start your first feature:
+Copy `.orderspec/` to the project root, then run:
 
 ```bash
-# Sync OrderSpec with installed AI agents
+# Detect agents interactively and synchronize commands and skills
 python3 .orderspec/framework/scripts/agents_sync.py sync
+```
 
-# Run bootstrap
+```text
 /order.bootstrap
-
-# Run the feature pipeline
 /order.spec "describe the feature you want"
 /order.plan
 /order.tasks
 /order.code
+/order.code-check
 ```
 
-When `/order.code` delegates work, it resolves a worker through the current
-agent adapter. Missing or invalid workers are reported before dispatch; the
-operator chooses the worker name and reasoning level. Project scope is the
-default. Use `/order.code --all --local` (or `--no-subagents`) to execute in
-one agent session without worker inspection or dispatch. Inspect or configure
-workers explicitly:
+In Codex, synced commands are repository skills such as `$order-bootstrap` and
+`$order-spec`. For complete setup, verification gates, brownfield usage, and
+agent-specific commands, read [Getting Started](framework/docs/getting-started.md).
 
-```bash
-python3 .orderspec/framework/scripts/agents_sync.py subagents inspect \
-  --agent codex --name worker --json
-python3 .orderspec/framework/scripts/agents_sync.py subagents ensure \
-  --agent codex --json
-```
+## Essential principles
 
-Shared rules live in `framework/protocols/sub-agent-rules.md`; agent-specific
-deployment and configuration rules live in `framework/adapters/`.
+- Specs are the stable source of truth; plans and tasks are derived.
+- Deterministic scripts own mechanical work.
+- Gates detect and route; artifact owners fix.
+- Capabilities are default-deny and governed by project contracts.
+- Every requirement traces forward, and every implementation file traces back.
+- Agent-specific behavior stays in adapters; the framework core is agent-agnostic.
 
-### Codex worker model defaults
+See [Philosophy](framework/docs/philosophy.md) for the complete rationale and
+[Architecture](framework/docs/architecture.md) for the operational model.
 
-Codex's built-in `worker` does not need a project TOML file. It inherits the
-model and reasoning settings of the parent Codex session. For example, when
-the global `~/.codex/config.toml` contains:
+## License
 
-```toml
-model = "gpt-5.6-luna"
-model_reasoning_effort = "high"
-```
-
-the built-in `worker` normally inherits `gpt-5.6-luna` and `high`. Runtime
-overrides from the CLI, IDE, or Codex app can change these defaults.
-
-To make worker settings reproducible for this project, create a project-scoped
-custom worker:
-
-```bash
-python3 .orderspec/framework/scripts/agents_sync.py subagents configure \
-  --agent codex \
-  --name worker \
-  --model gpt-5.6-luna \
-  --reasoning high \
-  --scope project
-```
-
-This writes `.codex/agents/worker.toml`. A custom project worker named
-`worker` takes precedence over Codex's built-in worker. Omit `--model` to let
-Codex inherit the parent session model. Omit project configuration only when
-inherited defaults are acceptable.
-
-## Brownfield projects
-
-If you are applying OrderSpec to an existing codebase (a brownfield project), you don't need to write specs for everything manually. You can use the reverse-engineering command to extract specifications directly from your existing code.
-
-Use `/order.code-to-spec` to scan existing modules and generate a compliant `spec.md`:
-
-```bash
-# Scan an existing directory or module and generate a spec
-/order.code-to-spec "path/to/existing/module"
-```
-
-**How it works:**
-- The command scans the specified code area, extracting interfaces, entities, and observable behaviors.
-- It translates technical implementation details (frameworks, libraries) into logical WHAT-contracts, routing new technologies to `/order.bootstrap` for registration.
-- It generates a standard `spec.md` that seamlessly fits into the downstream pipeline (`/order.plan`, `/order.tasks`).
-
-**Note:** Code extraction requires understanding implicit business logic. It is recommended to use a more capable model for `/order.code-to-spec` than for standard forward-engineering commands.
-
-## Current limitations
-
-- Setup is manual (no installer yet).
-- Python 3 is required for current framework scripts.
-- Project contract files live under `.orderspec/contracts/`; names there may still overlap with other frameworks if paths are made configurable in the future.
-- Operator-defined procedural extensions are not supported yet.
-- Some project facts cannot be inferred safely during bootstrap and are marked unresolved instead of guessed.
-- Not all AI agents are supported yet — current adapters cover Kilo Code, Claude Code, and Codex.
-- Claude Code skills registration uses a symlink, which may not work on all platforms (Windows without developer mode).
-
-This is intentional: OrderSpec prefers an explicit unresolved marker over a hallucinated contract.
-
-## Regression tests
-
-### Script tests
-
-Python scripts are stored in `.orderspec/framework/scripts/test`
-
-Run all script tests:
-
-```bash
-python3 .orderspec/framework/scripts/run_all_tests.py
-```
-
-## Status and roadmap
-
-Future work:
-
-- 🔜 Adapters for more agents (OpenCode, Cursor, Windsurf, ...).
-- 🔜 Automation/orchestration hooks.
-- 🔜 Better cross-platform support.
-- 🔜 MDA-like spec structure in addition to existing feature-specs.
-- 🔜 System-level spec graph: cross-spec validation and traceability.
-- 🔜 Explicit interface contracts between subsystems — to keep code changes localized and their blast radius predictable.
-- 🔜 Machine-readable specs: YAML "islands" with schema validation and auto-generated views, to detect and reduce spec drift.
-- 🔜 BDD/Gherkin tests.
-
-## Documentation
-
-- [Getting Started](docs/getting-started.md) — setup, bootstrap phases, pipeline walkthrough
-- [Architecture](docs/architecture.md) — three-document model, pipeline details, gates, governance, command context, repository layout
-- [Multi-Agent Support](docs/multi-agent.md) — adapter pattern, external rules, adding new agents
-- [Philosophy](docs/philosophy.md) — why OrderSpec exists, design principles, comparison with spec-kit and OpenSpec
-- [Reference](docs/reference.md) — customization, useful checks, roadmap, limitations
+[MIT](LICENSE)

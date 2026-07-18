@@ -20,6 +20,8 @@ reconciles one successful task at a time through `task_progress.py`.
 `/order.tasks` Refine is surgical: a deterministic guard restores the original
 file if any completed task or its worker context changes.
 
+## Work-order state and feedback
+
 Each new work order attempts to capture a Git-backed baseline for every
 pathmanifest path. `/order.code --reset` is available only when capture
 succeeded; it previews and restores that bounded set, then clears checkboxes
@@ -58,18 +60,6 @@ Each phase can be followed by an optional verification gate that checks the prev
 | Plan | `/order.plan` | `/order.plan-check` | plan is correctly derived from spec + repo + project contracts |
 | Tasks | `/order.tasks` | `/order.tasks-check` | tasks are correctly derived from plan |
 | Implement | `/order.code` | `/order.code-check` | code faithfully implements the contract |
-
-There is also one event-triggered gate outside the linear flow:
-
-| Gate | When you run it | What it does |
-|---|---|---|
-| `/order.sync-check` | after a merge, rebase, long branch, or hand-edit | detects drift, cross-version ID collisions, and stale relationships between artifacts, then routes reconciliation to the owning command |
-
-`sync-check` checks **artifact ↔ artifact** consistency.
-
-`code-check` checks **code ↔ contract** consistency.
-
-Together they cover the two axes along which a project can drift.
 
 ## How gates behave
 
@@ -175,7 +165,6 @@ interpret OrderSpec Markdown contracts.
 .
 └── .orderspec/
     ├── README.md
-    ├── docs/                              ← documentation
     ├── contracts/                         ← project contracts (maintained by /order.bootstrap)
     │   ├── constitution.md
     │   ├── stack.md
@@ -196,6 +185,7 @@ interpret OrderSpec Markdown contracts.
     │   └── active-feature.json
     ├── skills/                            ← project skills (single source of truth)
     └── framework/
+        ├── docs/                          ← framework documentation
         ├── orderspec-rules.md
         ├── command-context.json
         ├── protocols/
