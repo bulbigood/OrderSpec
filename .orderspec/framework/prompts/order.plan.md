@@ -35,13 +35,12 @@ baseline for **WHERE/HOW**, not a live inventory rewritten after each task.
 
 ## Global Execution Rules
 
-1.  **Script Authority:** Framework scripts are deterministic. You MUST NOT second-guess, silently override, or manually repair successful script output. If a script fails, read the error and fix your input data.
-2.  **Shell Variable Persistence:** Tool shell sessions may not preserve variables. You MUST rehydrate variables at the start of every new shell block by running:
+1.  **Shell Variable Persistence:** Tool shell sessions may not preserve variables. Rehydrate variables at the start of every new shell block:
     ```bash
     eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
     ```
     Do not assume variables like `$FEATURE_DIR` persist between separate shell calls.
-3.  **Scope Lock:** You are mapping `spec.md` to code. Do not invent new requirements, endpoints, fields, or permissions. If implementation strictly requires a new externally visible behavior not present in `spec.md`, STOP and report `PLAN_BLOCKED: contract decision required`.
+2.  **Scope Lock:** You are mapping `spec.md` to code. Do not invent new requirements, endpoints, fields, or permissions. If implementation strictly requires a new externally visible behavior not present in `spec.md`, STOP and report `PLAN_BLOCKED: contract decision required`.
 
 ---
 
@@ -60,8 +59,6 @@ python3 .orderspec/framework/scripts/command_context.py resolve order.plan --jso
 1.  If `ok` is `false` or `missing_required` is non-empty, STOP and report the missing context.
 2.  Read every file returned in `to_read`, in returned order.
 3.  Interpret each file according to its `usage` field (`apply`, `constrain`, `parse`, `inspect`, `reference`).
-
-If required project contracts (`constitution.md`, `stack.md`, `architecture.md`, `conventions.md`) are missing, STOP and tell the user to run `/order.bootstrap` first.
 
 ### Step 2: Path Resolution
 
@@ -100,12 +97,9 @@ python3 .orderspec/framework/scripts/workflow_feedback.py list \
 
 Determine mode before writing any file. State the mode in chat.
 
-1.  **Regenerate** — active `spec.md` exists, and `plan.md` needs to be recreated.
+1.  **Regenerate** — `plan.md` does not exist, or a standalone `--force` was explicitly supplied and no work-order baseline blocks regeneration.
 2.  **Refine** — active `plan.md` exists and either `$ARGUMENTS` requests specific changes, the prior `plan-report.md` has a `⛔ BLOCK` or `🔀 ROUTING` finding targeting `/order.plan`, or open workflow feedback targets `order.plan`. A blocking self-gate or open feedback selects Refine even when `$ARGUMENTS` is empty.
-3.  **Refresh** — `plan.md` already exists and `$ARGUMENTS` is empty → STOP:
-
-A blocking self-gate selects Refine even when `$ARGUMENTS` is empty. Open
-workflow feedback has the same effect.
+If `plan.md` already exists, `$ARGUMENTS` is empty, and no self-gate or workflow feedback selects Refine, STOP:
 
 ```text
 PLAN_STOPPED: plan.md already exists
@@ -114,9 +108,10 @@ PLAN_STOPPED: plan.md already exists
   - To apply specific changes: /order.plan "describe the change"
 ```
 
-If `tasks.md` exists, inspect task markers before selecting Regenerate or
-Refine. Any `[X]` marker means implementation has started and the plan is a
-locked work-order baseline. Do not regenerate it merely because planned
+If `tasks.md` exists, the derived work order is stale after any plan change.
+Inspect task markers before selecting Regenerate or Refine. Any `[X]` marker
+means implementation has started and the plan is a locked work-order baseline.
+Do not regenerate it merely because planned
 `[NEW]` paths now exist or `[DEL]` paths are gone. With only `--force` and no
 specific mapping defect, STOP:
 
@@ -132,6 +127,11 @@ require `/order.code --reset` first. After reset, refine the plan, then run
 `/order.plan-check`, `/order.tasks --force`, and `/order.tasks-check`. Never absorb
 partial implementation into `[NEW]` to `[MOD]` relabeling.
 
+If `tasks.md` exists but has no `[X]` markers, Regenerate/Refine may proceed,
+but record that the work order is invalidated. Completion MUST require
+`/order.plan-check`, `/order.tasks --force`, and `/order.tasks-check` before
+`/order.code`.
+
 ### Step 4: Upstream Gate Guard
 
 Check the upstream spec gate.
@@ -139,10 +139,7 @@ Check the upstream spec gate.
 ```bash
 eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 
-FORCE_FLAG=""
-case "$ARGUMENTS" in
-  *"--force"*) FORCE_FLAG="--force" ;;
-esac
+FORCE_FLAG="$(python3 -c 'import shlex,sys; print("--force" if "--force" in shlex.split(sys.argv[1]) else "")' "$ARGUMENTS")"
 
 python3 .orderspec/framework/scripts/upstream_gate.py \
   --report        "$FEATURE_DIR/spec-report.md" \
@@ -178,41 +175,51 @@ additional mandatory fix-list item. Do not consume it yet.
 
 ### Step 6: Tooling Validation
 
-Verify tooling and skills deterministically.
+Apply the resolved `tooling-protocol.md` and parsed tooling configuration.
+Verify configured skills deterministically.
 
 ```bash
 python3 .orderspec/framework/scripts/validate_tooling.py -C "$PWD" --json
 ```
 
-Store the JSON output. Use it to determine skill availability. Do not manually inspect `.orderspec/skills/`.
-
-**You MUST use the results from Step 6 in Step 8 (Focused Reconnaissance).**
-For each `STACK-NNN` referenced in `spec.md` §6:
-1.  Look up the technology name in `stack.md` using the `STACK-NNN` ID.
-2.  If `validate_tooling.py` reports `installed_and_verified` for a matching skill — consult that skill's documentation as primary evidence source before recon.
-3.  If `validate_tooling.py` reports `installed_but_missing` — follow `orderspec-rules.md` (Documentation Evidence and Tooling Policy): MUST NOT silently continue with library-specific claims; ask the operator to install the skill or proceed without library-specific claims.
-4.  If no binding exists for a `STACK-NNN` — no skill is required for that technology; proceed normally.
+Store the JSON and interpret every status exactly according to the loaded
+tooling protocol. Match referenced `STACK-NNN` IDs through the loaded stack
+contract and tooling configuration. Do not infer availability or inspect skill
+directories to discover it.
 
 ### Step 7: Setup Plan Artifact
 
-Initialize the plan file from the template.
+Initialize according to the selected mode. Regenerate refreshes from the current
+template. Refine preserves the existing plan and edits it in place.
 
 ```bash
+# Regenerate only:
 python3 .orderspec/framework/scripts/setup.py plan --json --refresh-template > /dev/null
+
+# Refine only:
+python3 .orderspec/framework/scripts/setup.py plan --json > /dev/null
 eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 ```
 
 ### Step 8: Focused Reconnaissance
 
-**Before scanning the repository, you MUST consult available skills and MCP documentation sources:**
+Start with repository manifests and project contracts so documentation lookup is
+driven by observed stack facts. Before making any library-specific claim, apply
+the documentation sources allowed by the resolved tooling protocol:
 
-1.  **Skills:** For each `STACK-NNN` from `spec.md` §6 where `validate_tooling.py` reported `installed_and_verified`, read the skill files under `.orderspec/skills/<skill-name>/` and use them as the primary reference for that technology's conventions, patterns, and API usage.
-2.  **MCP Documentation Sources:** If a documentation source (default: `context7`) is available in your runtime tool list and its `policy` is `required_if_available` for `order.plan`, you MUST consult it before making any library-specific implementation claims about technologies referenced in `spec.md` §6.
-3.  **Evidence Recording:** Record all consulted sources in the `Library Documentation Evidence` section of `plan.md` (Step 9.7).
+1.  **Skills:** Consult only skills reported `installed_and_verified`; use them
+    as primary evidence for their bound technology.
+2.  **Documentation Sources:** For every configured source whose policy applies
+    to `order.plan`, determine runtime availability and follow its configured
+    required/optional/disabled policy before making library-specific claims.
+3.  **Evidence Recording:** Record consulted sources in the template's `Library Documentation Evidence` section.
 
-Only after consulting skills and docs sources, perform a focused repository scan to map `spec.md` onto the codebase.
+Then perform focused reconnaissance to map `spec.md` onto the codebase.
 
-**Read Budget:** Hard cap of ~20 files. Prefer exemplars over exhaustive scans.
+**Read Budget:** Target at most 20 implementation/repository files. Context
+files returned by the resolver do not count. Exceed the target only when needed
+to close a named cross-boundary or runtime-evidence obligation; record the
+reason in `Verified Against`. Prefer exemplars over exhaustive scans.
 **Verify:**
 -   Language/runtime/framework versions.
 -   Test/lint/build commands.
@@ -233,65 +240,45 @@ For each material mechanism, distinguish three evidence classes:
 2. **Repository runtime evidence** proves that the required capability is configured or supplied by manifests, deployment files, runtime configuration, or the test harness.
 3. **Operational scope evidence** proves the boundary within which the mechanism is correct: `process`, `host`, `cluster`, `external service`, or `not applicable`.
 
+Library/API documentation alone is insufficient runtime evidence.
 Do not treat library support as runtime readiness. For example, documentation that an ODM exposes transactions does not prove that the repository deploys a transaction-capable database topology. A process-local lock does not satisfy a cluster-wide concurrency invariant unless the repository proves single-process deployment or the spec limits the invariant to one process.
 
 Prefer an existing project abstraction when it satisfies the contract. If the plan introduces a parallel mechanism, record the observed abstraction and the concrete mismatch that prevents reuse.
 
-If repository evidence contradicts `spec.md`, STOP and report `PLAN_BLOCKED: repository contradicts spec`.
+Missing feature implementation is expected. Stop only when repository/project
+contract evidence makes the requested contract impossible or mutually
+inconsistent; report `PLAN_BLOCKED: contract/repository decision required` and
+route to the owning `/order.spec` or `/order.bootstrap` command.
 
 ### Step 9: Write `plan.md`
 
-Rewrite `$IMPL_PLAN` (which was initialized from `plan-template.md` in Step 7).
+Fill `$IMPL_PLAN`. In Regenerate it was initialized from the current template;
+in Refine preserve unaffected decisions and change only routed/requested scope.
 
-**Instructions per Section:**
+Read and fill every canonical template section; its comments define field-level
+syntax. Additional semantic rules:
 
-**Before filling sections:** Replace `[DATE]` in the template header with today's date in `YYYY-MM-DD` format (use the current date from system context).
-
-1.  **Summary:** 2–4 sentences of technical approach only. Do not restate `spec.md` Executive Summary.
-1a. **Delivery Strategy:** Select exactly `migration-emc` or `incremental`.
-    Use `migration-emc` only when the plan contains compatibility, replacement,
-    feature-flag, schema-contraction, or `[DEL]` work; cite that evidence and set
-    the final phase to `Contract`. Otherwise select `incremental` and set the
-    final phase to `Final Verification`. This decision is plan-owned and binds
-    `/order.tasks`.
-2.  **Technical Context & Stack Verification:** Fill the table with verified facts only.
-    *   **Verified Against**: List the specific files you read during reconnaissance that influenced your decisions.
-    *   If a fact cannot be verified, write "No [item] found in inspected manifests". Do not write vague text.
-3.  **Mechanism Evidence & Runtime Closure:** Fill one row for each material mechanism whose correctness depends on an existing project abstraction, runtime/deployment capability, external service, or concurrency scope.
-    *   Group Spec IDs only when they share the same mechanism and evidence.
-    *   Record the existing project mechanism and either reuse it or state the concrete mismatch that prevents reuse.
-    *   Record every runtime prerequisite and cite repository evidence. Library/API documentation alone is insufficient runtime evidence.
-    *   List every config, deployment, manifest, and test-harness path needed to establish the prerequisite. Every listed path that will change MUST also appear in the `pathmanifest`.
-    *   State operational scope as `process`, `host`, `cluster`, `external service`, or `not applicable`.
-    *   If no material mechanism needs closure, retain the table and write one `None` row with a short repository-evidence statement.
-    *   If a required prerequisite cannot be verified, select a repository-supported alternative or STOP and report `PLAN_BLOCKED: runtime prerequisite unverified: <mechanism>: <prerequisite>`. Do not mark the feature `planned` with an unresolved prerequisite.
-4.  **Environment Readiness:** Fill the template's `Environment Readiness` table for every material runtime prerequisite. Include applicable task/spec IDs, an exact read-only check, expected result, repository evidence, bounded recovery options, required approval, side effect/scope, and safe fallback. If no prerequisite exists, write one `None` row with repository evidence. If a required prerequisite has no verified check and no safe fallback, STOP with `PLAN_BLOCKED: runtime prerequisite unverified`.
-5.  **Constitution Check:** Fill the table.
-    *   **Status**: Use `PASS`, `DESIGN-OK`, or `FAIL`.
-    *   Never mark `PASS` for planned `[NEW]` files.
-6.  **Physical Project Structure:** Emit the `pathmanifest` block (see Step 10). Preserve the fenced-block syntax and canonical template comments that document machine-readable output. Remove copied self-check lists or non-canonical authoring residue.
-7.  **Structure & Path Decisions:**
-    *   **File Naming Convention Evidence**: Fill the table. For the `Rule Fired` column, apply these rules in order for multi-word new filenames:
-        1.  Same-layer multi-word filename precedent.
-        2.  Cross-layer multi-word filename precedent.
-        3.  Repo config-filename casing.
-        4.  Ecosystem default.
-        If rule 1 fails, explicitly write: "No same-layer precedent; rule fired: N; chosen convention: ...".
-    *   **Architectural Mapping**: Map logical roles / Spec IDs to physical files.
-        For every behavior-bearing `[NEW]`/`[MOD]` path, record its complete
-        bounded obligation and relevant Spec IDs, including supporting paths
-        that are not the single `primary_files` owner in `mechanisms.tsv`.
-        Trace each required data field and interface value through persistence,
-        mutation, serialization, routing, and tests. Generic labels such as
-        "task schema" or "audit support" are insufficient when the spec names
-        exact fields or snapshots.
-    *   **Interface Fidelity**: For every `IF-NNN`, preserve the exact method, externally visible path, mounted route prefix, input semantics, response shape and nullability, pagination/filter behavior, and failure statuses. Map each behavior to the physical boundary that directly realizes it. Do not add endpoints absent from `spec.md`.
-    *   **Internal Component Diagram**: Draw physical/internal decomposition using quoted Mermaid labels.
-8.  **Mechanism Matrix:** Preserve this section's structure and explanatory text; do not add a Markdown mechanism table. Replace `<FEATURE_DIR>` and `<feature>` placeholders with the resolved repo-relative feature path. Mechanism rows remain machine state, not plan prose.
-9.  **Library Documentation Evidence:** For each library-specific implementation claim made in this plan (e.g., specific API usage, non-obvious configuration, framework-specific patterns), cite the evidence source (skill name, documentation source name, or user-provided reference). If no library-specific claims were made, write exactly: "No library-specific claims."
-
-    Note: Referencing `STACK-NNN` IDs from `spec.md` §6 is not itself a library-specific claim — those IDs map to `stack.md` entries. A library-specific claim is a concrete implementation detail (e.g., "use Mongoose middleware hooks", "configure Joi abortEarly option") that goes beyond simply naming the technology.
-10. **Complexity Tracking:** Fill the table ONLY if Constitution Check has `FAIL` rows or justified deviations.
+- Replace `[DATE]`; remove all remaining placeholders and authoring residue.
+- Keep Summary technical and role-pure. Select delivery strategy only from its
+  template evidence rule.
+- Record only verified stack/repository facts and exact evidence paths. A
+  planned `[NEW]` file is `DESIGN-OK`, never present-state `PASS` evidence.
+- Fill `Mechanism Evidence & Runtime Closure` from repository evidence and the
+  operational-scope rules established during reconnaissance.
+- For every behavior-bearing path, record complete bounded obligations and Spec
+  IDs. Trace contract fields and values through persistence, mutation,
+  serialization, routing/export, and tests.
+- Fill one Interface Fidelity row per `IF-NNN`; preserve method, mounted path,
+  input semantics, response/nullability, pagination/filter behavior, and
+  failure statuses. Do not add interfaces.
+- Apply the template's filename-precedence rules from observed filenames only.
+- Apply the environment protocol. An unverified required prerequisite without a
+  repository-supported alternative or safe fallback is
+  `PLAN_BLOCKED: runtime prerequisite unverified`.
+- Cite evidence for library-specific claims; a bare `STACK-NNN` reference is not
+  such a claim. Keep Complexity Tracking only for actual justified deviations.
+- Preserve the canonical Mechanism Matrix prose, resolving its feature-path
+  placeholders. Do not add a Markdown mechanism table.
 
 **Prohibitions:**
 -   Do not duplicate §8 Information Model or §9 Interface Contracts from `spec.md`.
@@ -299,27 +286,14 @@ Rewrite `$IMPL_PLAN` (which was initialized from `plan-template.md` in Step 7).
 
 ### Step 10: Emit Pathmanifest
 
-In the `Physical Project Structure` section of `plan.md`, emit a flat `pathmanifest` fenced block.
-
-**Rules:**
--   One file per line.
--   Paths are repo-relative, forward-slash, no leading `./`.
--   Mark files **`[MOD]`** if you saw them during reconnaissance.
--   Mark files **`[NEW]`** if you are planning to create them.
--   Mark files **`[DEL]`** if you are planning to delete them.
--   Include every config, deployment, manifest, or test-harness file that must change to establish a runtime prerequisite selected in Mechanism Evidence & Runtime Closure.
--   Do not list directories.
-
-```pathmanifest
-src/example/existing.py      [MOD]
-src/example/new_file.py      [NEW]
-src/example/old_file.py      [DEL]
-tests/example/test_new.py    [NEW]
-```
+Fill the template's canonical flat `pathmanifest`. Determine `[MOD]`/`[NEW]`/
+`[DEL]` from read-only existence checks and transition intent. Include every
+file that must change, including prerequisite config/deployment/test-harness
+files; never list directories.
 
 ### Step 11: Emit Mechanism Matrix
 
-Before emitting rows, verify two bindings:
+Before emitting rows, verify four bindings:
 
 1. primary_files is the boundary that directly realizes the mechanism, not a
    nearby coordinator. For example, audit-log immutability belongs to the
@@ -414,7 +388,10 @@ python3 .orderspec/framework/scripts/active_feature.py set \
 
 ### Step 14: Consumed Report Marker
 
-If a BLOCK/ROUTING `plan-report.md` was used in Step 5, mark it consumed.
+If a BLOCK/ROUTING `plan-report.md` was used in Step 5, first account for every
+routed finding by ID. Mark the report consumed only after all plan-owned
+findings were changed and mechanical validation passed. Never consume a report
+with an unaddressed plan-owned finding.
 
 ```bash
 eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
@@ -442,32 +419,18 @@ Report to chat:
 -   Delivery strategy (`migration-emc` or `incremental`) and its plan evidence
 -   Mechanism matrix result (row counts from `summarize-mechanisms --json`)
 -   Validation result (`validate --stage plan`)
--   **Manual/orchestrator next step:** Run `/order.plan-check` to verify the plan before starting `/order.tasks`
+-   **Manual/orchestrator next step:** Run `/order.plan-check`. If an existing
+    unchecked `tasks.md` was invalidated, then run `/order.tasks --force` and
+    `/order.tasks-check` after plan-check passes.
 -   Readiness for `/order.tasks` (after plan-check passes)
 
 ## Done When
 
-- [ ] Command context resolved via `command_context.py`
-- [ ] Every `to_read` file was read and interpreted by `usage`
-- [ ] Mode detected and stated
-- [ ] Feature paths resolved; `eval` used for shell vars
-- [ ] Upstream gate respected: exit 64 reported as STOP; advisory distinguished from ok
-- [ ] `plan.md` regenerated from current template
-- [ ] Prior `plan-report.md` consumed if present
-- [ ] Open `order.plan` workflow feedback loaded; addressed items consumed only after validation
-- [ ] Scope Lock enforced: no invented requirements
-- [ ] Files listed in `Verified Against`
-- [ ] Existing project mechanisms reviewed; every parallel mechanism has a concrete non-reuse justification
-- [ ] Every behavior-bearing path has an exact bounded obligation and relevant Spec IDs; persistence-to-interface dependencies are complete before tasking
-- [ ] Existing tasks with `[X]` were not absorbed by relabeling applied `[NEW]`/`[DEL]` transitions
-- [ ] Mechanism Evidence & Runtime Closure completed; runtime prerequisites have repository evidence and explicit operational scope
-- [ ] Every path needed to establish a selected runtime prerequisite appears in the pathmanifest
-- [ ] `pathmanifest` uses `[MOD]` for seen files, `[NEW]` for created, `[DEL]` for deleted
-- [ ] Delivery Strategy selects exactly `migration-emc` or `incremental`, cites plan evidence, and declares the matching final phase
-- [ ] Mechanism rows emitted via `put-mechanisms` using templates; Mechanism Matrix section retains its structure, has no Markdown mechanism table, and contains no unresolved placeholders
-- [ ] `traceability.py lint` and `check-mechanisms` pass
-- [ ] `validate --stage plan` has no blocking findings
-- [ ] Active feature status updated to `planned`
-- [ ] Skills and MCP documentation sources consulted before reconnaissance
-- [ ] `[DATE]` replaced with today's date in `plan.md` header
-- [ ] Completion Report provided, including manual/orchestrator recommendation to run `/order.plan-check`
+- [ ] Context, target, mode, upstream gate, self-report, and feedback resolved.
+- [ ] Regenerate used current template; Refine preserved unaffected content.
+- [ ] Plan is role-pure, evidence-bound, cross-boundary complete, and contains no placeholders.
+- [ ] Pathmanifest, mechanism ownership/delegation, and test topology agree.
+- [ ] Runtime prerequisites and operational scope are closed by repository evidence or safe fallback.
+- [ ] Existing tasks baseline was respected; changed plan invalidates unchecked tasks.
+- [ ] `lint`, `check-mechanisms`, `check-plan`, and plan validation pass without blocking findings.
+- [ ] State and consumed markers update only after validation; completion names required gates/regeneration.

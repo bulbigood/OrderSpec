@@ -251,7 +251,15 @@
           "group": "project.contracts"
         },
         {
+          "ref": "protocol.tooling"
+        },
+        {
           "ref": "protocol.environment_block"
+        }
+      ],
+      "read_if_exists": [
+        {
+          "group": "tooling.optional"
         }
       ],
       "feature_context": {
@@ -271,7 +279,7 @@
         }
       ],
       "feature_context": {
-        "mode": "required",
+        "mode": "if_active",
         "artifacts": [
           "spec",
           "plan"

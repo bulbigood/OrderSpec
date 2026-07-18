@@ -3,10 +3,19 @@ orderspec:
   artifact: command_prompt
   command: order.plan-check
   phase: check
-description: Per-stage gate validating plan.md as a faithful, complete, role-pure physical mapping of spec.md onto the current repository. Pure inspector; routes plan defects to /order.plan and contract defects to /order.spec; writes plan-report.md on every run.
+description: Per-stage gate validating plan.md as a faithful, complete, role-pure physical mapping of spec.md onto the current repository. Pure inspector; routes plan defects to /order.plan and contract defects to /order.spec; writes plan-report.md whenever a target feature directory is resolvable.
 ---
 
 # OrderSpec Plan Check
+
+## User Input
+
+```text
+$ARGUMENTS
+```
+
+This gate inspects the active feature only. If arguments are non-empty, STOP
+without mutation and report `PLAN_CHECK_STOPPED: unsupported arguments`.
 
 ## Role
 
@@ -33,7 +42,9 @@ A terminal precondition can require a BLOCK report and stop the command independ
    ```bash
    python3 .orderspec/framework/scripts/command_context.py resolve order.plan-check --json
    ```
-2. If `ok` is `false` or `missing_required` is non-empty, STOP and report missing required context.
+2. If `ok` is `false` or non-feature `missing_required` is non-empty, STOP and
+   report missing required context. Missing feature artifacts are handled below
+   so the gate can emit a report when the feature directory exists.
 3. Read every file returned in `to_read`, in returned order.
 4. Interpret each file by `usage`.
 
@@ -51,12 +62,14 @@ A terminal precondition can require a BLOCK report and stop the command independ
    python3 .orderspec/framework/scripts/active_feature.py get --json
    python3 .orderspec/framework/scripts/active_feature.py validate --json
    ```
-3. If active state validation fails, write BLOCK report with `P0-003 (MEDIUM): active feature state invalid`, then stop.
-4. If `$ARGUMENTS` contains an explicit feature reference, resolve it read-only using `active_feature.py list --json`.
-   - If ambiguous: write a BLOCK report with `P0-004 (MEDIUM): ambiguous feature reference`, then stop.
-   - If not found: write a BLOCK report with `P0-005 (MEDIUM): feature not found`, then stop.
-5. Do not use `active_feature.py select` in this gate.
-6. If no target is resolved, write BLOCK report with `P0-000 (MEDIUM): no active feature`, then stop.
+3. If active state validation fails and a feature directory was resolved, write
+   a BLOCK report with `P0-003 (MEDIUM): active feature state invalid`, then
+   stop. If no safe report path exists, report the same finding in chat only.
+4. Do not use `active_feature.py select` or otherwise change active state.
+5. If no target is resolved, report `P0-000 (MEDIUM): no active feature` in chat
+   and stop; no report path exists.
+6. If `plan.md` is missing, write a BLOCK report with
+   `P0-010 (HIGH): plan.md missing`, route to `/order.plan`, then stop.
 
 ## Upstream Gate Guard
 
@@ -86,13 +99,12 @@ Do not use `--force` in this gate. If the operator wants to plan over a failed s
 
 ## Mechanical Validation
 
-Run the deterministic validator:
+Run the deterministic validator read-only. State initialization and Spec-ID
+extraction belong to `/order.plan`, never to this gate:
 
 ```bash
 eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 
-python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" init
-python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" extract-spec-ids
 python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" lint
 python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" check-plan
 python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" check-mechanisms
@@ -103,12 +115,24 @@ The JSON output of `validate --stage plan --json` is the **ground truth** for me
 You MUST import all findings exactly as provided, including their `severity` and `disposition`.
 You MUST NOT downgrade or suppress imported findings.
 
-If a script crashes or returns unparseable output, record `P0-001 (HIGH): mechanical validator unavailable` and route to maintainer/tooling. If a script reports a finding you suspect is a script bug, record `P0-002 (LOW): suspected script-pattern bug` alongside the original finding — never suppress the original. Escalate P0-002 to MEDIUM only when focused evidence demonstrates that the script result is false or materially misleading.
+If required traceability state is absent/stale, or a script crashes or returns
+unparseable output, record `P0-001 (HIGH): mechanical validator unavailable`.
+Route missing/stale feature state to `/order.plan`; route an apparent framework
+failure to maintainer/tooling. If a script reports a finding you suspect is a
+script bug, record `P0-002 (LOW): suspected script-pattern bug` alongside the
+original finding — never suppress the original. Escalate P0-002 to MEDIUM only
+when focused evidence demonstrates that the script result is false or materially misleading.
 
 ## Semantic Inspection
 
 Read `plan.md`, `spec.md`, and `.state/mechanisms.tsv` (via `traceability.py get` / `summarize-mechanisms --json`). Perform the following checks that require LLM judgment.
 For any finding, assign disposition `Route` and create a routing block.
+
+Inspect in numeric ID order. One underlying defect gets exactly one semantic
+finding: choose the most specific check. P1-006 owns method/path/prefix/status
+drift; P1-007 owns executable test topology; P1-012 owns direct mechanism
+ownership and remaining interface semantics; P1-014 owns omissions across
+physical boundaries. Do not duplicate one defect under overlapping checks.
 
 **Important**: Semantic findings (P1-xxx) must be integrated into the report's Findings table alongside mechanical findings. Each semantic finding gets its own row with:
 - `ID`: P1-NNN
@@ -268,8 +292,8 @@ Map the JSON output from `traceability.py validate --stage plan` to the template
 - `{target_doc}`: `plan.md`
 - `{gate_focus}`: `physical mapping, mechanism completeness, role purity`
 - `{routing_blocks}`: insert routing blocks for all findings with disposition `Route`
-- `{deferred_rows}`: `(none)` — plan-check defers nothing
-- `{findings_rows}`: combine mechanical findings (from `findings` array) with semantic findings (P1-xxx). Each row: `| ID | Source | Severity | Disposition | Location | Summary |`
+- `{deferred_rows}`: `| (none) | — | — |` — plan-check defers nothing
+- `{findings_rows}`: combine mechanical findings (from `findings` array) with semantic findings (P1-xxx). Each row is a complete Markdown row: `| ID | Source | Severity | Disposition | Location | Summary |`. With no findings, use `| (none) | — | — | — | — | — |`.
 - `{coverage_taxonomy_rows}`: from `categories` object. Each row: `| Category | § | Status | Disposition |`. Example row: `| Functional Requirements | §4 | present — 10 REQs | — |`. `missing` MVP/core → Route (HIGH); `empty`/`partial` → Route (MEDIUM)
 - `{contradiction_grid_rows}`: from `contradiction_grid` array. Each row: `| Pair | Verdict | Reason |`. If `tension` is non-empty, render Reason as `{tension} — {reason}`.
 - `{journey_matrix_rows}`: from `matrices.uj_coverage` array. Each row: `| UJ | Priority | Covers REQs | ACs | ACs trace to REQs | Status |`.

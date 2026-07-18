@@ -11,12 +11,12 @@ ROOT = Path(__file__).resolve().parents[2]
 class SelfGateModeOrderTests(unittest.TestCase):
     def test_plan_and_tasks_read_self_gate_before_refresh(self):
         for command, report, stop_marker in (
-            ("plan", "plan-report.md", "**Refresh**"),
+            ("plan", "plan-report.md", "If `plan.md` already exists"),
             ("tasks", "tasks-report.md", "**Existing/Stop**"),
         ):
             content = (ROOT / "prompts" / f"order.{command}.md").read_text(encoding="utf-8")
             self.assertLess(content.index(f'SELF_REPORT="$FEATURE_DIR/{report}"'), content.index(stop_marker))
-            self.assertIn("A blocking self-gate selects Refine even when `$ARGUMENTS` is empty.", content)
+            self.assertIn("selects Refine even when `$ARGUMENTS` is empty", content)
 
     def test_spec_selects_mode_after_self_gate_intake(self):
         content = (ROOT / "prompts" / "order.spec.md").read_text(encoding="utf-8")

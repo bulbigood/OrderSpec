@@ -264,8 +264,8 @@ You MUST fill this template file in place. Do not invent report sections, table 
 - `{target_doc}`: `tasks.md`
 - `{gate_focus}`: `path completeness, ordering, faithfulness, test-first discipline`
 - `{routing_blocks}`: insert routing blocks for all findings with disposition `Route`
-- `{deferred_rows}`: `(none)` — tasks-check defers nothing
-- `{findings_rows}`: combine mechanical findings (from `findings` array) with semantic findings (T1-T8). Each row: `| ID | Source | Severity | Disposition | Location | Summary |`
+- `{deferred_rows}`: `| (none) | — | — |` — tasks-check defers nothing
+- `{findings_rows}`: combine mechanical findings (from `findings` array) with semantic findings (T1-T8). Each value is a complete Markdown row: `| ID | Source | Severity | Disposition | Location | Summary |`. With no findings, use `| (none) | — | — | — | — | — |`.
 - `{coverage_taxonomy_rows}`: from `categories` object. Each row: `| Category | § | Status | Disposition |`
 - `{contradiction_grid_rows}`: from `contradiction_grid` array. Each row: `| Pair | Verdict | Reason |`
 - `{journey_matrix_rows}`: from `matrices.uj_coverage` array. Each row: `| UJ | Priority | Covers REQs | ACs | ACs trace to REQs | Status |`

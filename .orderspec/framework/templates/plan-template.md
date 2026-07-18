@@ -174,6 +174,14 @@ Do not copy requirement text from spec.md.
 | [`REQ-001`, `IF-001`] | `src/example/new_file.py` | [How this file realizes the logical contract] |
 | [`AC-001`] | `tests/example/test_new.py` | [How this file verifies the acceptance path] |
 
+### Interface Fidelity
+
+<!-- One row per IF-NNN. Preserve contract values; do not copy full contracts. -->
+
+| Interface ID | Method / Mounted Path | Input / Response Semantics | Failure Statuses | Realizing Boundaries |
+|--------------|-----------------------|----------------------------|------------------|----------------------|
+| `IF-001` | [`METHOD /mounted/path`] | [ID-referenced input, response, nullability, pagination/filter obligations] | [`4xx`, `5xx` from spec] | [`route`, `controller/serializer`, `integration test`] |
+
 ### Internal Component Diagram
 
 <!--

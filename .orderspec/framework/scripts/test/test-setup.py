@@ -305,19 +305,29 @@ data = parse_json_stdout(out)
 assert_true(data["SPEC_EXISTS"] is True, "spec JSON reports SPEC_EXISTS=true")
 
 
-# 16. plan-check --json blocks when spec.md is missing
+# 16. plan-check --json creates a report target when spec.md is missing
 reset_repo()
+write_core_template("report-template", "CORE REPORT TEMPLATE\n")
 set_active_feature_state("specs/F")
 (WORK / "specs" / "F").mkdir(parents=True, exist_ok=True)
 (WORK / "specs" / "F" / "plan.md").write_text("PLAN\n", encoding="utf-8")
 rc, out, err = run_setup("plan-check", "--json")
-assert_rc(2, rc, "plan-check blocks without spec.md", out, err)
+assert_rc(0, rc, "plan-check prepares report without spec.md", out, err)
+data = parse_json_stdout(out)
+assert_true(data["SPEC_EXISTS"] is False, "plan-check reports SPEC_EXISTS=false")
+assert_true(data["PLAN_EXISTS"] is True, "plan-check reports PLAN_EXISTS=true")
+assert_true((WORK / "specs" / "F" / "plan-report.md").is_file(), "plan-check creates report target without spec.md")
 
-# 17. plan-check --json blocks when plan.md is missing
+# 17. plan-check --json creates a report target when plan.md is missing
 reset_repo()
-make_feature("specs/F", spec=True, plan=False)
+write_core_template("report-template", "CORE REPORT TEMPLATE\n")
+fdir = make_feature("specs/F", spec=True, plan=False)
 rc, out, err = run_setup("plan-check", "--json")
-assert_rc(2, rc, "plan-check blocks without plan.md", out, err)
+assert_rc(0, rc, "plan-check prepares report without plan.md", out, err)
+data = parse_json_stdout(out)
+assert_true(data["SPEC_EXISTS"] is True, "plan-check reports SPEC_EXISTS=true")
+assert_true(data["PLAN_EXISTS"] is False, "plan-check reports PLAN_EXISTS=false")
+assert_true((fdir / "plan-report.md").is_file(), "plan-check creates report target without plan.md")
 
 # 18. plan-check --json creates plan-report.md from core report template when spec+plan exist
 reset_repo()

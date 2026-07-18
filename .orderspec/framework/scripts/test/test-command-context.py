@@ -801,7 +801,7 @@ else:
 
 
 
-# 29a. real manifest: order.plan excludes schema YAMLs and tooling protocol
+# 29a. real manifest: order.plan includes tooling protocol but excludes unrelated schemas/templates
 reset_work()
 setup_base_files()
 import shutil as _shutil
@@ -819,7 +819,6 @@ if _real_manifest.exists():
     rc, data, err = run_cc_json("resolve", "order.plan", "--json")
     p = paths(data)
     excluded = [
-        ".orderspec/framework/protocols/tooling-protocol.md",
         ".orderspec/framework/schemas/frontmatter.yml",
         ".orderspec/framework/schemas/artifacts.yml",
         ".orderspec/framework/schemas/lifecycle.yml",
@@ -830,6 +829,7 @@ if _real_manifest.exists():
     ]
     included = [
         ".orderspec/framework/orderspec-rules.md",
+        ".orderspec/framework/protocols/tooling-protocol.md",
         ".orderspec/contracts/constitution.md",
         ".orderspec/contracts/stack.md",
         ".orderspec/contracts/architecture.md",
@@ -841,7 +841,7 @@ if _real_manifest.exists():
         and all(x not in p for x in excluded)
         and all(x in p for x in included)
     ):
-        ok("real manifest: order.plan excludes schemas/protocol/template/tooling, includes rules+contracts")
+        ok("real manifest: order.plan includes tooling protocol + contracts and excludes unrelated resources")
     else:
         bad(f"real manifest order.plan wrong :: rc={rc} paths={p} err={err!r}")
 else:

@@ -210,8 +210,8 @@ Map the JSON output from `traceability.py validate` to the template variables:
 - `{target_doc}`: `spec.md`
 - `{gate_focus}`: `completeness, consistency, testability`
 - `{routing_blocks}`: insert routing blocks for all findings with disposition `Route`
-- `{deferred_rows}`: `(none)` — spec-check defers nothing to plan
-- `{findings_rows}`: combine mechanical findings (from `findings` array) with semantic findings (S1-xxx). Each row: `| ID | Source | Severity | Disposition | Location | Summary |`
+- `{deferred_rows}`: `| (none) | — | — |` — spec-check defers nothing to plan
+- `{findings_rows}`: combine mechanical findings (from `findings` array) with semantic findings (S1-xxx). Each value is a complete Markdown row: `| ID | Source | Severity | Disposition | Location | Summary |`. With no findings, use `| (none) | — | — | — | — | — |`.
 - `{coverage_taxonomy_rows}`: from `categories` object. Each row: `| Category | § | Status | Disposition |`. Use the `categories` value as the Status string. Set Disposition from S1-013 when a corresponding semantic finding exists; otherwise use `—`.
 - `{contradiction_grid_rows}`: from `contradiction_grid` array. Each row: `| Pair | Verdict | Reason |`. If `tension` is non-empty, render Reason as `{tension} — {reason}`. Example row: `| INV-001 × ASM-002 | compatible | ASM-002 narrows the mechanism — REQ-002 is a specific instance |`
 - `{journey_matrix_rows}`: from `matrices.uj_coverage` array. Each row: `| UJ | Priority | Covers REQs | ACs | ACs trace to REQs | Status |`. Example row: `| UJ-001 | P1 | REQ-001, REQ-002 | AC-001, AC-002 | yes | ok |`

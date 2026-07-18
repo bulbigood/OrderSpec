@@ -43,6 +43,23 @@ class TestGatePurity(unittest.TestCase):
                 self.assertIn("pure inspector", content)
                 self.assertIn("route", content)
 
+    def test_plan_check_does_not_run_mutating_traceability_setup(self):
+        content = (FRAMEWORK_DIR / "prompts" / "order.plan-check.md").read_text(encoding="utf-8")
+        self.assertNotIn("traceability.py -C \"$PWD\" --feature-dir \"$FEATURE_DIR\" init", content)
+        self.assertNotIn("traceability.py -C \"$PWD\" --feature-dir \"$FEATURE_DIR\" extract-spec-ids", content)
+
+    def test_report_template_row_placeholders_are_not_double_wrapped(self):
+        content = (FRAMEWORK_DIR / "templates" / "report-template.md").read_text(encoding="utf-8")
+        for placeholder in (
+            "deferred_rows",
+            "findings_rows",
+            "coverage_taxonomy_rows",
+            "contradiction_grid_rows",
+            "journey_matrix_rows",
+            "if_matrix_rows",
+        ):
+            self.assertNotIn(f"| {{{placeholder}}} |", content)
+
 
 if __name__ == "__main__":
     unittest.main()

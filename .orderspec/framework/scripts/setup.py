@@ -342,7 +342,7 @@ def cmd_spec_check(args):
     """Setup for /order.spec-check — validate spec, create/refresh report template.
 
     Safety contract:
-      - Gate reports are overwritten each run (see template comment).
+      - The gate command owns the final report content for each run.
       - With --refresh-template, spec-report.md is regenerated from the
         currently resolved report template before the prompt fills it.
       - Without --refresh-template, an existing spec-report.md is preserved
@@ -400,7 +400,7 @@ def cmd_spec_check(args):
 # ── subcommand: plan-check ────────────────────────────────────────────────────
 
 def cmd_plan_check(args):
-    """Setup for /order.plan-check — validate spec+plan, create/refresh report template.
+    """Setup for /order.plan-check — resolve target and create/refresh report template.
 
     Safety contract:
       - Gate reports are overwritten each run (see template comment).
@@ -410,7 +410,7 @@ def cmd_plan_check(args):
         (useful for incremental edits during routing cycles).
     """
     try:
-        paths = get_feature_paths()
+        paths = get_feature_paths(persist_active_feature=False)
     except RuntimeError as e:
         die(str(e), rc=2)
 
@@ -419,22 +419,6 @@ def cmd_plan_check(args):
     impl_plan = Path(paths["IMPL_PLAN"])
     plan_report = feature_dir / "plan-report.md"
     repo_root = paths["REPO_ROOT"]
-
-    # A plan-check requires spec.md to exist.
-    if not feature_spec.is_file():
-        die(
-            f"spec.md not found: {feature_spec}\n"
-            f"Run /order.spec first to create the feature contract.",
-            rc=2,
-        )
-
-    # A plan-check requires plan.md to exist.
-    if not impl_plan.is_file():
-        die(
-            f"plan.md not found: {impl_plan}\n"
-            f"Run /order.plan first to create the implementation plan.",
-            rc=2,
-        )
 
     feature_dir.mkdir(parents=True, exist_ok=True)
 
@@ -463,6 +447,8 @@ def cmd_plan_check(args):
         "PLAN_REPORT": str(plan_report),
         "PLAN_REPORT_EXISTS": plan_report.is_file(),
         "REPORT_REFRESHED": bool(args.refresh_template),
+        "SPEC_EXISTS": feature_spec.is_file(),
+        "PLAN_EXISTS": impl_plan.is_file(),
     })
     output_result(payload, args)
 

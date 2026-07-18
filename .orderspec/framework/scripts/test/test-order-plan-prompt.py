@@ -78,5 +78,23 @@ class TestOrderPlanPrompt(unittest.TestCase):
         self.assertIn("| BLOCK | any routed CRITICAL/HIGH", check_prompt)
         self.assertNotIn("CRITICAL if MVP/P1", check_prompt)
 
+    def test_refine_preserves_plan_and_invalidates_tasks(self):
+        with open(self.prompt_path, "r") as f:
+            content = f.read()
+        self.assertIn("Refine preserves the existing plan", content)
+        self.assertIn("work order is invalidated", content)
+        self.assertIn("/order.tasks --force", content)
+
+    def test_tooling_source_is_not_hardcoded(self):
+        with open(self.prompt_path, "r") as f:
+            content = f.read().lower()
+        self.assertNotIn("default: `context7`", content)
+
+    def test_interface_fidelity_has_template_surface(self):
+        with open(self.template_path, "r") as f:
+            template = f.read()
+        self.assertIn("### Interface Fidelity", template)
+        self.assertIn("Method / Mounted Path", template)
+
 if __name__ == '__main__':
     unittest.main()

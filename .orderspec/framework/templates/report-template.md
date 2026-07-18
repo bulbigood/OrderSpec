@@ -21,38 +21,38 @@ orderspec:
 
 **Verdict**: {VERDICT}
 
-### Routing Required (owned by {owner_cmd} — gate did NOT modify content)
+### Routing Required (owned by routed artifact command — gate did NOT modify content)
 {routing_blocks}
 
 ### Deferred to Plan (owned by /order.plan or later checks)
 | ID | Location | Why deferred |
 |----|----------|--------------|
-| {deferred_rows} |
+{deferred_rows}
 
 ### Findings
 | ID | Source | Severity | Disposition | Location | Summary |
 |----|--------|----------|-------------|----------|---------|
-| {findings_rows} |
+{findings_rows}
 
 ### Coverage Taxonomy
 | Category | § | Status | Disposition |
 |----------|---|--------|-------------|
-| {coverage_taxonomy_rows} |
+{coverage_taxonomy_rows}
 
 ### Contradiction Grid
 | Pair | Verdict | Reason |
 |------|---------|--------|
-| {contradiction_grid_rows} |
+{contradiction_grid_rows}
 
 ### Journey Coverage Matrix
 | UJ | Priority | Covers REQs | ACs | ACs trace to REQs | Status |
 |----|----------|-------------|-----|-------------------|--------|
-| {journey_matrix_rows} |
+{journey_matrix_rows}
 
 ### IF Coverage Matrix
 | IF | Kind | Actor | Success | Failure | Covered by ACs | Status |
 |----|------|-------|---------|---------|----------------|--------|
-| {if_matrix_rows} |
+{if_matrix_rows}
 
 ### Metrics
 - Inventory: {inventory_summary}
