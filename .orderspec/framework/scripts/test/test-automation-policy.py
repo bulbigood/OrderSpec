@@ -33,6 +33,7 @@ def route_event(**overrides):
         "severity": "HIGH",
         "destructive": False,
         "summary": "mapping is incomplete",
+        "evidence": "plan-report.md finding P1-001",
     }
     value.update(overrides)
     return value
@@ -48,6 +49,18 @@ with tempfile.TemporaryDirectory(prefix="orderspec-automation-policy-") as temp:
     assert rc == 0 and result["rule_count"] == 4, result
 
     rc, result = run(config, route_event())
+    assert rc == 0 and result["decision"] == "PAUSE", result
+    assert result["basis"] == "automation-disabled", result
+
+    disabled_complete = {
+        "version": 1,
+        "id": "EVT-000",
+        "kind": "COMPLETE",
+        "reason": "WORKFLOW_COMPLETE",
+        "source": "order.code-check",
+        "evidence": "code-report.md verdict PASS",
+    }
+    rc, result = run(config, disabled_complete)
     assert rc == 0 and result["decision"] == "PAUSE", result
     assert result["basis"] == "automation-disabled", result
 
@@ -105,10 +118,26 @@ with tempfile.TemporaryDirectory(prefix="orderspec-automation-policy-") as temp:
         "id": "EVT-004",
         "kind": "COMPLETE",
         "reason": "WORKFLOW_COMPLETE",
-        "source": "order.code-check"
+        "source": "order.code-check",
+        "evidence": "code-report.md verdict PASS",
     }
     rc, result = run(config, complete)
     assert rc == 0 and result["decision"] == "COMPLETE", result
+
+    data["rules"].insert(0, {
+        "id": "unsafe-runtime-route",
+        "match": {"kind": "RUNTIME", "reason": "TRANSIENT_FAILURE"},
+        "action": "auto_route",
+    })
+    config.write_text(json.dumps(data), encoding="utf-8")
+    transient = {**runtime, "reason": "TRANSIENT_FAILURE"}
+    rc, result = run(config, transient)
+    assert rc == 0 and result["decision"] == "PAUSE", result
+    assert "AUTO_ROUTE" in result["safety_override"], result
+
+    invalid_event = route_event(target="order.nonexistent")
+    rc, result = run(config, invalid_event)
+    assert rc == 2 and result["ok"] is False, result
 
     invalid = dict(data)
     invalid["defaults"] = {**data["defaults"], "operator_input": "auto_route"}

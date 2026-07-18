@@ -13,21 +13,34 @@ import datetime as dt
 import json
 import os
 import re
+import secrets
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any
 
+from frontmatter import extract_yaml_frontmatter
+
 from automation_policy import (
+    ADVANCE_TARGETS,
+    COMMANDS,
     CONFIG_PATH,
+    ROUTE_TARGETS,
+    TERMINAL_COMMANDS,
     classify,
     load_valid_config,
     load_valid_event,
 )
 
 
-RUN_ID_RE = re.compile(r"^RUN-[0-9]{3}$")
+RUN_ID_RE = re.compile(r"^RUN-[0-9a-f]{16}$")
 STATUSES = {"RUNNING", "WAITING_OPERATOR", "PAUSED", "STOPPED", "COMPLETE"}
+TERMINAL_REPORTS = {
+    "order.spec-check": "spec-report.md",
+    "order.plan-check": "plan-report.md",
+    "order.tasks-check": "tasks-report.md",
+    "order.code-check": "code-report.md",
+}
 
 
 def now() -> str:
@@ -82,15 +95,25 @@ def run_store(root: Path, feature: Path | None) -> Path:
     return root / ".orderspec" / "state" / "runs"
 
 
-def next_run_id(store: Path) -> str:
-    numbers: list[int] = []
-    for path in store.glob("RUN-*.json"):
-        if RUN_ID_RE.fullmatch(path.stem):
-            numbers.append(int(path.stem.split("-")[1]))
-    return f"RUN-{max(numbers, default=0) + 1:03d}"
+def create_run(store: Path, state: dict[str, Any]) -> Path:
+    store.mkdir(parents=True, exist_ok=True)
+    for _ in range(100):
+        run_id = f"RUN-{secrets.token_hex(8)}"
+        path = store / f"{run_id}.json"
+        try:
+            with path.open("x", encoding="utf-8") as handle:
+                state["id"] = run_id
+                json.dump(state, handle, ensure_ascii=False, indent=2)
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            return path
+        except FileExistsError:
+            continue
+    raise ValueError("could not allocate a unique run ID")
 
 
-def load_state(path: Path) -> dict[str, Any]:
+def load_state(path: Path, root: Path | None = None) -> dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -102,15 +125,49 @@ def load_state(path: Path) -> dict[str, Any]:
         "created_at", "updated_at", "transition_count", "route_count", "decision_counts",
         "event_counts", "pending_interaction", "resume_input", "session_mode", "history",
     }
-    missing = sorted(required - set(data))
-    if missing:
-        raise ValueError(f"run state missing fields: {missing}")
+    required.add("terminal_command")
+    if set(data) != required:
+        raise ValueError(f"run state fields must be exactly: {sorted(required)}")
     if data.get("version") != 1 or not RUN_ID_RE.fullmatch(str(data.get("id", ""))):
         raise ValueError("invalid run state version or id")
+    if path.stem != data["id"]:
+        raise ValueError("run state ID does not match its filename")
     if data.get("status") not in STATUSES:
         raise ValueError("invalid run status")
-    if not isinstance(data.get("history"), list):
-        raise ValueError("run history must be an array")
+    if data.get("current_command") not in COMMANDS:
+        raise ValueError("invalid current command")
+    if data.get("terminal_command") not in TERMINAL_COMMANDS:
+        raise ValueError("invalid terminal command")
+    if data.get("session_mode") not in {"fresh", "resume", "compact"}:
+        raise ValueError("invalid session mode")
+    for key in ("project_root", "created_at", "updated_at"):
+        if not isinstance(data.get(key), str) or not data[key].strip():
+            raise ValueError(f"run state {key} must be a non-empty string")
+    feature_value = data.get("feature_dir")
+    if feature_value is not None and (not isinstance(feature_value, str) or not feature_value.strip()):
+        raise ValueError("run state feature_dir must be a non-empty string or null")
+    for key in ("transition_count", "route_count"):
+        if not isinstance(data.get(key), int) or isinstance(data[key], bool) or data[key] < 0:
+            raise ValueError(f"run state {key} must be a non-negative integer")
+    for key in ("decision_counts", "event_counts"):
+        value = data.get(key)
+        if not isinstance(value, dict) or any(
+            not isinstance(name, str) or not isinstance(count, int) or isinstance(count, bool) or count < 0
+            for name, count in value.items()
+        ):
+            raise ValueError(f"run state {key} must contain non-negative integer counters")
+    if not isinstance(data.get("history"), list) or any(not isinstance(item, dict) for item in data["history"]):
+        raise ValueError("run history must be an array of objects")
+    for key in ("pending_interaction", "resume_input"):
+        if data.get(key) is not None and not isinstance(data[key], dict):
+            raise ValueError(f"run state {key} must be an object or null")
+    if root is not None and data.get("project_root") != str(root):
+        raise ValueError("run state belongs to a different project root")
+    if root is not None and feature_value is not None:
+        try:
+            Path(feature_value).resolve().relative_to((root / ".orderspec" / "features").resolve())
+        except ValueError as exc:
+            raise ValueError("run state feature_dir is outside .orderspec/features") from exc
     return data
 
 
@@ -126,21 +183,49 @@ def resolve_run_path(root: Path, value: str) -> Path:
     return path
 
 
+def validate_terminal_evidence(root: Path, state: dict[str, Any], event: dict[str, Any]) -> None:
+    value = event["evidence"]
+    report = Path(value)
+    if not report.is_absolute():
+        report = root / report
+    report = report.resolve()
+    expected_name = TERMINAL_REPORTS[event["source"]]
+    if report.name != expected_name:
+        raise ValueError(f"COMPLETE evidence must reference {expected_name}")
+    try:
+        report.relative_to((root / ".orderspec").resolve())
+    except ValueError as exc:
+        raise ValueError("COMPLETE evidence must be under .orderspec") from exc
+    feature_value = state.get("feature_dir")
+    if feature_value is not None and report != (Path(feature_value) / expected_name).resolve():
+        raise ValueError("COMPLETE evidence does not belong to the run feature")
+    try:
+        metadata = extract_yaml_frontmatter(report.read_text(encoding="utf-8")).get("orderspec", {})
+    except (OSError, UnicodeError) as exc:
+        raise ValueError(f"cannot read COMPLETE evidence: {exc}") from exc
+    if not isinstance(metadata, dict):
+        raise ValueError("COMPLETE evidence has invalid frontmatter")
+    if metadata.get("artifact") != "gate_report" or metadata.get("command") != event["source"]:
+        raise ValueError("COMPLETE evidence is not the terminal command's canonical gate report")
+    if metadata.get("verdict") != "PASS":
+        raise ValueError("COMPLETE evidence gate verdict must be PASS")
+
+
 def cmd_start(args: argparse.Namespace) -> int:
     root = safe_project_root(args.project_root)
     feature = safe_feature_dir(root, args.feature_dir)
     config_path = Path(args.config).resolve() if args.config else root / CONFIG_PATH
     config = load_valid_config(config_path)
     store = run_store(root, feature)
-    run_id = next_run_id(store)
     timestamp = now()
     state = {
         "version": 1,
-        "id": run_id,
+        "id": "",
         "status": "RUNNING",
         "project_root": str(root),
         "feature_dir": str(feature) if feature else None,
         "current_command": args.command,
+        "terminal_command": args.terminal_command,
         "created_at": timestamp,
         "updated_at": timestamp,
         "transition_count": 0,
@@ -152,8 +237,7 @@ def cmd_start(args: argparse.Namespace) -> int:
         "session_mode": config["context"]["between_commands"],
         "history": [{"at": timestamp, "type": "RUN_STARTED", "command": args.command}],
     }
-    path = store / f"{run_id}.json"
-    atomic_json(path, state)
+    path = create_run(store, state)
     emit({"ok": True, "run_file": str(path), "run": state})
     return 0
 
@@ -171,8 +255,8 @@ def counters_for(state: dict[str, Any]) -> dict[str, int]:
 def cmd_evaluate(args: argparse.Namespace) -> int:
     root = safe_project_root(args.project_root)
     run_path = resolve_run_path(root, args.run_file)
-    state = load_state(run_path)
-    if state["status"] not in {"RUNNING", "PAUSED"}:
+    state = load_state(run_path, root)
+    if state["status"] != "RUNNING":
         raise ValueError(f"cannot evaluate event while run status is {state['status']}")
     config_path = Path(args.config).resolve() if args.config else root / CONFIG_PATH
     config = load_valid_config(config_path)
@@ -181,7 +265,21 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
         raise ValueError(
             f"event source {event['source']} does not match current command {state['current_command']}"
         )
+    if event["kind"] == "ADVANCE" and ADVANCE_TARGETS.get(event["source"]) != event["target"]:
+        raise ValueError(
+            f"illegal ADVANCE transition {event['source']} -> {event['target']}"
+        )
+    if event["kind"] == "ROUTE" and event["target"] not in ROUTE_TARGETS[event["source"]]:
+        raise ValueError(
+            f"illegal ROUTE transition {event['source']} -> {event['target']}"
+        )
+    if event["kind"] == "COMPLETE" and event["source"] != state["terminal_command"]:
+        raise ValueError(
+            f"COMPLETE requires terminal command {state['terminal_command']}, got {event['source']}"
+        )
     decision = classify(config, event, counters_for(state))
+    if decision["decision"] == "COMPLETE":
+        validate_terminal_evidence(root, state, event)
     timestamp = now()
     fingerprint = decision["event_fingerprint"]
     state["event_counts"][fingerprint] = state["event_counts"].get(fingerprint, 0) + 1
@@ -224,7 +322,7 @@ def cmd_evaluate(args: argparse.Namespace) -> int:
 def cmd_answer(args: argparse.Namespace) -> int:
     root = safe_project_root(args.project_root)
     run_path = resolve_run_path(root, args.run_file)
-    state = load_state(run_path)
+    state = load_state(run_path, root)
     pending = state.get("pending_interaction")
     if state["status"] != "WAITING_OPERATOR" or not isinstance(pending, dict):
         raise ValueError("run is not waiting for operator input")
@@ -258,7 +356,30 @@ def cmd_answer(args: argparse.Namespace) -> int:
 def cmd_status(args: argparse.Namespace) -> int:
     root = safe_project_root(args.project_root)
     run_path = resolve_run_path(root, args.run_file)
-    emit({"ok": True, "run_file": str(run_path), "run": load_state(run_path)})
+    emit({"ok": True, "run_file": str(run_path), "run": load_state(run_path, root)})
+    return 0
+
+
+def cmd_resume(args: argparse.Namespace) -> int:
+    root = safe_project_root(args.project_root)
+    run_path = resolve_run_path(root, args.run_file)
+    state = load_state(run_path, root)
+    if state["status"] != "PAUSED":
+        raise ValueError(f"cannot resume run while status is {state['status']}")
+    if not args.reason.strip():
+        raise ValueError("resume reason must not be empty")
+    timestamp = now()
+    state["status"] = "RUNNING"
+    state["updated_at"] = timestamp
+    state["session_mode"] = args.session_mode
+    state["history"].append({
+        "at": timestamp,
+        "type": "OPERATOR_RESUME",
+        "reason": args.reason,
+        "session_mode": args.session_mode,
+    })
+    atomic_json(run_path, state)
+    emit({"ok": True, "run_file": str(run_path), "run": state})
     return 0
 
 
@@ -270,6 +391,7 @@ def main() -> int:
     start = sub.add_parser("start")
     start.add_argument("--feature-dir")
     start.add_argument("--command", required=True)
+    start.add_argument("--terminal-command", default="order.code-check", choices=sorted(TERMINAL_COMMANDS))
     start.add_argument("--config")
     start.set_defaults(handler=cmd_start)
 
@@ -289,10 +411,16 @@ def main() -> int:
     status.add_argument("--run-file", required=True)
     status.set_defaults(handler=cmd_status)
 
+    resume = sub.add_parser("resume")
+    resume.add_argument("--run-file", required=True)
+    resume.add_argument("--reason", required=True)
+    resume.add_argument("--session-mode", choices=["fresh", "resume"], default="fresh")
+    resume.set_defaults(handler=cmd_resume)
+
     args = parser.parse_args()
     try:
-        if args.subcommand == "start" and not re.fullmatch(r"order\.[a-z][a-z0-9-]*", args.command):
-            raise ValueError("--command must be an order.* command")
+        if args.subcommand == "start" and args.command not in COMMANDS:
+            raise ValueError("--command must be a supported OrderSpec command")
         return args.handler(args)
     except (OSError, ValueError) as exc:
         emit({"ok": False, "error": str(exc)})

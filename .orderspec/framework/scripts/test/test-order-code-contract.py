@@ -88,6 +88,12 @@ expect(
     "order.code forbids workload-based LOCAL_ALL chunking",
 )
 expect(
+    "Turn termination contract" in code_prompt
+    and "continuation_required: true" in code_prompt
+    and '"ready at T008" is never a final response' in normalized_code_prompt,
+    "order.code forbids ending a turn on an internal ready state",
+)
+expect(
     "PHASE_COMPLETE" in code_prompt and "HALTED" in code_prompt,
     "order.code distinguishes phase completion from evidenced halt",
 )

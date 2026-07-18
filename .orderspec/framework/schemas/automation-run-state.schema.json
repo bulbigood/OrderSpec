@@ -5,17 +5,26 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "version", "id", "status", "project_root", "feature_dir", "current_command",
+    "version", "id", "status", "project_root", "feature_dir", "current_command", "terminal_command",
     "created_at", "updated_at", "transition_count", "route_count", "decision_counts",
     "event_counts", "pending_interaction", "resume_input", "session_mode", "history"
   ],
   "properties": {
     "version": {"const": 1},
-    "id": {"type": "string", "pattern": "^RUN-[0-9]{3}$"},
+    "id": {"type": "string", "pattern": "^RUN-[0-9a-f]{16}$"},
     "status": {"enum": ["RUNNING", "WAITING_OPERATOR", "PAUSED", "STOPPED", "COMPLETE"]},
     "project_root": {"type": "string", "minLength": 1},
     "feature_dir": {"type": ["string", "null"]},
-    "current_command": {"type": "string", "pattern": "^order\\.[a-z][a-z0-9-]*$"},
+    "current_command": {
+      "enum": [
+        "order.bootstrap", "order.feature", "order.spec", "order.code-to-spec",
+        "order.spec-check", "order.plan", "order.plan-check", "order.tasks",
+        "order.tasks-check", "order.code", "order.code-check"
+      ]
+    },
+    "terminal_command": {
+      "enum": ["order.spec-check", "order.plan-check", "order.tasks-check", "order.code-check"]
+    },
     "created_at": {"type": "string", "format": "date-time"},
     "updated_at": {"type": "string", "format": "date-time"},
     "transition_count": {"type": "integer", "minimum": 0},

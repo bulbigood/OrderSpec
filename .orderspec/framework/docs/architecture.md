@@ -202,7 +202,9 @@ schema-validated semantic result per obligation before report finalization.
 Optional continuous execution remains outside artifact authorship. Commands
 produce typed boundary events; the deterministic supervisor applies
 `.orderspec/config/automation.json` and persists a feature- or project-scoped
-run checkpoint. `ADVANCE` and `ROUTE` may continue automatically. Questions and
+run checkpoint. Framework-owned command, advance, and owner-route tables decide
+whether an event is legal; an agent-provided target is not authoritative by
+itself. `ADVANCE` and `ROUTE` may continue automatically. Questions and
 exact approvals become `OPERATOR_INPUT` interrupts and can only pause or stop;
 operator configuration never fabricates an answer.
 

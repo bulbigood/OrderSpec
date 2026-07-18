@@ -28,15 +28,25 @@ Runtime adapters submit one schema-valid event after a command boundary:
 
 | Kind | Meaning | Possible automated outcome |
 |---|---|---|
-| `ADVANCE` | the current stage completed | run the next stage |
-| `ROUTE` | an evidenced defect belongs to another command | run the owner |
+| `ADVANCE` | the current stage completed | run the framework-declared next stage |
+| `ROUTE` | an evidenced defect belongs to another command | run a legal artifact owner |
 | `OPERATOR_INPUT` | the command needs a decision or exact approval | never auto-answer |
 | `RUNTIME` | execution infrastructure failed | bounded retry, pause, or stop |
-| `COMPLETE` | the requested terminal gate passed | finish the run |
+| `COMPLETE` | the declared terminal gate has a canonical PASS report | finish the run |
 
 The classifier returns `AUTO_ROUTE`, `RETRY`, `PAUSE`, `STOP`, or terminal
 `COMPLETE`. Rules are evaluated in file order; the first match wins. When no
 rule matches, the kind-specific default applies.
+
+Event reasons are kind-specific rather than arbitrary labels. `ADVANCE` uses
+`STAGE_COMPLETE`; routes use `ARTIFACT_DEFECT` or `UPSTREAM_DEFECT`; runtime
+failures use `TRANSIENT_FAILURE` or `FRAMEWORK_ERROR`; terminal completion uses
+`WORKFLOW_COMPLETE`. Routes require non-empty evidence.
+
+The supervisor, not the event producer, owns lifecycle legality. It checks every
+command against the framework registry, every `ADVANCE` against the canonical
+pipeline, and every `ROUTE` against the source command's legal artifact owners.
+An `order.*`-shaped unknown command is invalid.
 
 Example routed defect:
 
@@ -50,7 +60,8 @@ Example routed defect:
   "target": "order.plan",
   "severity": "HIGH",
   "destructive": false,
-  "summary": "The physical mapping omits a required boundary."
+  "summary": "The physical mapping omits a required boundary.",
+  "evidence": "code-report.md finding C1-deadbeef"
 }
 ```
 
@@ -99,7 +110,8 @@ Start a feature-scoped run-state:
 ```bash
 python3 .orderspec/framework/scripts/workflow_supervisor.py start \
   --feature-dir .orderspec/features/<feature> \
-  --command order.code-check
+  --command order.code-check \
+  --terminal-command order.code-check
 ```
 
 The command returns a `run_file`. Runtime adapters submit events through:
@@ -120,7 +132,23 @@ python3 .orderspec/framework/scripts/workflow_supervisor.py answer \
 The answer sets `session_mode=resume` for `same_session`; normal cross-command
 transitions use `context.between_commands`, which defaults to `fresh`. Run files
 live under feature `.state/runs/`, or project `.orderspec/state/runs/` before a
-feature exists. They are ignored local state but survive process restarts.
+feature exists. Run IDs use exclusive random filenames, so concurrent starts
+cannot overwrite each other. Run files are ignored local state but survive
+process restarts.
+
+A policy or loop-limit `PAUSE` is an enforced barrier: `evaluate` accepts events
+only in `RUNNING`. After reviewing the cause, the operator explicitly resumes:
+
+```bash
+python3 .orderspec/framework/scripts/workflow_supervisor.py resume \
+  --run-file <run-file> --reason "reviewed loop-limit evidence"
+```
+
+`COMPLETE` is accepted only from the `terminal_command` declared at start. Its
+`evidence` must reference that gate's canonical feature report
+(`spec-report.md`, `plan-report.md`, `tasks-report.md`, or `code-report.md`),
+whose command metadata and `verdict: PASS` are checked mechanically. A prose
+claim of completion is insufficient.
 
 ## Loop protection
 
@@ -134,5 +162,7 @@ rules. Crossing a limit produces `PAUSE`, never an unbounded retry.
 The supervisor core is runtime-neutral and does not parse prose transcripts.
 An agent adapter is responsible for starting a fresh or resumed agent session,
 enforcing the automation-event output schema, and submitting the validated
-event. This keeps Codex, Claude Code, and Kilo invocation details outside the
-workflow policy.
+event. Schema validity is the transport contract; the supervisor additionally
+checks state-dependent transition, ownership, pause, and terminal-evidence
+invariants. This keeps Codex, Claude Code, and Kilo invocation details outside
+the workflow policy.

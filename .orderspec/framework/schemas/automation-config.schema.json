@@ -43,10 +43,15 @@
             "additionalProperties": false,
             "properties": {
               "kind": {"$ref": "#/$defs/stringOrArray"},
-              "reason": {"$ref": "#/$defs/stringOrArray"},
-              "source": {"$ref": "#/$defs/stringOrArray"},
-              "target": {"$ref": "#/$defs/stringOrArray"},
-              "severity": {"$ref": "#/$defs/stringOrArray"},
+              "reason": {"$ref": "#/$defs/reasonOrArray"},
+              "source": {"$ref": "#/$defs/commandOrArray"},
+              "target": {"$ref": "#/$defs/commandOrArray"},
+              "severity": {
+                "oneOf": [
+                  {"enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]},
+                  {"type": "array", "minItems": 1, "items": {"enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]}}
+                ]
+              },
               "destructive": {
                 "oneOf": [
                   {"type": "boolean"},
@@ -76,6 +81,34 @@
       "oneOf": [
         {"type": "string", "minLength": 1},
         {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+      ]
+    },
+    "command": {
+      "enum": [
+        "order.bootstrap", "order.feature", "order.spec", "order.code-to-spec",
+        "order.spec-check", "order.plan", "order.plan-check", "order.tasks",
+        "order.tasks-check", "order.code", "order.code-check"
+      ]
+    },
+    "commandOrArray": {
+      "oneOf": [
+        {"$ref": "#/$defs/command"},
+        {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/command"}}
+      ]
+    },
+    "reason": {
+      "enum": [
+        "STAGE_COMPLETE", "ARTIFACT_DEFECT", "UPSTREAM_DEFECT",
+        "SEMANTIC_DECISION", "SCOPE_CLARIFICATION", "MUTATION_APPROVAL",
+        "TOOL_INSTALL_APPROVAL", "GOVERNANCE_APPROVAL", "CANDIDATE_SELECTION",
+        "WORK_ORDER_RESET_REQUIRED", "CREDENTIALS_REQUIRED", "PERMISSION_REQUIRED",
+        "TRANSIENT_FAILURE", "FRAMEWORK_ERROR", "WORKFLOW_COMPLETE"
+      ]
+    },
+    "reasonOrArray": {
+      "oneOf": [
+        {"$ref": "#/$defs/reason"},
+        {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/reason"}}
       ]
     }
   }

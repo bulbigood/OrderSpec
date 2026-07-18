@@ -66,6 +66,8 @@ python3 .orderspec/framework/scripts/workflow_supervisor.py start \
   --feature-dir <feature> --command order.code
 python3 .orderspec/framework/scripts/workflow_supervisor.py status \
   --run-file <run-file>
+python3 .orderspec/framework/scripts/workflow_supervisor.py resume \
+  --run-file <run-file> --reason <operator-reason>
 ```
 
 `work_order.py rollback` previews by default; pass `--apply` only after

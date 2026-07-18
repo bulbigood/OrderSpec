@@ -37,6 +37,7 @@ with tempfile.TemporaryDirectory(prefix="orderspec-supervisor-") as temp:
         "start",
         "--feature-dir", str(feature),
         "--command", "order.code-check",
+        "--terminal-command", "order.plan-check",
     )
     assert rc == 0 and result["run"]["status"] == "RUNNING", result
     run_file = Path(result["run_file"])
@@ -50,8 +51,22 @@ with tempfile.TemporaryDirectory(prefix="orderspec-supervisor-") as temp:
         "source": "order.code-check",
         "target": "order.plan",
         "severity": "HIGH",
-        "summary": "physical mapping is incomplete"
+        "summary": "physical mapping is incomplete",
+        "evidence": "code-report.md finding C1-deadbeef",
     }
+    illegal_advance = {
+        "version": 1,
+        "id": "EVT-000",
+        "kind": "ADVANCE",
+        "reason": "STAGE_COMPLETE",
+        "source": "order.code-check",
+        "target": "order.plan",
+    }
+    rc, rejected = run(
+        root, "evaluate", "--run-file", str(run_file), "--event-file", "-",
+        stdin=json.dumps(illegal_advance),
+    )
+    assert rc == 2 and "illegal ADVANCE" in rejected["error"], rejected
     rc, result = run(
         root, "evaluate", "--run-file", str(run_file), "--event-file", "-",
         stdin=json.dumps(route),
@@ -122,12 +137,34 @@ with tempfile.TemporaryDirectory(prefix="orderspec-supervisor-") as temp:
     )
     assert rc == 0 and result["run"]["resume_input"]["answer"] == "src/billing", result
 
-    complete = {
+    advance = {
         "version": 1,
         "id": "EVT-004",
+        "kind": "ADVANCE",
+        "reason": "STAGE_COMPLETE",
+        "source": "order.plan",
+        "target": "order.plan-check",
+    }
+    rc, result = run(
+        root, "evaluate", "--run-file", str(run_file), "--event-file", "-",
+        stdin=json.dumps(advance),
+    )
+    assert rc == 0 and result["run"]["current_command"] == "order.plan-check", result
+
+    plan_report = feature / "plan-report.md"
+    plan_report.write_text(
+        "---\norderspec:\n  artifact: gate_report\n  command: order.plan-check\n"
+        "  verdict: PASS\n---\n",
+        encoding="utf-8",
+    )
+
+    complete = {
+        "version": 1,
+        "id": "EVT-005",
         "kind": "COMPLETE",
         "reason": "WORKFLOW_COMPLETE",
-        "source": "order.plan"
+        "source": "order.plan-check",
+        "evidence": str(plan_report.relative_to(root)),
     }
     rc, result = run(
         root, "evaluate", "--run-file", str(run_file), "--event-file", "-",
@@ -137,6 +174,56 @@ with tempfile.TemporaryDirectory(prefix="orderspec-supervisor-") as temp:
     assert result["run"]["status"] == "COMPLETE", result
 
     rc, result = run(root, "status", "--run-file", str(run_file))
-    assert rc == 0 and len(result["run"]["history"]) == 7, result
+    assert rc == 0 and len(result["run"]["history"]) == 8, result
+
+    config["enabled"] = False
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    rc, paused_run = run(
+        root,
+        "start",
+        "--feature-dir", str(feature),
+        "--command", "order.plan",
+        "--terminal-command", "order.plan-check",
+    )
+    assert rc == 0, paused_run
+    paused_file = Path(paused_run["run_file"])
+    pause_event = {
+        "version": 1,
+        "id": "EVT-006",
+        "kind": "ADVANCE",
+        "reason": "STAGE_COMPLETE",
+        "source": "order.plan",
+        "target": "order.plan-check",
+    }
+    rc, paused = run(
+        root, "evaluate", "--run-file", str(paused_file), "--event-file", "-",
+        stdin=json.dumps(pause_event),
+    )
+    assert rc == 0 and paused["run"]["status"] == "PAUSED", paused
+    rc, rejected = run(
+        root, "evaluate", "--run-file", str(paused_file), "--event-file", "-",
+        stdin=json.dumps(pause_event),
+    )
+    assert rc == 2 and "PAUSED" in rejected["error"], rejected
+    rc, resumed = run(
+        root, "resume", "--run-file", str(paused_file),
+        "--reason", "operator reviewed the pause",
+    )
+    assert rc == 0 and resumed["run"]["status"] == "RUNNING", resumed
+    assert resumed["run"]["history"][-1]["type"] == "OPERATOR_RESUME", resumed
+
+    processes = [
+        subprocess.Popen(
+            [sys.executable, str(SCRIPT), "-C", str(root), "start", "--command", "order.spec"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        for _ in range(12)
+    ]
+    concurrent = [json.loads(process.communicate()[0]) for process in processes]
+    concurrent_paths = [item["run_file"] for item in concurrent]
+    assert len(concurrent_paths) == len(set(concurrent_paths)) == 12, concurrent_paths
+    assert all(Path(path).is_file() for path in concurrent_paths), concurrent_paths
 
 print("All workflow-supervisor tests passed")

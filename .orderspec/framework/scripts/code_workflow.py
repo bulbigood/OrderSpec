@@ -203,12 +203,24 @@ def stop(error: str, message: str, *, route: str | None = None) -> tuple[int, di
     payload: dict[str, Any] = {
         "ok": False,
         "action": "STOP",
+        "terminal": True,
+        "continuation_required": False,
         "error": error,
         "message": message,
     }
     if route:
         payload["route"] = route
     return 2, payload
+
+
+def continuing(payload: dict[str, Any], next_action: str) -> dict[str, Any]:
+    """Mark a machine state that must not become a conversational boundary."""
+    return {
+        **payload,
+        "terminal": False,
+        "continuation_required": True,
+        "next_action": next_action,
+    }
 
 
 def preflight(mode: str, force: bool) -> tuple[int, dict[str, Any]]:
@@ -233,6 +245,8 @@ def preflight(mode: str, force: bool) -> tuple[int, dict[str, Any]]:
         return 0, {
             "ok": True,
             "action": "RESET_PREVIEW",
+            "terminal": True,
+            "continuation_required": False,
             "mode": mode,
             "feature_dir": str(feature_dir),
             "command": [
@@ -269,6 +283,8 @@ def preflight(mode: str, force: bool) -> tuple[int, dict[str, Any]]:
         return gate_rc, {
             "ok": False,
             "action": "STOP",
+            "terminal": True,
+            "continuation_required": False,
             "error": "upstream_gate",
             "gate": gate,
         }
@@ -288,6 +304,8 @@ def preflight(mode: str, force: bool) -> tuple[int, dict[str, Any]]:
         return contract_rc, {
             "ok": False,
             "action": "STOP",
+            "terminal": True,
+            "continuation_required": False,
             "error": "invalid_task_contract_context",
             "route": "/order.tasks or /order.spec",
             "validation": contract_validation,
@@ -296,9 +314,10 @@ def preflight(mode: str, force: bool) -> tuple[int, dict[str, Any]]:
     unchecked = [record for record in records if record["status"] == " "]
     phases = list(dict.fromkeys(record["phase"] for record in records))
     selected_phase = unchecked[0]["phase"] if unchecked and mode == "LOCAL_PHASE" else None
-    return 0, {
+    action = "COMPLETE" if not unchecked else "READY"
+    return 0, continuing({
         "ok": True,
-        "action": "COMPLETE" if not unchecked else "READY",
+        "action": action,
         "mode": mode,
         "force": force,
         "feature_dir": str(feature_dir),
@@ -310,7 +329,7 @@ def preflight(mode: str, force: bool) -> tuple[int, dict[str, Any]]:
         "phase_count": len(phases),
         "selected_phase": selected_phase,
         "gate": gate,
-    }
+    }, "run terminal validation" if action == "COMPLETE" else "call code_workflow.py next immediately")
 
 
 def packet_for(
@@ -392,9 +411,15 @@ def next_packets(mode: str, feature_dir_value: str, selected_phase: str | None) 
             return stop("missing_selected_phase", "LOCAL_PHASE requires --selected-phase")
         unchecked = [record for record in unchecked if record["phase"] == selected_phase]
         if not unchecked:
-            return 0, {"ok": True, "action": "PHASE_COMPLETE", "phase": selected_phase}
+            return 0, continuing(
+                {"ok": True, "action": "PHASE_COMPLETE", "phase": selected_phase},
+                "run terminal validation immediately",
+            )
     if not unchecked:
-        return 0, {"ok": True, "action": "COMPLETE"}
+        return 0, continuing(
+            {"ok": True, "action": "COMPLETE"},
+            "run terminal validation immediately",
+        )
 
     first = unchecked[0]
     candidates = [first]
@@ -419,17 +444,19 @@ def next_packets(mode: str, feature_dir_value: str, selected_phase: str | None) 
             return rc, {
                 "ok": False,
                 "action": "STOP",
+                "terminal": True,
+                "continuation_required": False,
                 "error": "packet_resolution_failed",
                 "task_id": record["task_id"],
                 "details": packet,
             }
         packets.append(packet)
 
-    return 0, {
+    return 0, continuing({
         "ok": True,
         "action": "EXECUTE_TASK_GROUP" if len(packets) > 1 else "EXECUTE_TASK",
         "worker_envelopes": packets,
-    }
+    }, "call attempt-begin and execute the returned envelope immediately")
 
 
 def attempt_begin(
@@ -485,7 +512,7 @@ def attempt_begin(
     ).hexdigest()
     state_path = attempt_dir / f"{attempt_id}.json"
     state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    return 0, {
+    return 0, continuing({
         "ok": True,
         "action": "DISPATCH",
         "attempt_id": attempt_id,
@@ -493,7 +520,7 @@ def attempt_begin(
         "worker_envelopes": envelopes,
         "state_file": state_path.relative_to(repo_root).as_posix(),
         "results_file": state["results_file"],
-    }
+    }, "execute the returned envelope and finish its attempt")
 
 
 def attempt_finish(
@@ -549,6 +576,7 @@ def attempt_finish(
             "ok": False,
             "action": "STOP",
             "terminal": True,
+            "continuation_required": False,
             "error": "invalid_worker_results",
             "results": result_errors,
         }
@@ -602,6 +630,7 @@ def attempt_finish(
             "ok": False,
             "action": "STOP",
             "terminal": True,
+            "continuation_required": False,
             "error": "attempt_changes_rejected",
             "unexpected_changed_paths": unexpected,
             "result_mismatches": mismatches,
@@ -617,6 +646,7 @@ def attempt_finish(
             "ok": False,
             "action": "STOP",
             "terminal": True,
+            "continuation_required": False,
             "error": "worker_failed",
             "workers": failed,
             "observed_by_task": observed_by_task,
@@ -629,14 +659,14 @@ def attempt_finish(
         state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     except OSError as exc:
         return stop("attempt_state_update_failed", str(exc))
-    return 0, {
+    return 0, continuing({
         "ok": True,
         "action": "READY_TO_VERIFY_AND_MARK",
         "attempt_id": attempt_id,
         "task_ids": state["task_ids"],
         "observed_by_task": observed_by_task,
         "results": results,
-    }
+    }, "verify, mark, clean up, then call code_workflow.py next")
 
 
 def attempt_cleanup(feature_dir_value: str, attempt_id: str) -> tuple[int, dict[str, Any]]:
@@ -702,12 +732,12 @@ def attempt_cleanup(feature_dir_value: str, attempt_id: str) -> tuple[int, dict[
             pass
     except OSError as exc:
         return stop("attempt_cleanup_failed", str(exc))
-    return 0, {
+    return 0, continuing({
         "ok": True,
         "action": "ATTEMPT_CLEANED",
         "attempt_id": attempt_id,
         "removed": removed,
-    }
+    }, "call code_workflow.py next immediately")
 
 
 def finish(mode: str, feature_dir_value: str, outcome: str) -> tuple[int, dict[str, Any]]:
@@ -729,13 +759,13 @@ def finish(mode: str, feature_dir_value: str, outcome: str) -> tuple[int, dict[s
         return stop("invalid_tasks", "; ".join(errors), route="/order.tasks")
     unchecked = [record["task_id"] for record in records if record["status"] == " "]
     if mode in FULL_MODES and outcome == "COMPLETE" and unchecked:
-        return 1, {
+        return 1, continuing({
             "ok": False,
             "action": "CONTINUE",
             "error": "tasks_incomplete",
             "first_unchecked": unchecked[0],
             "unchecked": len(unchecked),
-        }
+        }, "return to Step 4 at first_unchecked immediately")
     feature_name = feature_dir.name
     feature_id = feature_name if feature_name.startswith("FEAT-") else f"FEAT-{feature_name}"
 
@@ -757,7 +787,13 @@ def finish(mode: str, feature_dir_value: str, outcome: str) -> tuple[int, dict[s
         )
         payload["active_feature"] = status
         if status_rc != 0:
-            payload.update({"ok": False, "action": "STOP", "error": "status_update_failed"})
+            payload.update({
+                "ok": False,
+                "action": "STOP",
+                "terminal": True,
+                "continuation_required": False,
+                "error": "status_update_failed",
+            })
             return status_rc, payload
         return 0, payload
 
@@ -765,6 +801,8 @@ def finish(mode: str, feature_dir_value: str, outcome: str) -> tuple[int, dict[s
         return update_status({
             "ok": True,
             "action": "HALTED",
+            "terminal": True,
+            "continuation_required": False,
             "completed": len(records) - len(unchecked),
             "total": len(records),
             "first_unchecked": unchecked[0] if unchecked else None,
@@ -786,6 +824,8 @@ def finish(mode: str, feature_dir_value: str, outcome: str) -> tuple[int, dict[s
         payload = {
             "ok": False,
             "action": "STOP",
+            "terminal": True,
+            "continuation_required": False,
             "error": "mechanism_coverage",
             "route": "/order.tasks or /order.spec",
             "details": trace,
@@ -795,6 +835,8 @@ def finish(mode: str, feature_dir_value: str, outcome: str) -> tuple[int, dict[s
     return update_status({
         "ok": True,
         "action": outcome,
+        "terminal": True,
+        "continuation_required": False,
         "completed": len(records) - len(unchecked),
         "total": len(records),
         "coverage": trace,

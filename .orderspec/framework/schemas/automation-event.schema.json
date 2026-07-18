@@ -10,8 +10,8 @@
     "id": {"type": "string", "minLength": 1},
     "kind": {"enum": ["ADVANCE", "ROUTE", "OPERATOR_INPUT", "RUNTIME", "COMPLETE"]},
     "reason": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"},
-    "source": {"type": "string", "pattern": "^order\\.[a-z][a-z0-9-]*$"},
-    "target": {"type": ["string", "null"], "pattern": "^order\\.[a-z][a-z0-9-]*$"},
+    "source": {"$ref": "#/$defs/command"},
+    "target": {"oneOf": [{"$ref": "#/$defs/command"}, {"type": "null"}]},
     "severity": {"type": ["string", "null"], "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL", null]},
     "destructive": {"type": "boolean", "default": false},
     "summary": {"type": "string", "default": ""},
@@ -51,12 +51,84 @@
   },
   "allOf": [
     {
-      "if": {"properties": {"kind": {"enum": ["ADVANCE", "ROUTE"]}}},
-      "then": {"required": ["target"]}
+      "if": {"properties": {"kind": {"const": "ADVANCE"}}, "required": ["kind"]},
+      "then": {
+        "required": ["target"],
+        "properties": {
+          "reason": {"const": "STAGE_COMPLETE"},
+          "target": {"$ref": "#/$defs/command"},
+          "interaction": {"type": "null"}
+        }
+      }
     },
     {
-      "if": {"properties": {"kind": {"const": "OPERATOR_INPUT"}}},
-      "then": {"required": ["interaction"]}
+      "if": {"properties": {"kind": {"const": "ROUTE"}}, "required": ["kind"]},
+      "then": {
+        "required": ["target", "evidence"],
+        "properties": {
+          "reason": {"enum": ["ARTIFACT_DEFECT", "UPSTREAM_DEFECT"]},
+          "target": {"$ref": "#/$defs/command"},
+          "evidence": {"type": "string", "minLength": 1},
+          "interaction": {"type": "null"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"kind": {"const": "OPERATOR_INPUT"}}, "required": ["kind"]},
+      "then": {
+        "required": ["interaction"],
+        "properties": {
+          "reason": {"enum": [
+            "SEMANTIC_DECISION", "SCOPE_CLARIFICATION", "MUTATION_APPROVAL",
+            "TOOL_INSTALL_APPROVAL", "GOVERNANCE_APPROVAL", "CANDIDATE_SELECTION",
+            "WORK_ORDER_RESET_REQUIRED", "CREDENTIALS_REQUIRED", "PERMISSION_REQUIRED"
+          ]},
+          "target": {"type": "null"},
+          "interaction": {"type": "object"}
+        },
+        "oneOf": [
+          {"properties": {"reason": {"const": "SEMANTIC_DECISION"}, "interaction": {"properties": {"kind": {"const": "SEMANTIC_DECISION"}}}}},
+          {"properties": {"reason": {"const": "SCOPE_CLARIFICATION"}, "interaction": {"properties": {"kind": {"const": "SCOPE_CLARIFICATION"}}}}},
+          {"properties": {"reason": {"const": "MUTATION_APPROVAL"}, "interaction": {"properties": {"kind": {"const": "MUTATION_APPROVAL"}}}}},
+          {"properties": {"reason": {"const": "TOOL_INSTALL_APPROVAL"}, "interaction": {"properties": {"kind": {"const": "TOOL_INSTALL_APPROVAL"}}}}},
+          {"properties": {"reason": {"const": "GOVERNANCE_APPROVAL"}, "interaction": {"properties": {"kind": {"const": "GOVERNANCE_APPROVAL"}}}}},
+          {"properties": {"reason": {"const": "CANDIDATE_SELECTION"}, "interaction": {"properties": {"kind": {"const": "CANDIDATE_SELECTION"}}}}},
+          {"properties": {"reason": {"const": "WORK_ORDER_RESET_REQUIRED"}, "interaction": {"properties": {"kind": {"const": "WORK_ORDER_RESET_REQUIRED"}}}}},
+          {"properties": {"reason": {"const": "CREDENTIALS_REQUIRED"}, "interaction": {"properties": {"kind": {"const": "CREDENTIALS_REQUIRED"}}}}},
+          {"properties": {"reason": {"const": "PERMISSION_REQUIRED"}, "interaction": {"properties": {"kind": {"const": "PERMISSION_REQUIRED"}}}}}
+        ]
+      }
+    },
+    {
+      "if": {"properties": {"kind": {"const": "RUNTIME"}}, "required": ["kind"]},
+      "then": {
+        "properties": {
+          "reason": {"enum": ["TRANSIENT_FAILURE", "FRAMEWORK_ERROR"]},
+          "target": {"type": "null"},
+          "interaction": {"type": "null"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"kind": {"const": "COMPLETE"}}, "required": ["kind"]},
+      "then": {
+        "required": ["evidence"],
+        "properties": {
+          "reason": {"const": "WORKFLOW_COMPLETE"},
+          "target": {"type": "null"},
+          "evidence": {"type": "string", "minLength": 1},
+          "interaction": {"type": "null"}
+        }
+      }
     }
-  ]
+  ],
+  "$defs": {
+    "command": {
+      "enum": [
+        "order.bootstrap", "order.feature", "order.spec", "order.code-to-spec",
+        "order.spec-check", "order.plan", "order.plan-check", "order.tasks",
+        "order.tasks-check", "order.code", "order.code-check"
+      ]
+    }
+  }
 }

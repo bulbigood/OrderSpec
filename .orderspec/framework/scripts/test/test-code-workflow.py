@@ -63,6 +63,7 @@ with tempfile.TemporaryDirectory(prefix="orderspec-code-workflow-") as temp:
     )
     rc, data = run(root, "preflight", "--mode", "LOCAL_ALL")
     assert rc == 0 and data["action"] == "READY" and data["first_unchecked"] == "T001", data
+    assert data["terminal"] is False and data["continuation_required"] is True, data
     rc, data = run(
         root,
         "next",
@@ -72,6 +73,8 @@ with tempfile.TemporaryDirectory(prefix="orderspec-code-workflow-") as temp:
         str(feature),
     )
     assert rc == 0 and data["action"] == "EXECUTE_TASK", data
+    assert data["terminal"] is False and data["continuation_required"] is True, data
+    assert "attempt-begin" in data["next_action"], data
     envelope = data["worker_envelopes"][0]
     assert envelope["protocol_version"] == 1, envelope
     assert envelope["task"]["task_context"]["write_paths"] == ["src/service.py"], envelope
@@ -89,6 +92,7 @@ with tempfile.TemporaryDirectory(prefix="orderspec-code-workflow-") as temp:
         "T001",
     )
     assert rc == 0 and attempt["action"] == "DISPATCH", attempt
+    assert attempt["terminal"] is False and attempt["continuation_required"] is True, attempt
     source.write_text("VALUE = 2\n", encoding="utf-8")
     result_path = root / attempt["results_file"]
     result_path.write_text(json.dumps({
@@ -109,6 +113,7 @@ with tempfile.TemporaryDirectory(prefix="orderspec-code-workflow-") as temp:
         str(result_path),
     )
     assert rc == 0 and finished["action"] == "READY_TO_VERIFY_AND_MARK", finished
+    assert finished["terminal"] is False and finished["continuation_required"] is True, finished
     assert finished["observed_by_task"] == {"T001": ["src/service.py"]}, finished
 
     rc, premature_cleanup = run(
@@ -180,6 +185,7 @@ with tempfile.TemporaryDirectory(prefix="orderspec-code-workflow-") as temp:
         finished["attempt_id"],
     )
     assert rc == 0 and cleaned["action"] == "ATTEMPT_CLEANED", cleaned
+    assert cleaned["terminal"] is False and cleaned["continuation_required"] is True, cleaned
     assert not successful_state.exists() and not first_result_path.exists()
     assert rejected_state.is_file() and rejected_result.is_file()
 

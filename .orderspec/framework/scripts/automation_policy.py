@@ -44,7 +44,50 @@ DEFAULT_ACTIONS = {
 MATCH_FIELDS = {"kind", "reason", "source", "target", "severity", "destructive"}
 CONTEXT_BETWEEN = {"fresh", "resume", "compact"}
 CONTEXT_AFTER_INPUT = {"resume", "fresh"}
-COMMAND_RE = re.compile(r"^order\.[a-z][a-z0-9-]*$")
+COMMANDS = {
+    "order.bootstrap",
+    "order.feature",
+    "order.spec",
+    "order.code-to-spec",
+    "order.spec-check",
+    "order.plan",
+    "order.plan-check",
+    "order.tasks",
+    "order.tasks-check",
+    "order.code",
+    "order.code-check",
+}
+ADVANCE_TARGETS = {
+    "order.bootstrap": "order.feature",
+    "order.feature": "order.spec",
+    "order.spec": "order.spec-check",
+    "order.code-to-spec": "order.spec-check",
+    "order.spec-check": "order.plan",
+    "order.plan": "order.plan-check",
+    "order.plan-check": "order.tasks",
+    "order.tasks": "order.tasks-check",
+    "order.tasks-check": "order.code",
+    "order.code": "order.code-check",
+}
+ROUTE_TARGETS = {
+    "order.bootstrap": set(),
+    "order.feature": {"order.bootstrap"},
+    "order.spec": {"order.bootstrap", "order.feature"},
+    "order.code-to-spec": {"order.bootstrap", "order.feature"},
+    "order.spec-check": {"order.spec"},
+    "order.plan": {"order.bootstrap", "order.spec"},
+    "order.plan-check": {"order.plan", "order.spec"},
+    "order.tasks": {"order.bootstrap", "order.plan", "order.spec"},
+    "order.tasks-check": {"order.tasks", "order.plan", "order.spec"},
+    "order.code": {"order.bootstrap", "order.code", "order.tasks", "order.plan", "order.spec"},
+    "order.code-check": {"order.code", "order.tasks", "order.plan", "order.spec"},
+}
+TERMINAL_COMMANDS = {
+    "order.spec-check",
+    "order.plan-check",
+    "order.tasks-check",
+    "order.code-check",
+}
 HARD_OPERATOR_REASONS = {
     "SEMANTIC_DECISION",
     "SCOPE_CLARIFICATION",
@@ -55,6 +98,13 @@ HARD_OPERATOR_REASONS = {
     "WORK_ORDER_RESET_REQUIRED",
     "CREDENTIALS_REQUIRED",
     "PERMISSION_REQUIRED",
+}
+REASONS_BY_KIND = {
+    "ADVANCE": {"STAGE_COMPLETE"},
+    "ROUTE": {"ARTIFACT_DEFECT", "UPSTREAM_DEFECT"},
+    "OPERATOR_INPUT": HARD_OPERATOR_REASONS,
+    "RUNTIME": {"TRANSIENT_FAILURE", "FRAMEWORK_ERROR"},
+    "COMPLETE": {"WORKFLOW_COMPLETE"},
 }
 
 
@@ -153,6 +203,16 @@ def validate_config(data: Any) -> tuple[dict[str, Any] | None, list[str]]:
                     errors.append(f"{label}.match.{field} must be a string, boolean, or non-empty array of them")
                 if field == "kind" and any(item not in KINDS for item in values):
                     errors.append(f"{label}.match.kind contains an unsupported kind")
+                if field == "reason" and any(
+                    item not in set().union(*REASONS_BY_KIND.values()) for item in values
+                ):
+                    errors.append(f"{label}.match.reason contains an unsupported reason")
+                if field in {"source", "target"} and any(item not in COMMANDS for item in values):
+                    errors.append(f"{label}.match.{field} contains an unsupported command")
+                if field == "severity" and any(
+                    item not in {"LOW", "MEDIUM", "HIGH", "CRITICAL"} for item in values
+                ):
+                    errors.append(f"{label}.match.severity contains an unsupported severity")
                 if field == "destructive" and any(not isinstance(item, bool) for item in values):
                     errors.append(f"{label}.match.destructive must contain booleans")
         if rule.get("action") not in ACTIONS:
@@ -183,13 +243,15 @@ def validate_event(data: Any) -> tuple[dict[str, Any] | None, list[str]]:
     reason = data.get("reason")
     if not isinstance(reason, str) or not re.fullmatch(r"[A-Z][A-Z0-9_]*", reason):
         errors.append("event.reason must be an uppercase identifier")
+    elif kind in REASONS_BY_KIND and reason not in REASONS_BY_KIND[kind]:
+        errors.append(f"event.reason {reason} is not valid for {kind}")
     source = data.get("source")
-    if not isinstance(source, str) or not COMMAND_RE.fullmatch(source):
-        errors.append("event.source must be an order.* command")
+    if not isinstance(source, str) or source not in COMMANDS:
+        errors.append("event.source must be a supported OrderSpec command")
     target = data.get("target")
     if kind in {"ADVANCE", "ROUTE"}:
-        if not isinstance(target, str) or not COMMAND_RE.fullmatch(target):
-            errors.append("ADVANCE and ROUTE events require an order.* target")
+        if not isinstance(target, str) or target not in COMMANDS:
+            errors.append("ADVANCE and ROUTE events require a supported OrderSpec target")
     elif target is not None:
         errors.append("OPERATOR_INPUT, RUNTIME, and COMPLETE events require target=null or omitted")
     severity = data.get("severity")
@@ -202,6 +264,10 @@ def validate_event(data: Any) -> tuple[dict[str, Any] | None, list[str]]:
         value = data.get(field, "")
         if not isinstance(value, str):
             errors.append(f"event.{field} must be a string")
+    if kind in {"ROUTE", "COMPLETE"} and (
+        not isinstance(data.get("evidence"), str) or not data.get("evidence", "").strip()
+    ):
+        errors.append(f"{kind} requires non-empty evidence")
 
     interaction = data.get("interaction")
     if kind == "OPERATOR_INPUT":
@@ -287,12 +353,12 @@ def classify(
     requested_action: str
     basis: str
 
-    if event["kind"] == "COMPLETE":
-        requested_action = "complete"
-        basis = "terminal:complete"
-    elif not config["enabled"]:
+    if not config["enabled"]:
         requested_action = "pause"
         basis = "automation-disabled"
+    elif event["kind"] == "COMPLETE":
+        requested_action = "complete"
+        basis = "terminal:complete"
     else:
         matched_rule = next((rule for rule in config["rules"] if _matches(rule["match"], event)), None)
         if matched_rule is not None:
@@ -315,6 +381,12 @@ def classify(
         if action not in {"pause", "stop"}:
             action = "pause"
             override = "operator input cannot be answered automatically"
+    if action == "auto_route" and event["kind"] not in {"ADVANCE", "ROUTE"}:
+        action = "pause"
+        override = "AUTO_ROUTE is valid only for ADVANCE or ROUTE"
+    if action == "retry" and event["kind"] != "RUNTIME":
+        action = "pause"
+        override = "RETRY is valid only for RUNTIME"
     if event["destructive"] and action not in {"pause", "stop"}:
         action = "pause"
         override = "destructive transition requires operator review"
@@ -400,7 +472,10 @@ def main() -> int:
             return 0
         event = load_valid_event(args.event_file)
         counters = json.loads(args.counters)
-        if not isinstance(counters, dict) or any(not isinstance(value, int) or value < 0 for value in counters.values()):
+        if not isinstance(counters, dict) or any(
+            not isinstance(value, int) or isinstance(value, bool) or value < 0
+            for value in counters.values()
+        ):
             raise ValueError("--counters must be a JSON object of non-negative integers")
         emit({**classify(config, event, counters), "event": event})
         return 0

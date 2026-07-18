@@ -31,6 +31,21 @@ are allowed only inside the resolved task envelope and project constraints.
   repair an unowned input or rewrite a rejected result.
 - Applied `[NEW]` and `[DEL]` transitions are expected work-order state. Never run plan-authoring current-state checks from this command.
 
+### Turn termination contract
+
+For `LOCAL_ALL` and `DELEGATED`, do not end the turn while the latest framework
+payload has `continuation_required: true` or `terminal: false`. `READY`,
+`EXECUTE_TASK`, `EXECUTE_TASK_GROUP`, `DISPATCH`, `READY_TO_VERIFY_AND_MARK`,
+`ATTEMPT_CLEANED`, `CONTINUE`, and pre-validation `COMPLETE` are internal states,
+not user-visible stopping points. Execute `next_action` immediately. A progress
+update such as "ready at T008" is never a final response.
+
+End only after a framework payload has `terminal: true`: `STOP`, `HALTED`,
+`RESET_PREVIEW` awaiting approval, or the result of terminal validation
+(`COMPLETE`/`PHASE_COMPLETE`). The words `continue`, `resume`, and the default
+`LOCAL_ALL` request mean continue through all internal states to one of these
+terminal outcomes.
+
 ## Step 1 — Resolve Context
 
 Run first:
@@ -285,6 +300,10 @@ Obey `action`:
 - `CONTINUE`: return to Step 4 at `first_unchecked`; no completion report.
 - `STOP`: route the deterministic coverage/status defect.
 - `COMPLETE`, `PHASE_COMPLETE`, or `HALTED`: report returned state.
+
+Treat `terminal` and `continuation_required` as authoritative. Never turn an
+internal payload into a completion report, even when the next task is ready and
+no attempt has started yet.
 
 The script owns full-work-order completeness, mechanism coverage, and active
 feature status. Do not repeat or override them manually. A tasks gate report is
