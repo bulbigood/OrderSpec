@@ -242,10 +242,19 @@ Before every upstream route, persist one typed report:
 
 ```bash
 python3 .orderspec/framework/scripts/workflow_feedback.py create \
-  --feature-dir "$FEATURE_DIR" --input-file "$FEEDBACK_INPUT_FILE"
+  --feature-dir "$FEATURE_DIR" --input-file - <<'JSON'
+{"source":"order.code","target":"order.<owner>","category":"<category>","summary":"<summary>","evidence":"<evidence>","location":"<location>","requested_change":"<bounded change>"}
+JSON
 ```
 
 Use the exact observed evidence. Do not claim to invoke the owner command.
+
+Close the active attempt with its original worker result before creating this
+feedback report. A `FAILED`, `BLOCKED`, or `NEEDS_CONTEXT` result is expected to
+make `attempt-finish` return a terminal worker failure; only after that return
+may the coordinator create feedback. Never create feedback input or report files
+during the attempt snapshot. Pass input through standard input as shown.
+Framework bookkeeping must not become an unexpected task write.
 
 ## Step 5 — Terminal Validation
 

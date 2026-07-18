@@ -70,6 +70,11 @@ expect(
     "order.code persists every upstream route",
 )
 expect(
+    code_prompt.index("attempt-finish") < code_prompt.index("Before every upstream route")
+    and "Never create feedback input or report files\nduring the attempt snapshot" in code_prompt,
+    "order.code closes task attempts before writing feedback state",
+)
+expect(
     "code_workflow.py finish" in normalized_code_prompt
     and "return to Step 4" in normalized_code_prompt,
     "order.code deterministically rejects voluntary partial completion",

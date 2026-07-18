@@ -99,16 +99,24 @@ python3 .orderspec/framework/scripts/workflow_feedback.py list \
 
 Determine mode before writing any file. State the mode in chat.
 
+For empty `input.semantic_input` without an explicit control, run:
+
+```bash
+python3 .orderspec/framework/scripts/default_mode.py resolve \
+  --command order.plan --feature-dir "$FEATURE_DIR" \
+  --semantic-input "<input.semantic_input>"
+```
+
+Obey its mode. `GENERATE` creates the absent plan. `RECONCILE` compares the
+existing plan with current spec and repository evidence, then makes the minimum
+required change or reports it already aligned. Empty input never stops merely
+because `plan.md` exists.
+
 1.  **Regenerate** — `plan.md` does not exist, or a standalone `--force` was explicitly supplied and no work-order baseline blocks regeneration.
 2.  **Refine** — active `plan.md` exists and either `input.semantic_input` requests specific changes, the prior `plan-report.md` has a `⛔ BLOCK` or `🔀 ROUTING` finding targeting `/order.plan`, or open workflow feedback targets `order.plan`. A blocking self-gate or open feedback selects Refine even when `input.semantic_input` is empty.
-If `plan.md` already exists, `input.semantic_input` is empty, and no self-gate or workflow feedback selects Refine, STOP:
-
-```text
-PLAN_STOPPED: plan.md already exists
-  - To verify the current plan: /order.plan-check
-  - To regenerate from scratch: /order.plan --force
-  - To apply specific changes: /order.plan "describe the change"
-```
+If `plan.md` exists and the resolver selects `RECONCILE`, use Refine semantics
+while preserving unaffected content. A no-delta result is successful and
+read-only.
 
 If `tasks.md` exists, the derived work order is stale after any plan change.
 Inspect task markers before selecting Regenerate or Refine. Any `[X]` marker
@@ -123,11 +131,18 @@ PLAN_STOPPED: implementation baseline is active
   Continue with /order.code --resume, or describe the actual mapping defect.
 ```
 
-Even a specific mapping defect MUST NOT change `plan.md` while any task is
-`[X]`: changing the plan would invalidate the safe rollback baseline. STOP and
-require `/order.code --reset` first. After reset, refine the plan, then run
-`/order.plan-check`, `/order.tasks --force`, and `/order.tasks-check`. Never absorb
-partial implementation into `[NEW]` to `[MOD]` relabeling.
+Before any plan write while a task is `[X]`, classify the candidate delta:
+
+- no plan delta, or spec-only contract enrichment already covered by the same
+  WHERE/HOW mapping: leave `plan.md` untouched and route to argument-free
+  `/order.tasks`, which may refine only unchecked work;
+- a genuine physical mapping, mechanism, topology, or delivery-strategy change:
+  do not mutate or roll back anything. Ask one blocking question whether the
+  operator wants to preserve partial implementation for an explicit work-order
+  reconciliation, or preview bounded `/order.code --reset` and rebuild. Reset is
+  never inferred or presented as mandatory.
+
+Never absorb partial implementation into `[NEW]` to `[MOD]` relabeling.
 
 If `tasks.md` exists but has no `[X]` markers, Regenerate/Refine may proceed,
 but record that the work order is invalidated. Completion MUST require

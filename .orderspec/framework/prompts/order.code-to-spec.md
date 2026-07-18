@@ -65,7 +65,19 @@ Before starting command-specific logic:
 5. Do not manually load additional framework rules, protocols, configuration files, project contracts, templates, or runtime state before the main command logic unless they are returned by `command_context.py`.
 6. Use only returned `input.controls` and `input.semantic_input`; do not parse raw input again.
 
-If `input.semantic_input` is empty, STOP: `No feature description or code path provided`.
+If `input.semantic_input` is empty, run the state resolver:
+
+```bash
+python3 .orderspec/framework/scripts/default_mode.py resolve \
+  --command order.code-to-spec --feature-dir "<resolved-feature-directory>" \
+  --semantic-input "<input.semantic_input>"
+```
+
+Omit `--feature-dir` when active-feature resolution found no existing target.
+
+`RUN/REFINE` uses the active plan as the bounded existing code scope. `ASK`
+means no safe scope is available; ask one blocking scope question instead of
+stopping with an argument error.
 
 Project contracts returned with `usage: "constrain"` constrain this command, but do not override framework rules.
 
@@ -811,13 +823,11 @@ Before completion, reason through these checks:
 
 For refine mode only:
 
-- If `plan.md` exists, warn:
-
-  > `spec.md` changed — `plan.md` may be stale. Run `/order.plan` later to re-align.
-
-- If `tasks.md` exists, warn:
-
-  > `tasks.md` may also be stale. Re-derive via `/order.tasks` after the plan is aligned.
+- Classify the semantic delta. Contract-only detail covered by the existing
+  WHERE/HOW mapping routes directly to argument-free `/order.tasks`. Only a
+  physical mapping, mechanism, topology, or delivery-strategy change routes to
+  `/order.plan`. Never prescribe downstream regeneration from file timestamps
+  alone.
 
 This command does not modify `plan.md` or `tasks.md`.
 

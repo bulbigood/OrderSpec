@@ -93,7 +93,8 @@ def cmd_create(args: argparse.Namespace) -> int:
     values: dict[str, Any] = {}
     if args.input_file:
         try:
-            loaded = json.loads(Path(args.input_file).read_text(encoding="utf-8"))
+            raw = sys.stdin.read() if args.input_file == "-" else Path(args.input_file).read_text(encoding="utf-8")
+            loaded = json.loads(raw)
         except (OSError, json.JSONDecodeError) as exc:
             emit({"ok": False, "error": f"cannot read feedback input: {exc}"})
             return 2
@@ -194,7 +195,7 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     create = sub.add_parser("create")
     create.add_argument("--feature-dir", required=True)
-    create.add_argument("--input-file", help="read report fields from a JSON object")
+    create.add_argument("--input-file", help="read report fields from a JSON object; use - for stdin")
     create.add_argument("--source", choices=sorted(SOURCES))
     create.add_argument("--target", choices=sorted(TARGETS))
     create.add_argument("--category")

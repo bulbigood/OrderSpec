@@ -11,12 +11,22 @@ ROOT = Path(__file__).resolve().parents[2]
 class SelfGateModeOrderTests(unittest.TestCase):
     def test_plan_and_tasks_read_self_gate_before_refresh(self):
         for command, report, stop_marker in (
-            ("plan", "plan-report.md", "If `plan.md` already exists"),
-            ("tasks", "tasks-report.md", "**Existing/Stop**"),
+            ("plan", "plan-report.md", "If `plan.md` exists and the resolver"),
+            ("tasks", "tasks-report.md", "**Inspect**"),
         ):
             content = (ROOT / "prompts" / f"order.{command}.md").read_text(encoding="utf-8")
             self.assertLess(content.index(f'SELF_REPORT="$FEATURE_DIR/{report}"'), content.index(stop_marker))
             self.assertIn("selects Refine even when `input.semantic_input` is empty", content)
+
+    def test_argument_free_authoring_uses_shared_resolver(self):
+        for command in ("spec", "code-to-spec", "plan", "tasks"):
+            content = (ROOT / "prompts" / f"order.{command}.md").read_text(encoding="utf-8")
+            self.assertIn("default_mode.py resolve", content, command)
+
+        plan = (ROOT / "prompts" / "order.plan.md").read_text(encoding="utf-8")
+        self.assertIn("Reset is\n  never inferred or presented as mandatory", plan)
+        tasks = (ROOT / "prompts" / "order.tasks.md").read_text(encoding="utf-8")
+        self.assertNotIn("**Existing/Stop**", tasks)
 
     def test_spec_selects_mode_after_self_gate_intake(self):
         content = (ROOT / "prompts" / "order.spec.md").read_text(encoding="utf-8")

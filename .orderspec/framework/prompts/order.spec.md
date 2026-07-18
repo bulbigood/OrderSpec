@@ -90,6 +90,23 @@ only after the revised spec passes mechanical validation.
 
 ### Mode selection
 
+For empty `input.semantic_input` without an explicit mode flag, resolve the
+state-based default before selecting a mode:
+
+```bash
+python3 .orderspec/framework/scripts/default_mode.py resolve \
+  --command order.spec --feature-dir "<resolved-feature-directory>" \
+  --semantic-input "<input.semantic_input>"
+```
+
+Omit `--feature-dir` when active-feature resolution found no existing target.
+
+Obey `action`. `RUN/REFINE` selects Refine, including an existing active spec
+with no feedback: audit it against current inputs, make only objectively
+evidenced corrections, and otherwise report it already aligned. `ASK` means no
+active specification exists and a feature description cannot be inferred; ask
+one blocking scope question. Never stop merely because semantic input is empty.
+
 Select the mode only after Self Gate Report Intake above:
 
 - **Create**: `--new`; otherwise no active feature, no substantive active `spec.md`, or a
@@ -99,9 +116,9 @@ Select the mode only after Self Gate Report Intake above:
 - **Refine**: without an explicit mode flag, the request, routed report, or open feedback changes the resolved
   existing contract. When a self-gate finding targets `/order.spec`, select **Refine** even when `input.semantic_input` is empty.
 
-If an active spec exists but the request could reasonably mean either Refine or
-Create, ask one blocking question. If Refine has no requested change, routed
-finding, or open feedback, stop with `No specification change requested`.
+If an active spec exists but non-empty input could reasonably mean either Refine
+or Create, ask one blocking question. Empty input targets the active spec and is
+not ambiguous.
 
 State the selected mode in one line. Do not create directories, write artifacts,
 or update state before this point and all blocking questions are resolved.
@@ -331,6 +348,10 @@ consumed.
 
 Report mode, every mutated feature ID/path, concise semantic changes and affected
 IDs, per-target validation, active-state result, and unresolved routed findings.
-For Refine/Decompose, warn that existing `plan.md` and `tasks.md` may be stale;
-do not modify them. Recommend `/order.spec-check` for every mutated spec before
-planning when independent assurance is required.
+For Refine/Decompose, classify downstream impact instead of blanket-invalidating
+artifacts. Contract-only IDs, acceptance detail, or schema detail that do not
+change WHERE/HOW route directly to argument-free `/order.tasks` for surgical
+refinement of unchecked work. Only a physical mapping, mechanism, topology, or
+delivery-strategy change routes to `/order.plan`. Do not modify downstream
+artifacts here. Recommend `/order.spec-check` when independent assurance is
+required.

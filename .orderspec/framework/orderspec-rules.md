@@ -61,6 +61,17 @@ artifacts MUST NOT be written to the repository root.
 Commands MUST edit only artifacts they own. Gates inspect and route defects;
 they do not repair source artifacts. Script-owned state MUST NOT be hand-edited.
 
+### Argument-free command defaults
+
+An empty command argument is not an error by itself. Commands MUST choose the
+safest obvious mode from explicit controls, open owner feedback, routed gate
+findings, active artifact presence, upstream freshness, and work-order progress,
+in that order. Authoring commands use `default_mode.py` for this state-based
+default. They ask one blocking question only when two materially different
+outcomes remain plausible; they MUST NOT ask the operator to restate an open
+feedback item or select an already-active artifact. Destructive recovery is
+never an inferred default.
+
 ## 4. Artifact metadata and versions
 
 Frontmatter contains only metadata for the current artifact instance. It MUST

@@ -10,8 +10,10 @@ from pathlib import Path
 SCRIPT = Path(__file__).resolve().parents[1] / "workflow_feedback.py"
 
 
-def run(*args: str) -> tuple[int, dict]:
-    result = subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True)
+def run(*args: str, stdin: str | None = None) -> tuple[int, dict]:
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), *args], input=stdin, capture_output=True, text=True
+    )
     return result.returncode, json.loads(result.stdout)
 
 
@@ -52,5 +54,19 @@ with tempfile.TemporaryDirectory(prefix="orderspec-feedback-") as temp:
     )
     rc, created = run("create", "--feature-dir", str(feature), "--input-file", str(input_file))
     assert rc == 0 and created["feedback"]["evidence"].startswith("line one\nline two")
+
+    stdin_payload = {
+        "source": "order.code",
+        "target": "order.spec",
+        "category": "contract_context",
+        "summary": "schema IDs missing",
+        "evidence": "T002 cannot resolve fields",
+        "requested_change": "add stable field contract IDs",
+    }
+    rc, created = run(
+        "create", "--feature-dir", str(feature), "--input-file", "-",
+        stdin=json.dumps(stdin_payload),
+    )
+    assert rc == 0 and created["feedback"]["id"] == "FB-003", created
 
 print("All workflow-feedback tests passed")

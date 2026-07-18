@@ -115,17 +115,23 @@ python3 .orderspec/framework/scripts/workflow_feedback.py list \
 
 Determine mode before writing any file. State the mode in chat.
 
+For empty `input.semantic_input` without an explicit control, run:
+
+```bash
+python3 .orderspec/framework/scripts/default_mode.py resolve \
+  --command order.tasks --feature-dir "$FEATURE_DIR" \
+  --semantic-input "<input.semantic_input>"
+```
+
+Obey its mode. `GENERATE` creates the missing work order. `REFINE` repairs only
+unchecked tasks and their context. `INSPECT` preserves current content, reports
+progress, and succeeds without rewriting. Empty input never stops merely because
+`tasks.md` exists.
+
 1.  **Regenerate** — `tasks.md` is absent, or `input.controls.force` is true. This discards task design only; if any task is `[X]`, STOP and require `/order.code --reset` first.
 2.  **Refine** — active `tasks.md` exists and either `input.semantic_input` requests specific changes, the prior `tasks-report.md` has a `⛔ BLOCK` or `🔀 ROUTING` finding targeting `/order.tasks`, or open workflow feedback targets `order.tasks`. A blocking self-gate or open feedback selects Refine even when `input.semantic_input` is empty.
-3.  **Existing/Stop** — `tasks.md` already exists, `input.semantic_input` is empty, and
-    neither an active self-gate finding nor open feedback selects Refine → STOP:
-
-```text
-TASKS_STOPPED: tasks.md already exists
-  - To verify the current tasks: /order.tasks-check
-  - To regenerate from scratch: /order.tasks --force
-  - To apply specific changes: /order.tasks "describe the change"
-```
+3.  **Inspect** — `tasks.md` exists and neither feedback nor upstream drift
+    requires Refine. Report current progress without rewriting task design.
 
 ### Step 4: Upstream Gate Guard
 
