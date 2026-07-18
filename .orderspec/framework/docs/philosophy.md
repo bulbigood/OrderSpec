@@ -35,6 +35,9 @@ model returns schema-validated evidence for that packet.
   permission.
 - **Stable truth, disposable derivatives.** Specifications survive repository
   movement; plans and tasks can be regenerated at their lifecycle boundaries.
+- **Plans choose; work orders sequence.** Delivery strategy, transitions,
+  mechanisms, evidence topology, and dependencies belong to the plan.
+  `tasks.md` compiles their execution order without adding a second HOW-layer.
 - **No orphans.** Requirements trace forward to implementation and tests;
   implementation paths trace back to contract elements.
 - **Drift is a defect.** Consistency is checked mechanically rather than left
@@ -50,6 +53,12 @@ model returns schema-validated evidence for that packet.
 
 Correctness has priority over token reduction. Documents remain narrow and
 engineer-facing, but do not omit constraints merely to shorten prompts.
+
+For weak models, repetition is not a substitute for determinism. Author
+commands should receive machine-built candidate structure and answer bounded,
+schema-validated semantic questions; scripts should render and validate the
+result. A large prompt that asks the model to reconstruct lifecycle state is a
+transitional implementation, not the target architecture.
 
 ## Comparison with spec-kit and OpenSpec
 

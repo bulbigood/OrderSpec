@@ -996,6 +996,71 @@ if rc == 0:
 else:
     bad("suggest-tasks: documented exclusion test failed", f"rc={rc} err={err[:300]}")
 
+# 31. M38: every pathmanifest transition must have a task
+reset_feature()
+write_spec(MINIMAL_SPEC)
+write_plan("""# Plan
+
+## Physical Project Structure
+
+```pathmanifest
+src/service.py    [NEW]
+src/obsolete.py    [DEL]
+```
+""")
+(SPECS / "tasks.md").write_text("""# Tasks
+
+- [ ] T001 [US1] | src/service.py | REQ-001 | implement service
+""", encoding="utf-8")
+run_trace("extract-spec-ids", F)
+json_data = json.dumps([
+    {"spec_id": "REQ-001", "coverage_kind": "direct", "mechanism": "implement", "primary_files": "src/service.py", "test_type": "unit"}
+])
+run_trace("put-mechanisms", "--json", F, input_text=json_data)
+rc, data = run_validate("tasks")
+if has_finding(data, "M38") and "src/obsolete.py" in finding_msg(data, "M38"):
+    ok("M38 neg: omitted [DEL] transition detected")
+else:
+    bad("M38 neg: omitted [DEL] transition not detected", str(data.get("findings", [])))
+
+# 32. M38: all pathmanifest transitions tasked
+(SPECS / "tasks.md").write_text("""# Tasks
+
+- [ ] T001 [US1] | src/service.py | REQ-001 | implement service
+- [ ] T002 | src/obsolete.py |  | remove plan-declared obsolete path
+""", encoding="utf-8")
+rc, data = run_validate("tasks")
+if not has_finding(data, "M38"):
+    ok("M38 pos: all pathmanifest transitions tasked")
+else:
+    bad("M38 pos: complete task paths falsely rejected", finding_msg(data, "M38"))
+
+# 33. M39: task line must retain the explicit empty refs field
+reset_feature()
+write_spec(MINIMAL_SPEC)
+write_plan("""# Plan
+
+## Physical Project Structure
+
+```pathmanifest
+src/service.py    [NEW]
+```
+""")
+(SPECS / "tasks.md").write_text("""# Tasks
+
+- [ ] T001 [US1] | src/service.py | gloss in field three
+""", encoding="utf-8")
+run_trace("extract-spec-ids", F)
+json_data = json.dumps([
+    {"spec_id": "REQ-001", "coverage_kind": "direct", "mechanism": "implement", "primary_files": "src/service.py", "test_type": "unit"}
+])
+run_trace("put-mechanisms", "--json", F, input_text=json_data)
+rc, data = run_validate("tasks")
+if has_finding(data, "M39"):
+    ok("M39 neg: three-field machine task rejected")
+else:
+    bad("M39 neg: malformed task line not detected", str(data.get("findings", [])))
+
 # ── Cleanup ──────────────────────────────────────────────────────────────────
 
 if WORK.exists():

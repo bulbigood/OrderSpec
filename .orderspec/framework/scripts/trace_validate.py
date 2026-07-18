@@ -27,7 +27,8 @@ DISPOSITION_MAP = {
     "M21": "Route", "M22": "Informational", "M23": "Route", "M24": "Route",
     "M25": "Route", "M28": "Route", "M29": "Route", "M30": "Route",
     "M31": "Route", "M32": "Route", "M33": "Route", "M34": "Route",
-    "M35": "Route", "M36": "Route", "M37": "Route"
+    "M35": "Route", "M36": "Route", "M37": "Route", "M38": "Route",
+    "M39": "Route"
 }
 
 def _load_specids(feature=None):
@@ -366,6 +367,34 @@ def _check_m8(task_paths, plan, add):
     for p in sorted(task_paths):
         if p not in manifest_paths:
             add("M8", "HIGH", "tasks.md", f"Path '{p}' used in tasks.md but not in plan.md manifest")
+
+
+def _check_m38(task_paths, plan, add):
+    """Every planned repository transition must be represented in the work order."""
+    manifest_paths, manifest_errors = _parse_pathmanifest(plan)
+    if manifest_errors:
+        return
+    for path, tag in sorted(manifest_paths.items()):
+        if path not in task_paths:
+            add(
+                "M38",
+                "HIGH",
+                "tasks.md",
+                f"Planned {tag} path '{path}' has no task",
+            )
+
+
+def _check_m39(task_lines, add):
+    """Machine task lines always have four explicit pipe-delimited fields."""
+    for line_num, line in task_lines:
+        if len(line.split(" | ")) != 4:
+            tid = re.search(r"T\d{3}", line)
+            add(
+                "M39",
+                "HIGH",
+                f"tasks.md:{line_num}",
+                f"Task {tid.group(0) if tid else '???'} must contain exactly four pipe-delimited fields",
+            )
 
 
 def _check_m12(task_lines, add):
@@ -935,6 +964,8 @@ def cmd_validate(args):
         _check_m4(task_lines, direct_primary_files, add)
         _check_m5_tasks(task_refs, defined_ids, add)
         _check_m8(task_paths, plan, add)
+        _check_m38(task_paths, plan, add)
+        _check_m39(task_lines, add)
         _check_m12(task_lines, add)
         _check_m14(task_lines, uj_ids, add)
         _check_m7(task_lines, add)

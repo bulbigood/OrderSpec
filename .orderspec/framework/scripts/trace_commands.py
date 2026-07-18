@@ -431,11 +431,16 @@ def cmd_extract_trace(feature):
             tid = f"T{m.group(1)}"
             parts = line.split(" | ")
 
-            if len(parts) < 3:
+            if len(parts) != 4:
+                print(
+                    f"extract-trace: task {tid} must contain exactly four pipe-delimited fields",
+                    file=sys.stderr,
+                )
+                bug = True
                 continue
 
             path = parts[1].strip().lstrip("./")
-            refs_str = parts[2].strip() if len(parts) >= 4 else ""
+            refs_str = parts[2].strip()
 
             if not refs_str:
                 continue

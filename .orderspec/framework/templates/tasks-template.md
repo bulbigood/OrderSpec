@@ -2,21 +2,20 @@
 
 **Input**: `/specs/[###-feature-name]/spec.md` (SDD), `/specs/[###-feature-name]/plan.md`
 
-**Execution Strategy (Expand-Migrate-Contract)**:
+**Execution Strategy (derived from plan.md)**:
 
-1. **Expand**: Add new schemas, models, and contract stubs without breaking existing flows.
-2. **Migrate & Implement**: Build behavior increments grouped by User Stories. Complete and verify P1 (MVP) first.
-3. **Contract**: Remove deprecated code, drop obsolete schema/routes, remove feature flags, finalize.
+1. Migration work order: **Expand → Migrate → Contract** when the plan declares compatibility or cleanup transitions.
+2. Non-migration work order: **Setup → User Stories → Final Verification** with no invented cleanup phase.
 
 **Format (STRICT — pipe-delimited, machine-parsed)**: `- [ ] T### [P?] [US?] | path | refs? | gloss`
 
-- `extract-trace` splits each task line on ` | ` (space-pipe-space). Field 2 is the file path, field 3 is the spec IDs. A line with fewer than 2 separators is non-task prose and contributes NO coverage.
+- `extract-trace` splits each task line on ` | ` (space-pipe-space). Every task has exactly four fields and three separators. Field 2 is the file path; field 3 is the spec IDs.
 - **Path field is a RAW plan.md path — NO backticks, NO markdown.** The tool matches the literal path; backticks make it not match and silently drop coverage.
-- **refs is OPTIONAL.** An infrastructure task (barrel/index registration, route wiring, test fixtures, GATE/verification) carries NO refs and contributes NO coverage — write `... | path |  | gloss` (empty field 3) or omit it. This is LEGAL. The contract is "every DIRECT mechanism is covered by ≥1 task", NOT "every task has a ref". NEVER invent a ref to give a task a home.
+- **refs is optional in meaning, but its field is mandatory.** An infrastructure task (barrel/index registration, route wiring, test fixtures, GATE/verification) uses `... | path |  | gloss`. NEVER invent a ref to give a task a home.
 - **A declared ref MUST be a DIRECT mechanism whose `primary_files` CONTAINS this task's path.** The tool REJECTS (rc=3) any ref attached to a path that does not realize/exercise it (filler / mis-attribution / ID-parking). `documented` IDs and `delegated` (AC) IDs MUST NOT appear as refs (rc=3) — task a delegate's `<ID>` instead.
 - **refs** when present: comma-separated, NO SPACES (`REQ-001,AC-002`), at most **3** per line, no duplicates.
 - **gloss** = ≤15-word paraphrase of the asserted criteria. Free text (never grepped). Name asserted AC/INV here on verification/GATE tasks (not in refs).
-- The `[P]` marker is OPTIONAL: present only when the task is file-disjoint and independent of adjacent marked tasks. Sequential top-to-bottom order is always correct on its own. There are no "waves".
+- The `[P]` marker is absent by default. Add it only when plan evidence establishes that adjacent marked tasks are both file-disjoint and dependency-independent. Sequential top-to-bottom order is always correct on its own.
 - The `[USn]` marker maps 1:1 to UJ-NNN in spec (US1 ↔ UJ-001); present on story-phase tasks only, omitted in Setup/Expand and Contract.
 
 <!--
@@ -76,7 +75,7 @@ line.
 
 ## Execution Order
 
-Phase 1 (Setup & Expand) → Phase 2 (US1 / MVP) → **STOP & VALIDATE** → Phase 3+ (US2..) → **GATE** → Final Phase (Contract).
+[Render the plan-derived order. End with Contract only for a migration work order; otherwise end with Final Verification.]
 
 - Phases are hard sequential barriers; within a phase, execute tasks top-to-bottom.
 - Test tasks within a story phase are written first and MUST fail before their implementation tasks.
@@ -135,25 +134,25 @@ Phase 1 (Setup & Expand) → Phase 2 (US1 / MVP) → **STOP & VALIDATE** → Pha
 
 ---
 
-## Final Phase: Contract (Gate, Cleanup, Hardening)
+## Final Phase: Contract or Final Verification
 
-**Purpose**: Verify everything, then perform irreversible cleanup. **Greenfield rule**: if nothing pre-exists to deprecate, this phase only removes scaffolding/flags and polishes — do NOT invent legacy code to delete.
+**Purpose**: Verify everything. Perform irreversible cleanup only when `plan.md` declares it; otherwise this is a read-only Final Verification phase.
 
 - [ ] T0XX | [test file path from plan.md pathmanifest] |  | GATE: run [test command from plan.md] — verify all AC-* pass, INV-* hold, NFR-* met; STOP on failure (contraction is irreversible). Empty refs — verification asserts, does not realize. Path MUST be a real test file from pathmanifest (not a command) so M8 passes.
-- [ ] T0XX Remove feature flags / scaffolding; delete deprecated code/routes; drop obsolete columns/tables (only if a legacy mechanism is being replaced)
+- [ ] T0XX | [cleanup path from plan.md] |  | remove only plan-declared deprecated mechanism after GATE
 - [ ] T0XX | [relevant path from plan.md pathmanifest] |  | VERIFY: run [lint/typecheck command] without autofix; STOP on failure
-- [ ] T0XX Update technical docs / inline docstrings to match final state
+- [ ] T0XX | [documentation path from plan.md] |  | update plan-declared technical documentation
 
 ---
 
 ## Notes
 
 - Coverage is proven by the tool, never hand-built: `extract-trace` writes `.state/traceability.tsv`. Do NOT author a coverage matrix or a files-touched table here.
-- The `[P]` marker means file-disjoint and independent of adjacent marked tasks; safe to run concurrently OR sequentially. Absence of the marker = run sequentially. No "waves".
+- `[P]` requires explicit plan evidence of file-disjointness and dependency independence. Absence means sequential execution.
 - The `[USn]` marker traces a task to its user story.
 - Each task is self-contained: raw path + spec IDs + ≤15-word gloss, so the implementer need not re-open spec.md.
 - Every test task's own gloss states expected failure before implementation; earlier phases do not pre-implement tested behavior.
 - `GATE:` and `VERIFY:` tasks are read-only and report `changed_files: []`.
-- Commit after each task or logical group. Stop at any checkpoint to validate a story independently.
+- Stop at checkpoints to validate stories independently.
 - A direct ref belongs on the task whose path equals its `primary_files` (the task that realizes/exercises it), never parked on a barrel/verify/GATE task. This is machine-enforced: extract-trace rejects (rc=3) a ref whose primary_files does not contain that task's path. Infra tasks carry EMPTY refs.
 - Avoid: vague tasks, same-file `[P]` conflicts, cross-story dependencies that break independence, retrofitting a mechanism into already-written code, splitting many unrelated REQ/AC into one oversized task just to satisfy coverage.

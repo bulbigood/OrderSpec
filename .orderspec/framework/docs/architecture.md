@@ -42,6 +42,12 @@ execution continues.
 
 Tasks are pure throwaway: generate, execute, discard.
 
+The plan owns the delivery strategy and every repository transition. Task
+generation compiles those decisions into a path-complete sequential work order:
+every `[NEW]`, `[MOD]`, and `[DEL]` manifest path is tasked, and no task path is
+outside the manifest. E-M-C is selected for migration/compatibility work;
+non-migration work ends with Final Verification rather than artificial cleanup.
+
 ## The pipeline
 
 ```text

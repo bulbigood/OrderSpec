@@ -148,7 +148,7 @@ else:
 rc = put_mech(f"REQ-001{TAB}direct{TAB}m{TAB}src/a.js{TAB}unit\n")
 if rc != 0:
     no("put_mech seed", f"rc={rc}")
-write_tasks("""- [ ] T001 [US1] run build, no coverage
+write_tasks("""- [ ] T001 [US1] | src/a.js |  | run build, no coverage
 - [ ] T002 [US1] | src/a.js | REQ-001 | covers it
 """)
 rc, out, err = run_trace("extract-trace", F)
@@ -266,6 +266,20 @@ if rc == 0 and hasrow("REQ-001", "T001", "src/a.js", "tasks.md") and hasrow("REQ
     ok("exactly 3 driving ids → allowed")
 else:
     no("cap-3 boundary", f"rc={rc} :: {TT.read_text() if TT.exists() else 'N/A'}")
+
+# 13. every machine task line has exactly four fields
+rc = put_mech(f"REQ-001{TAB}direct{TAB}m{TAB}src/a.js{TAB}unit\n")
+if rc != 0:
+    no("put_mech seed", f"rc={rc}")
+write_tasks("""- [ ] T001 [US1] | src/a.js | gloss incorrectly occupying field three
+""")
+before = TT.read_text() if TT.exists() else ""
+rc, out, err = run_trace("extract-trace", F)
+after = TT.read_text() if TT.exists() else ""
+if rc != 0 and before == after and "exactly four" in err:
+    ok("three-field task line rejected, trace untouched")
+else:
+    no("four-field format", f"rc={rc} err={err}")
 
 # ── Cleanup ──────────────────────────────────────────────────────────────────
 

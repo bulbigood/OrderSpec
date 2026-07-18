@@ -11,6 +11,17 @@
 
 ---
 
+## Delivery Strategy
+
+| Mode | Evidence | Required Final Phase |
+|------|----------|----------------------|
+| [migration-emc / incremental] | [Compatibility, replacement, feature-flag, schema-contraction, or `[DEL]` evidence; otherwise state no migration transition] | [Contract / Final Verification] |
+
+- `migration-emc` requires plan-declared compatibility or cleanup work and uses Expand → Migrate → Contract.
+- `incremental` uses Setup → User Stories → Final Verification and MUST NOT invent cleanup work.
+
+---
+
 ## Technical Context & Stack Verification
 
 | Item | Verified Value |

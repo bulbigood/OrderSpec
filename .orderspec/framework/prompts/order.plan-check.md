@@ -189,6 +189,15 @@ or "add audit support" do not prove completeness when `spec.md` defines exact
 fields, snapshots, identifiers, response values, or failure behavior. Severity
 is HIGH for P1/MVP paths, MEDIUM otherwise. Escalate to CRITICAL only when the omitted boundary leaves an invariant with a reachable write path unenforced or creates atomicity, security, data-loss, or data-corruption risk.
 
+### P1-015 Delivery Strategy Ownership
+
+Verify that `Delivery Strategy` selects exactly `migration-emc` or
+`incremental`. `migration-emc` requires concrete compatibility, replacement,
+feature-flag, schema-contraction, or `[DEL]` evidence and must end in Contract.
+`incremental` must end in Final Verification and must not invent cleanup work.
+Missing, unsupported, or contradictory strategy evidence → Route to
+`/order.plan` (HIGH for P1/MVP, MEDIUM otherwise).
+
 ### P1-008 Physical Grounding & Naming
 Use focused reconnaissance (hard cap ~10 files: one manifest, route registration, exemplars per touched layer, barrel/index files, test exemplar).
 Verify:

@@ -122,6 +122,20 @@ Plan/work-order baseline rules:
 Execution marker rules:
 
 - `/order.tasks` owns task content, ordering, paths, refs, and phase structure.
+- `/order.plan` owns delivery strategy, path transitions, mechanisms, test
+  topology, and dependency evidence. `/order.tasks` may sequence these decisions
+  but MUST NOT introduce or rewrite them.
+- Every `[NEW]`, `[MOD]`, and `[DEL]` pathmanifest transition MUST appear in at
+  least one task. Deterministic tasks-stage validation enforces both directions:
+  every task path belongs to the manifest and every manifest path is tasked.
+- Every machine task line MUST contain exactly four ` | `-delimited fields:
+  marker/ID, write path, refs, and gloss. A task without refs retains an empty
+  third field.
+- Expand-Migrate-Contract is a delivery strategy for plans with compatibility
+  or cleanup transitions, not a universal phase shape. A non-migration work
+  order ends in Final Verification and MUST NOT invent Contract cleanup.
+- `[P]` is absent by default and requires plan evidence of both path
+  disjointness and dependency independence.
 - `/order.code` owns execution progress for the current run, but MUST change
   only one checkbox at a time through `.orderspec/framework/scripts/task_progress.py`.
 - A worker or coordinator MUST NOT hand-edit `[X]` markers.

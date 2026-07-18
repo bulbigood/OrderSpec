@@ -3,7 +3,7 @@ orderspec:
   artifact: command_prompt
   command: order.tasks-check
   phase: check
-description: Per-stage gate validating tasks.md as a faithful, well-ordered projection of plan.md. The deterministic traceability tool already proves coverage, cap, subset-binding, and ID legality at /order.tasks time. This gate spends LLM context only on semantic checks: faithfulness to plan, E-M-C ordering, test-first discipline, and SC buildability. Pure inspector: writes only tasks-report.md.
+description: Per-stage gate validating tasks.md as a faithful, path-complete, well-ordered projection of plan.md. Deterministic validation proves structure, coverage, path completeness, cap, binding, and ID legality. The LLM judges only semantic faithfulness, dependency order, plan-selected delivery strategy, test-first discipline, and SC buildability. Pure inspector: writes only tasks-report.md.
 ---
 
 # OrderSpec Tasks Check
@@ -18,11 +18,13 @@ It runs after `/order.tasks` and answers: Is `tasks.md` a faithful, well-ordered
 **This gate does NOT re-derive, re-count, or re-judge coverage, cap, subset-binding, or ID-legality.** Its entire value is the semantic layer no script can see:
 
 - **T1 — faithfulness**: does any task invent a decision absent from spec/plan?
-- **T3 — E-M-C ordering**: Expand additive-only; Contract opens with a GATE.
+- **T2 — executable boundaries**: tasks are cohesive and `[P]` is justified.
+- **T3 — delivery ordering**: E-M-C for migration plans; no invented Contract for non-migration plans.
 - **T4 — test-first**: tests precede impl within a story.
 - **T5 — SC buildability**: buildable success criteria have tasks.
 - **T6 — evidence topology**: declared unit/integration evidence has executable test-writing tasks; a generic GATE is not evidence for a direct mechanism.
 - **T7 — upstream reroute**: when the root defect lives in plan/spec, route up.
+- **T8 — prerequisite closure**: worker context and cross-path prerequisites are complete.
 
 This gate is a **pure inspector**. It writes only `tasks-report.md`. It MUST NOT edit `spec.md`, `plan.md`, `tasks.md`, or source code.
 
@@ -89,7 +91,10 @@ python3 .orderspec/framework/scripts/upstream_gate.py \
 Interpret exit codes:
 - **exit 2 (stop)** — upstream artifact (`plan.md`) missing. Write BLOCK report with `T0-005 (HIGH): upstream plan.md missing`, route to `/order.plan`, then stop.
 - **exit 1 (halt)** — plan gate report exists and is non-PASS. Write BLOCK report with `T0-006 (HIGH): upstream plan gate non-PASS (verdict: {verdict})`, route to `/order.plan` then `/order.plan-check`, then stop.
-- **exit 0 (advisory)** — plan gate report absent or stale. Proceed, but record `T0-007 (MEDIUM): plan gate advisory ({reason})`.
+- **exit 0 (advisory)** — plan gate report absent or stale. Proceed and record
+  `T0-007 (MEDIUM, Informational): plan gate advisory ({reason})`. This does not
+  create a routing block or prevent PASS; recommend `/order.plan-check` in the
+  completion response.
 - **exit 0 (ok)** — Proceed.
 - **exit 64 (error)** — invocation error. Write BLOCK report with `T0-008 (MEDIUM): upstream_gate invocation error`, then stop.
 
@@ -117,12 +122,12 @@ python3 .orderspec/framework/scripts/task_contract_context.py validate \
   --feature-dir "$FEATURE_DIR" --json
 ```
 
-If this exits non-zero, import one blocking finding:
+If `task_context.py validate` exits non-zero, import one blocking finding:
 `T0-009: task context whitelist invalid`, include the script's exact validation
 errors, assign HIGH when affected context belongs to P1/MVP and MEDIUM otherwise,
 route to `/order.tasks`, and stop semantic inspection.
 
-If contract-context validation exits non-zero, import one blocking finding:
+If `task_contract_context.py validate` exits non-zero, import one blocking finding:
 `T0-010: task contract context invalid`, include the script's exact errors,
 assign HIGH when affected context belongs to P1/MVP and MEDIUM otherwise, and
 route an undefined spec ID to `/order.spec` or a missing phase context to
@@ -145,7 +150,9 @@ tasks. Do not route such tasks merely because they carry `[USn]`.
 ## Semantic Inspection
 
 Read `tasks.md`, `plan.md`, and `spec.md`. Perform the following checks that require LLM judgment.
-For any finding, assign disposition `Route` and create a routing block.
+For every semantic T1–T8 finding, assign disposition `Route` and create a
+routing block. Preserve each mechanical/T0 disposition exactly; informational
+advisories do not receive routing blocks.
 
 Semantic findings (T1-xxx through T8-xxx) must be integrated into the report's Findings table alongside mechanical findings. Each semantic finding gets its own row with:
 - `ID`: T{n}-NNN (prefix by pass)
@@ -164,12 +171,23 @@ Semantic findings (T1-xxx through T8-xxx) must be integrated into the report's F
 
 - **T2a**: A task whose description bundles **unrelated** work sharing no coherent behavior (genuine grab-bag), such that `/order.code` cannot execute it as one discrete step → **Route** (MEDIUM). Do NOT raise this merely because a task lists several refs — that is legal and capped.
 - **T2b**: A TEST task legitimately exercising one coherent multi-AC flow is NOT a defect. Flag only a test task bundling genuinely unrelated scenarios: MEDIUM when the bundle prevents discrete execution or diagnosis; LOW only when it is an organizational defect with no implementation or orchestration impact.
+- **T2c**: `[P]` is valid only when `plan.md` provides evidence that the adjacent
+  marked tasks are both file-disjoint and dependency-independent. Missing plan
+  evidence or a dependency between marked tasks → Route to `/order.tasks`
+  (MEDIUM). Do not infer safety from different paths alone.
 
-### T3. E-M-C Ordering
+### T3. Plan-Selected Delivery Ordering
 
-- **T3a**: Phase 1 (Expand) tasks are **additive only** (read descriptions). A destructive step in Expand → **Route** to `/order.tasks` (HIGH if MVP/P1, MEDIUM otherwise). Escalate to CRITICAL only when the step creates an atomicity, security, data-loss, data-corruption, or unenforced-invariant risk.
+- **T3a**: When the plan declares migration/compatibility/cleanup work, Phase 1
+  (Expand) is additive only. A destructive step in Expand → Route to
+  `/order.tasks`. A non-migration plan MUST NOT acquire an invented cleanup or
+  Contract phase. Assign HIGH for P1/MVP and MEDIUM otherwise; use CRITICAL only
+  for the risks defined by the Severity Model.
 - **T3b**: Story phases follow UJ priority order from spec (P1 before P2). Out-of-order phases → **Route** to `/order.tasks` (HIGH if P1 ordering is affected, MEDIUM otherwise).
-- **T3c**: The Contract phase begins with a GATE task; no destructive task precedes it. Missing GATE or a destructive task before it → **Route** to `/order.tasks` (HIGH for P1/MVP, MEDIUM otherwise). Escalate to CRITICAL only when the ordering creates an atomicity, security, data-loss, data-corruption, or unenforced-invariant risk.
+- **T3c**: If a Contract phase is required by the plan, it begins with a GATE
+  task and no destructive task precedes it. A non-migration work order instead
+  ends with read-only Final Verification. Missing GATE, destructive work before
+  it, or invented cleanup → Route to `/order.tasks` (HIGH for P1/MVP, MEDIUM otherwise).
 
 ### T4. Test-First Discipline
 
@@ -244,7 +262,7 @@ You MUST fill this template file in place. Do not invent report sections, table 
 **Body Section Variables** — map from `traceability.py validate --stage tasks` JSON:
 - `{gate_title}`: `Tasks Check`
 - `{target_doc}`: `tasks.md`
-- `{gate_focus}`: `ordering, faithfulness, test-first discipline`
+- `{gate_focus}`: `path completeness, ordering, faithfulness, test-first discipline`
 - `{routing_blocks}`: insert routing blocks for all findings with disposition `Route`
 - `{deferred_rows}`: `(none)` — tasks-check defers nothing
 - `{findings_rows}`: combine mechanical findings (from `findings` array) with semantic findings (T1-T8). Each row: `| ID | Source | Severity | Disposition | Location | Summary |`
@@ -298,3 +316,4 @@ After writing the report, respond in chat with:
 - Manual/orchestrator next action:
   - PASS → human or orchestrator may start `/order.code`
   - ROUTING_REQUIRED/BLOCK → human or orchestrator may run routed `/order.tasks` and/or `/order.plan`/`/order.spec` request(s), then rerun `/order.tasks-check`
+  - Plan gate advisory → additionally recommend `/order.plan-check`; do not route it through an artifact-author command

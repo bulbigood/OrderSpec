@@ -140,6 +140,24 @@ expect(
     "order.tasks makes final command verification explicitly read-only",
 )
 expect(
+    "exactly four fields" in tasks_prompt
+    and "never omitted as a field" in tasks_prompt,
+    "order.tasks defines one unambiguous four-field task format",
+)
+expect(
+    "every `[NEW]`, `[MOD]`, and `[DEL]` path" in tasks_prompt
+    and "Planned {tag} path" in (FRAMEWORK / "scripts" / "trace_validate.py").read_text(encoding="utf-8"),
+    "order.tasks and mechanical validation require pathmanifest completeness",
+)
+expect(
+    "never modify\nplan-owned state from `/order.tasks`" in tasks_prompt,
+    "order.tasks routes mechanisms and mapping defects to the plan owner",
+)
+expect(
+    "Commit after each task" not in tasks_template,
+    "tasks template contains no implicit version-control side effect",
+)
+expect(
     "then `render`" not in tasks_prompt
     and "`render` produces" not in tasks_prompt,
     "order.tasks does not invoke removed traceability render command",

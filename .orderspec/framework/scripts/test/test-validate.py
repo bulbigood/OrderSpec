@@ -323,6 +323,7 @@ put_mechanisms(
     f"REQ-001{TAB}direct{TAB}login model{TAB}src/models/user.py{TAB}unit",
 )
 (SPECS / "tasks.md").write_text("""- [X] T001 [US1] | src/models/user.py | REQ-001 | user model
+- [X] T002 [US1] | tests/unit/user.test.py |  | unit evidence path
 """)
 rc, out, err = run_trace("validate", "--stage", "tasks", F)
 if rc == 0 and "M10" not in out:
@@ -457,6 +458,7 @@ put_mechanisms(
 )
 (SPECS / "tasks.md").write_text("""- [ ] T001 [US1] | src/models/user.py | REQ-001 | user model
 - [ ] T003 [US1] | src/models/user.py | REQ-001 | another task
+- [ ] T005 [US1] | tests/unit/user.test.py |  | unit evidence path
 """)
 rc, out, err = run_trace("validate", "--stage", "tasks", F)
 if rc == 0 and "M7" not in out:

@@ -248,6 +248,12 @@ Rewrite `$IMPL_PLAN` (which was initialized from `plan-template.md` in Step 7).
 **Before filling sections:** Replace `[DATE]` in the template header with today's date in `YYYY-MM-DD` format (use the current date from system context).
 
 1.  **Summary:** 2–4 sentences of technical approach only. Do not restate `spec.md` Executive Summary.
+1a. **Delivery Strategy:** Select exactly `migration-emc` or `incremental`.
+    Use `migration-emc` only when the plan contains compatibility, replacement,
+    feature-flag, schema-contraction, or `[DEL]` work; cite that evidence and set
+    the final phase to `Contract`. Otherwise select `incremental` and set the
+    final phase to `Final Verification`. This decision is plan-owned and binds
+    `/order.tasks`.
 2.  **Technical Context & Stack Verification:** Fill the table with verified facts only.
     *   **Verified Against**: List the specific files you read during reconnaissance that influenced your decisions.
     *   If a fact cannot be verified, write "No [item] found in inspected manifests". Do not write vague text.
@@ -433,6 +439,7 @@ Report to chat:
 -   `FEATURE_DIR`
 -   Constitution status summary
 -   `[NEW]` / `[MOD]` / `[DEL]` file counts
+-   Delivery strategy (`migration-emc` or `incremental`) and its plan evidence
 -   Mechanism matrix result (row counts from `summarize-mechanisms --json`)
 -   Validation result (`validate --stage plan`)
 -   **Manual/orchestrator next step:** Run `/order.plan-check` to verify the plan before starting `/order.tasks`
@@ -456,6 +463,7 @@ Report to chat:
 - [ ] Mechanism Evidence & Runtime Closure completed; runtime prerequisites have repository evidence and explicit operational scope
 - [ ] Every path needed to establish a selected runtime prerequisite appears in the pathmanifest
 - [ ] `pathmanifest` uses `[MOD]` for seen files, `[NEW]` for created, `[DEL]` for deleted
+- [ ] Delivery Strategy selects exactly `migration-emc` or `incremental`, cites plan evidence, and declares the matching final phase
 - [ ] Mechanism rows emitted via `put-mechanisms` using templates; Mechanism Matrix section retains its structure, has no Markdown mechanism table, and contains no unresolved placeholders
 - [ ] `traceability.py lint` and `check-mechanisms` pass
 - [ ] `validate --stage plan` has no blocking findings

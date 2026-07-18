@@ -27,6 +27,19 @@ class TasksCheckPromptTests(unittest.TestCase):
     def test_verdict_covers_every_routed_high(self):
         self.assertIn("| BLOCK | any routed CRITICAL/HIGH;", PROMPT)
 
+    def test_semantic_scope_includes_granularity_and_prerequisites(self):
+        self.assertIn("T2 — executable boundaries", PROMPT)
+        self.assertIn("T8 — prerequisite closure", PROMPT)
+        self.assertIn("T2c", PROMPT)
+
+    def test_plan_advisory_is_informational(self):
+        self.assertIn("T0-007 (MEDIUM, Informational)", PROMPT)
+        self.assertIn("recommend `/order.plan-check`", PROMPT)
+
+    def test_delivery_strategy_is_plan_selected(self):
+        self.assertIn("Plan-Selected Delivery Ordering", PROMPT)
+        self.assertIn("non-migration plan MUST NOT", PROMPT)
+
 
 if __name__ == "__main__":
     unittest.main()
