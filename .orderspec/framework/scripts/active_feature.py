@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Manage the canonical active-feature selection and lifecycle state."""
+
 from __future__ import annotations
 
 import argparse

@@ -75,6 +75,9 @@ reviewing the bounded rollback.
 
 ## Regression tests
 
+The purpose of every Python module and test, the size audit, and the proposed
+decomposition are indexed in the [script and test catalog](script-test-catalog.md).
+
 The master runner recursively discovers `test-*.py`, `test_*.py`, and
 `*_test.py` under `.orderspec/framework/scripts/test/`, applies a per-test
 timeout, reports progress, and exits non-zero on failure:

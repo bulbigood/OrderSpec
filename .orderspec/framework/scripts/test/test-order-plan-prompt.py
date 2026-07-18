@@ -1,3 +1,5 @@
+"""Contract tests for structure and guidance in the order.plan prompts."""
+
 import unittest
 import os
 

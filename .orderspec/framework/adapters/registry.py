@@ -1,3 +1,5 @@
+"""Registry and lookup helpers for all supported agent adapters."""
+
 from .kilocode import KiloCodeAdapter
 from .claude_code import ClaudeCodeAdapter
 from .codex import CodexAdapter

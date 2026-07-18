@@ -1,3 +1,5 @@
+"""Claude Code detection, prompt synchronization, and worker configuration."""
+
 import os
 import hashlib
 import shutil

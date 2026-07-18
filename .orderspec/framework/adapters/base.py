@@ -1,3 +1,5 @@
+"""Shared adapter metadata and abstract synchronization interface."""
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, asdict
 from typing import Optional, Dict, Any, List

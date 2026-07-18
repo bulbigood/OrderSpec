@@ -1,3 +1,5 @@
+"""Codex detection, prompt synchronization, and worker configuration."""
+
 import hashlib
 import json
 import os

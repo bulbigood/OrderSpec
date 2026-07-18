@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+"""Inspect, generate, migrate, and validate deterministic project contracts."""
+
 from __future__ import annotations
 
 import argparse
