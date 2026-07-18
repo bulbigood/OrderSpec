@@ -127,6 +127,13 @@
       "usage": "parse",
       "authority": "framework"
     },
+    "schema.active_feature_state": {
+      "path": ".orderspec/framework/schemas/active-feature-state.schema.json",
+      "kind": "schema",
+      "reason": "canonical active feature runtime state",
+      "usage": "parse",
+      "authority": "framework"
+    },
     "schema.task_context": {
       "path": ".orderspec/framework/schemas/task-context.schema.json",
       "kind": "schema",
@@ -224,9 +231,13 @@
         }
       ],
       "required": [
-        {
-          "ref": "schema.bootstrap_state"
-        }
+        {"ref": "schema.bootstrap_state"},
+        {"ref": "schema.active_feature_state"}
+      ]
+    },
+    "order.feature": {
+      "required": [
+        {"ref": "schema.active_feature_state"}
       ]
     },
     "order.spec": {

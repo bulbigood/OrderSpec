@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -1190,8 +1191,40 @@ def complete_command(args: argparse.Namespace) -> int:
     if errors:
         print(json.dumps({"ok": False, "validation_errors": errors}, indent=2, ensure_ascii=False))
         return 1
+    active_process = subprocess.run(
+        [
+            sys.executable,
+            str(Path(__file__).resolve().parent / "active_feature.py"),
+            "init",
+            "--last-command",
+            "order.bootstrap",
+            "--json",
+        ],
+        text=True,
+        capture_output=True,
+    )
+    try:
+        active_state = json.loads(active_process.stdout)
+    except json.JSONDecodeError:
+        active_state = {
+            "ok": False,
+            "error": "active_feature_initialization_failed",
+            "details": active_process.stderr or active_process.stdout,
+        }
+    if active_process.returncode != 0 or not active_state.get("ok"):
+        print(json.dumps({
+            "ok": False,
+            "validation_errors": ["active-feature.json initialization failed"],
+            "active_feature": active_state,
+        }, indent=2, ensure_ascii=False))
+        return active_process.returncode or 1
     state = write_bootstrap_state()
-    print(json.dumps({"ok": True, "state_file": str(BOOTSTRAP_STATE_PATH), "state": state}, indent=2, ensure_ascii=False))
+    print(json.dumps({
+        "ok": True,
+        "state_file": str(BOOTSTRAP_STATE_PATH),
+        "state": state,
+        "active_feature": active_state,
+    }, indent=2, ensure_ascii=False))
     return 0
 
 

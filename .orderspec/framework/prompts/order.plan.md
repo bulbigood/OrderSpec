@@ -53,12 +53,14 @@ Follow these steps in exact order. Do not skip steps.
 Resolve and load all required context files.
 
 ```bash
-python3 .orderspec/framework/scripts/command_context.py resolve order.plan --json
+python3 .orderspec/framework/scripts/command_context.py resolve order.plan \
+  --arguments "$ARGUMENTS" --json
 ```
 
 1.  If `ok` is `false` or `missing_required` is non-empty, STOP and report the missing context.
 2.  Read every file returned in `to_read`, in returned order.
 3.  Interpret each file according to its `usage` field (`apply`, `constrain`, `parse`, `inspect`, `reference`).
+4.  Use only returned `input.controls` and `input.semantic_input`; do not parse raw input again.
 
 ### Step 2: Path Resolution
 
@@ -71,7 +73,7 @@ eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 If this fails because no active feature directory can be resolved, STOP:
 ```text
 PLAN_STOPPED: no active feature
-  1. Create/select a feature with /order.spec
+  1. Create one with /order.spec, or select one with /order.feature --select
   2. Then run /order.plan
 ```
 
@@ -98,8 +100,8 @@ python3 .orderspec/framework/scripts/workflow_feedback.py list \
 Determine mode before writing any file. State the mode in chat.
 
 1.  **Regenerate** — `plan.md` does not exist, or a standalone `--force` was explicitly supplied and no work-order baseline blocks regeneration.
-2.  **Refine** — active `plan.md` exists and either `$ARGUMENTS` requests specific changes, the prior `plan-report.md` has a `⛔ BLOCK` or `🔀 ROUTING` finding targeting `/order.plan`, or open workflow feedback targets `order.plan`. A blocking self-gate or open feedback selects Refine even when `$ARGUMENTS` is empty.
-If `plan.md` already exists, `$ARGUMENTS` is empty, and no self-gate or workflow feedback selects Refine, STOP:
+2.  **Refine** — active `plan.md` exists and either `input.semantic_input` requests specific changes, the prior `plan-report.md` has a `⛔ BLOCK` or `🔀 ROUTING` finding targeting `/order.plan`, or open workflow feedback targets `order.plan`. A blocking self-gate or open feedback selects Refine even when `input.semantic_input` is empty.
+If `plan.md` already exists, `input.semantic_input` is empty, and no self-gate or workflow feedback selects Refine, STOP:
 
 ```text
 PLAN_STOPPED: plan.md already exists
@@ -139,7 +141,8 @@ Check the upstream spec gate.
 ```bash
 eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 
-FORCE_FLAG="$(python3 -c 'import shlex,sys; print("--force" if "--force" in shlex.split(sys.argv[1]) else "")' "$ARGUMENTS")"
+Set `FORCE_FLAG=--force` only when `input.controls.force` is true; otherwise
+leave it empty.
 
 python3 .orderspec/framework/scripts/upstream_gate.py \
   --report        "$FEATURE_DIR/spec-report.md" \
@@ -166,9 +169,9 @@ Interpret the JSON `status` field and exit code:
 Use self-gate result read in Step 3. Do not perform a second check.
 
 -   **ABSENT** → Proceed.
--   **PRESENT (✅ PASS)** → Ignore report; proceed with `$ARGUMENTS`.
--   **PRESENT (`CONSUMED_STALE`)** → Previous verdict is inactive. Proceed with `$ARGUMENTS`; a fresh `/order.plan-check` is required for new PASS evidence.
--   **PRESENT (⛔ BLOCK / 🔀 ROUTING)** → This is your fix-list. Address every finding targeting `/order.plan`. Route findings for other commands. Treat `$ARGUMENTS` as additional guidance, not a replacement.
+-   **PRESENT (✅ PASS)** → Ignore report; proceed with `input.semantic_input`.
+-   **PRESENT (`CONSUMED_STALE`)** → Previous verdict is inactive. Proceed with `input.semantic_input`; a fresh `/order.plan-check` is required for new PASS evidence.
+-   **PRESENT (⛔ BLOCK / 🔀 ROUTING)** → This is your fix-list. Address every finding targeting `/order.plan`. Route findings for other commands. Treat `input.semantic_input` as additional guidance, not a replacement.
 
 Treat every open `order.plan` workflow feedback item loaded in Step 3 as an
 additional mandatory fix-list item. Do not consume it yet.
@@ -385,9 +388,8 @@ Blocking findings (`severity: HIGH` or `CRITICAL`) must be fixed. Fix the data i
 ```bash
 eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 
-python3 .orderspec/framework/scripts/active_feature.py set \
+python3 .orderspec/framework/scripts/active_feature.py status \
   --feature-id "$FEATURE_ID" \
-  --feature-directory "$FEATURE_DIR_REL" \
   --status planned \
   --last-command order.plan \
   --json

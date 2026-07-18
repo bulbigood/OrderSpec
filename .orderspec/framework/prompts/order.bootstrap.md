@@ -38,18 +38,22 @@ change. Natural-language user input alone selects Amend, never Targeted Amend.
 Before any other probe or mutation:
 
 ```bash
-python3 .orderspec/framework/scripts/command_context.py resolve order.bootstrap --json
+python3 .orderspec/framework/scripts/command_context.py resolve order.bootstrap \
+  --arguments "$ARGUMENTS" --json
 ```
 
 STOP if resolution fails or required context is missing. Consume every
 `to_read` item in order according to `usage` and `authority`. Do not manually
 enumerate additional framework context.
 
+Use only returned `input.controls` and `input.semantic_input`. Do not parse raw
+input again.
+
 Then run the deterministic mode/phase router:
 
 ```bash
 python3 .orderspec/framework/scripts/bootstrap_workflow.py inspect \
-  --arguments="$ARGUMENTS"
+  --arguments="<input.semantic_input>"
 ```
 
 For an explicit targeted invocation, omit `--arguments` and pass the envelope:
@@ -335,6 +339,8 @@ python3 .orderspec/framework/scripts/bootstrap_contracts.py complete --json
 ```
 
 Completion writes the framework/project/tooling evidence baseline atomically.
+It also initializes missing `.orderspec/state/active-feature.json` as inactive
+and preserves any valid existing selection.
 Report mode, contract changes, constitution decisions, agent sync, tooling,
 external-rule integration, unresolved decisions, and downstream impact.
 
@@ -354,3 +360,4 @@ external-rule integration, unresolved decisions, and downstream impact.
   command scope, canonical destination, and enabled-agent exposure;
 - external rules were ignored or operator-approved and routed by owner;
 - top-level run updated bootstrap baseline only after all validation succeeded.
+- canonical active-feature state exists and validates.

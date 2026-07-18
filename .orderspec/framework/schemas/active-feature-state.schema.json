@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "orderspec://schemas/active-feature-state.schema.json",
+  "title": "OrderSpec Active Feature State",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "active",
+    "feature_id",
+    "feature_directory",
+    "spec_file",
+    "plan_file",
+    "tasks_file",
+    "status",
+    "last_command",
+    "updated_at"
+  ],
+  "properties": {
+    "version": {"const": 1},
+    "active": {"type": "boolean"},
+    "feature_id": {
+      "type": ["string", "null"],
+      "pattern": "^FEAT-[0-9]{3}-[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "feature_directory": {"type": ["string", "null"]},
+    "spec_file": {"type": ["string", "null"]},
+    "plan_file": {"type": ["string", "null"]},
+    "tasks_file": {"type": ["string", "null"]},
+    "status": {
+      "enum": [
+        "unknown",
+        "specified",
+        "planned",
+        "tasks",
+        "implementing",
+        "implemented",
+        "verified",
+        "done",
+        "blocked"
+      ]
+    },
+    "last_command": {"type": ["string", "null"]},
+    "updated_at": {"type": "string", "format": "date-time"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"active": {"const": true}}},
+      "then": {
+        "properties": {
+          "feature_id": {"type": "string"},
+          "feature_directory": {"type": "string", "minLength": 1}
+        }
+      },
+      "else": {
+        "properties": {
+          "feature_id": {"const": null},
+          "feature_directory": {"const": null},
+          "spec_file": {"const": null},
+          "plan_file": {"const": null},
+          "tasks_file": {"const": null},
+          "status": {"const": "unknown"}
+        }
+      }
+    }
+  ]
+}

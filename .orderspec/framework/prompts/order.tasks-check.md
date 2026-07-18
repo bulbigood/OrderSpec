@@ -8,6 +8,16 @@ description: Per-stage gate validating tasks.md as a faithful, path-complete, we
 
 # OrderSpec Tasks Check
 
+## User Input
+
+```text
+$ARGUMENTS
+```
+
+This gate always targets active feature. Unflagged text is semantic inspection
+guidance: it may add attention but never narrow required checks or change
+target. No controls are supported.
+
 ## Role
 
 `/order.tasks-check` is the independent inspection gate for `tasks.md`.
@@ -49,6 +59,7 @@ A terminal precondition can require a BLOCK report and stop the command independ
 2. If `ok` is `false` or `missing_required` is non-empty, treat this as the terminal precondition `T0-011 (MEDIUM): command context unavailable` and STOP. If a report target can be resolved safely from the available context, write a BLOCK report; otherwise report the finding in chat.
 3. Read every file returned in `to_read`, in returned order.
 4. Interpret each file by `usage`.
+5. Use only resolver-parsed semantic input; do not parse raw input again.
 
 ## Target Feature Resolution
 

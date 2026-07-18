@@ -158,19 +158,11 @@ def assert_rc(expected, actual, name, out="", err=""):
 
 # ── Tests ────────────────────────────────────────────────────────────────────
 
-# 1. paths --json resolves from SPECIFY_FEATURE_DIRECTORY and is read-only
+# 1. paths rejects missing canonical active-feature state and stays read-only
 reset_repo()
 env = {"SPECIFY_FEATURE_DIRECTORY": "specs/F"}
 rc, out, err = run_setup("paths", "--json", env=env)
-assert_rc(0, rc, "paths --json resolves explicit feature dir", out, err)
-data = parse_json_stdout(out)
-assert_true(data["FEATURE_DIR"].endswith("specs/F"), "paths returns FEATURE_DIR")
-assert_true("FEATURE_DIR_REL" in data, "paths returns FEATURE_DIR_REL key")
-assert_true(data["FEATURE_DIR_REL"] == "specs/F", "paths FEATURE_DIR_REL is relative path")
-assert_true(not data["FEATURE_DIR_REL"].startswith("/"), "paths FEATURE_DIR_REL does not start with /")
-assert_true(data["FEATURE_SPEC"].endswith("specs/F/spec.md"), "paths returns FEATURE_SPEC")
-assert_true(data["IMPL_PLAN"].endswith("specs/F/plan.md"), "paths returns IMPL_PLAN")
-assert_true(data["REPO_ROOT"] == str(WORK.resolve()), "paths returns REPO_ROOT")
+assert_rc(2, rc, "paths ignores ambient feature override without active state", out, err)
 assert_true(not (WORK / "specs" / "F").exists(), "paths is read-only and does not create feature dir")
 assert_true(
     not (WORK / ".orderspec" / "state" / "active-feature.json").exists(),
@@ -221,22 +213,23 @@ rc, out, err = run_setup("plan", "--json")
 assert_rc(0, rc, "plan with override exits zero", out, err)
 assert_true((fdir / "plan.md").read_text(encoding="utf-8") == "OVERRIDE PLAN TEMPLATE\n", "override plan-template wins")
 
-# 7. relative SPECIFY_FEATURE_DIRECTORY is resolved under repo root and persisted
+# 7. ambient SPECIFY_FEATURE_DIRECTORY cannot override canonical active state
 reset_repo()
+active_dir = make_feature("specs/F", spec=True, plan=False)
 env = {"SPECIFY_FEATURE_DIRECTORY": "features/custom-F"}
 fdir = WORK / "features" / "custom-F"
 fdir.mkdir(parents=True, exist_ok=True)
 (fdir / "spec.md").write_text("# Spec\n- **REQ-001**: System MUST work\n", encoding="utf-8")
 rc, out, err = run_setup("plan", "--json", env=env)
-assert_rc(0, rc, "relative SPECIFY_FEATURE_DIRECTORY works", out, err)
+assert_rc(0, rc, "ambient feature override is ignored", out, err)
 data = parse_json_stdout(out)
-assert_true(data["FEATURE_DIR"] == str(fdir.resolve()), "relative feature dir resolved under repo root")
-assert_true("FEATURE_DIR_REL" in data, "relative SPECIFY_FEATURE_DIRECTORY returns FEATURE_DIR_REL key")
-assert_true(data["FEATURE_DIR_REL"] == "features/custom-F", "FEATURE_DIR_REL matches input relative path")
+assert_true(data["FEATURE_DIR"] == str(active_dir.resolve()), "canonical active feature remains target")
+assert_true(data["FEATURE_DIR_REL"] == "specs/F", "FEATURE_DIR_REL comes from active state")
+assert_true(not (fdir / "plan.md").exists(), "ambient override target is untouched")
 state = json.loads((WORK / ".orderspec" / "state" / "active-feature.json").read_text(encoding="utf-8"))
 assert_true(
-    state["feature_directory"] == "features/custom-F",
-    "relative feature dir persisted to active-feature state",
+    state["feature_directory"] == "specs/F",
+    "active-feature state is unchanged",
 )
 
 # 8. active-feature state fallback works when env var is absent

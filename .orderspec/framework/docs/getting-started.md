@@ -49,6 +49,7 @@ Bootstrap creates or refines:
 .orderspec/config/tooling.json
 .orderspec/state/tooling-detection.json
 .orderspec/state/agents.json
+.orderspec/state/active-feature.json
 ```
 
 It also detects agents and tooling, synchronizes enabled agents, derives
@@ -73,6 +74,16 @@ Run the authoring pipeline in order:
 In Codex, use `$order-spec`, `$order-plan`, `$order-tasks`, and `$order-code`.
 Each command resolves the active feature and its required inputs through
 command context.
+
+Switch between existing features explicitly; other commands never infer a
+selection from prose:
+
+```text
+/order.feature --select FEAT-002-billing
+```
+
+Run `/order.feature` without controls to inspect current selection and list
+available features.
 
 Run verification gates at the boundary where feedback is most useful:
 

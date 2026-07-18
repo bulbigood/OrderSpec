@@ -143,14 +143,13 @@ else:
     bad(f"active_feature.py py_compile fails :: {compile_proc.stderr or compile_proc.stdout}")
 
 
-# 2. missing state validates as inactive
+# 2. missing state validation fails and routes to bootstrap
 root = fresh_work("missing-state")
-rc, data, err = assert_ok_json(root, "missing state validates as inactive", "validate", "--json")
-state = data.get("state", {})
-if data.get("active") is False and state.get("status") == "unknown":
-    ok("missing state normalized to inactive unknown")
+rc, data, err = run_json(root, "validate", "--json")
+if rc != 0 and any("run /order.bootstrap" in item for item in data.get("validation_errors", [])):
+    ok("missing state validation routes to bootstrap")
 else:
-    bad(f"missing state normalization wrong :: {data!r}")
+    bad(f"missing state validation wrong :: rc={rc} data={data!r} err={err!r}")
 
 
 # 3. clear writes canonical inactive state
@@ -339,6 +338,7 @@ rc, data, err = assert_ok_json(
     root,
     "select by FEAT feature_id succeeds",
     "select",
+    "--feature",
     "FEAT-001-user-auth",
     "--last-command",
     "order.spec",
@@ -362,6 +362,7 @@ rc, data, err = assert_ok_json(
     root,
     "select by directory basename succeeds",
     "select",
+    "--feature",
     "001-user-auth",
     "--last-command",
     "order.spec",
@@ -458,6 +459,7 @@ rc, data, err = assert_ok_json(
     root,
     "select by feature directory path succeeds",
     "select",
+    "--feature",
     ".orderspec/features/001-user-auth",
     "--last-command",
     "order.spec",
@@ -476,6 +478,7 @@ rc, data, err = assert_ok_json(
     root,
     "select by short numeric prefix succeeds",
     "select",
+    "--feature",
     "001",
     "--last-command",
     "order.spec",
@@ -491,7 +494,7 @@ else:
 root = fresh_work("ambiguous-prefix")
 write_spec(root, ".orderspec/features/003-alpha", feature_id="FEAT-003-alpha", slug="alpha")
 write_spec(root, ".orderspec/features/003-beta", feature_id="FEAT-003-beta", slug="beta")
-rc, data, err = run_json(root, "select", "003", "--json")
+rc, data, err = run_json(root, "select", "--feature", "003", "--json")
 if rc != 0 and data.get("error") == "ambiguous_feature" and len(data.get("matches", [])) == 2:
     ok("ambiguous short prefix rejected")
 else:
@@ -515,7 +518,7 @@ else:
 # 22. status inference: spec only => specified
 root = fresh_work("status-specified")
 write_spec(root, ".orderspec/features/001-alpha", feature_id="FEAT-001-alpha", slug="alpha")
-rc, data, err = assert_ok_json(root, "status specified select succeeds", "select", "001-alpha", "--json")
+rc, data, err = assert_ok_json(root, "status specified select succeeds", "select", "--feature", "001-alpha", "--json")
 if data.get("state", {}).get("status") == "specified":
     ok("status inference spec only => specified")
 else:
@@ -526,7 +529,7 @@ else:
 root = fresh_work("status-planned")
 write_spec(root, ".orderspec/features/001-alpha", feature_id="FEAT-001-alpha", slug="alpha")
 write_file(root, ".orderspec/features/001-alpha/plan.md", "# Plan\n")
-rc, data, err = assert_ok_json(root, "status planned select succeeds", "select", "001-alpha", "--json")
+rc, data, err = assert_ok_json(root, "status planned select succeeds", "select", "--feature", "001-alpha", "--json")
 state = data.get("state", {})
 if state.get("status") == "planned" and state.get("plan_file") == ".orderspec/features/001-alpha/plan.md":
     ok("status inference plan.md => planned")
@@ -539,7 +542,7 @@ root = fresh_work("status-tasks")
 write_spec(root, ".orderspec/features/001-alpha", feature_id="FEAT-001-alpha", slug="alpha")
 write_file(root, ".orderspec/features/001-alpha/plan.md", "# Plan\n")
 write_file(root, ".orderspec/features/001-alpha/tasks.md", "# Tasks\n")
-rc, data, err = assert_ok_json(root, "status tasks select succeeds", "select", "001-alpha", "--json")
+rc, data, err = assert_ok_json(root, "status tasks select succeeds", "select", "--feature", "001-alpha", "--json")
 state = data.get("state", {})
 if state.get("status") == "tasks" and state.get("tasks_file") == ".orderspec/features/001-alpha/tasks.md":
     ok("status inference tasks.md => tasks")
@@ -592,6 +595,7 @@ assert_ok_json(
     root,
     "deleted feature setup select succeeds",
     "select",
+    "--feature",
     "001-alpha",
     "--last-command",
     "order.spec",
@@ -643,6 +647,7 @@ assert_ok_json(
     root,
     "clear delete setup select succeeds",
     "select",
+    "--feature",
     "001-alpha",
     "--last-command",
     "order.spec",
@@ -690,6 +695,7 @@ rc, data, err = assert_ok_json(
     root,
     "resolve by FEAT feature_id succeeds",
     "resolve",
+    "--feature",
     "FEAT-001-user-auth",
     "--json",
 )
@@ -713,6 +719,7 @@ rc, data, err = assert_ok_json(
     root,
     "resolve by directory basename succeeds",
     "resolve",
+    "--feature",
     "001-user-auth",
     "--json",
 )
@@ -730,7 +737,7 @@ else:
 root = fresh_work("resolve-ambiguous-prefix")
 write_spec(root, ".orderspec/features/003-alpha", feature_id="FEAT-003-alpha", slug="alpha")
 write_spec(root, ".orderspec/features/003-beta", feature_id="FEAT-003-beta", slug="beta")
-rc, data, err = run_json(root, "resolve", "003", "--json")
+rc, data, err = run_json(root, "resolve", "--feature", "003", "--json")
 if (
     rc != 0
     and data.get("error") == "ambiguous_feature"
@@ -744,11 +751,118 @@ else:
 
 # 35. resolve invalid specs root is rejected
 root = fresh_work("resolve-invalid-specs-root")
-rc, data, err = run_json(root, "resolve", "anything", "--specs-root", "../features", "--json")
+rc, data, err = run_json(root, "resolve", "--feature", "anything", "--specs-root", "../features", "--json")
 if rc != 0 and data.get("error") == "invalid_specs_root":
     ok("resolve invalid specs root rejected")
 else:
     bad(f"resolve invalid specs root accepted :: rc={rc} data={data!r} err={err!r}")
+
+
+# 36. init creates canonical inactive state and preserves it on rerun
+root = fresh_work("init-state")
+rc, data, err = assert_ok_json(root, "init missing state succeeds", "init", "--last-command", "order.bootstrap", "--json")
+first = active_state_path(root).read_text(encoding="utf-8")
+rc2, data2, err2 = assert_ok_json(root, "init existing state succeeds", "init", "--last-command", "other", "--json")
+if (
+    data.get("action") == "initialized"
+    and data.get("active") is False
+    and data2.get("action") == "preserved"
+    and active_state_path(root).read_text(encoding="utf-8") == first
+):
+    ok("init is canonical and idempotent")
+else:
+    bad(f"init state behavior wrong :: first={data!r} second={data2!r}")
+
+
+# 37. positional select is rejected; --feature is required
+root = fresh_work("select-named-control")
+write_spec(root, ".orderspec/features/001-alpha", feature_id="FEAT-001-alpha", slug="alpha")
+rc, out, err = run_active(root, "select", "001-alpha", "--json")
+if rc != 0 and "--feature" in err and not active_state_path(root).exists():
+    ok("select requires named --feature control")
+else:
+    bad(f"positional select was not rejected :: rc={rc} out={out!r} err={err!r}")
+
+
+# 38. switching reconstructs implementing status from task progress
+root = fresh_work("select-reconstruct-implementing")
+write_spec(root, ".orderspec/features/001-alpha", feature_id="FEAT-001-alpha", slug="alpha")
+write_file(root, ".orderspec/features/001-alpha/plan.md", "# Plan\n")
+write_file(root, ".orderspec/features/001-alpha/tasks.md", "# Tasks\n- [X] T001 | a | REQ-001 | done\n")
+rc, data, err = assert_ok_json(root, "select reconstruct implementing succeeds", "select", "--feature", "001-alpha", "--json")
+if data.get("state", {}).get("status") == "implementing":
+    ok("select reconstructs implementing status")
+else:
+    bad(f"implementing status reconstruction wrong :: {data!r}")
+
+
+# 39. switching reconstructs verified status from code-report PASS
+root = fresh_work("select-reconstruct-verified")
+write_spec(root, ".orderspec/features/001-alpha", feature_id="FEAT-001-alpha", slug="alpha")
+write_file(root, ".orderspec/features/001-alpha/code-report.md", "---\norderspec:\n  verdict: PASS\n---\n")
+rc, data, err = assert_ok_json(root, "select reconstruct verified succeeds", "select", "--feature", "001-alpha", "--json")
+if data.get("state", {}).get("status") == "verified":
+    ok("select reconstructs verified status")
+else:
+    bad(f"verified status reconstruction wrong :: {data!r}")
+
+
+# 40. init deterministically migrates legacy directory-only state
+root = fresh_work("init-migrate-legacy")
+write_spec(root, ".orderspec/features/001-alpha", feature_id="FEAT-001-alpha", slug="alpha")
+state_file = active_state_path(root)
+state_file.parent.mkdir(parents=True, exist_ok=True)
+state_file.write_text(json.dumps({
+    "feature_directory": ".orderspec/features/001-alpha",
+    "spec_file": ".orderspec/features/001-alpha/spec.md",
+}) + "\n", encoding="utf-8")
+rc, data, err = assert_ok_json(root, "init legacy state succeeds", "init", "--last-command", "order.bootstrap", "--json")
+if (
+    data.get("action") == "migrated"
+    and data.get("state", {}).get("active") is True
+    and data.get("state", {}).get("feature_id") == "FEAT-001-alpha"
+):
+    ok("init migrates legacy active selection")
+else:
+    bad(f"legacy state migration wrong :: {data!r}")
+
+
+# 41. status refreshes metadata without changing selection
+root = fresh_work("status-guarded-update")
+write_spec(root, ".orderspec/features/001-alpha", feature_id="FEAT-001-alpha", slug="alpha")
+assert_ok_json(root, "status setup select succeeds", "select", "--feature", "001-alpha", "--json")
+write_file(root, ".orderspec/features/001-alpha/plan.md", "# Plan\n")
+rc, data, err = assert_ok_json(
+    root, "guarded status update succeeds", "status",
+    "--feature-id", "FEAT-001-alpha", "--status", "planned",
+    "--last-command", "order.plan", "--json",
+)
+if (
+    data.get("action") == "status_updated"
+    and data.get("state", {}).get("feature_id") == "FEAT-001-alpha"
+    and data.get("state", {}).get("plan_file") == ".orderspec/features/001-alpha/plan.md"
+):
+    ok("status updates lifecycle and metadata without selection change")
+else:
+    bad(f"guarded status update wrong :: {data!r}")
+
+
+# 42. status rejects stale expected feature after selection changed
+write_spec(root, ".orderspec/features/002-beta", feature_id="FEAT-002-beta", slug="beta")
+assert_ok_json(root, "status race setup select succeeds", "select", "--feature", "002-beta", "--json")
+before = active_state_path(root).read_text(encoding="utf-8")
+rc, data, err = run_json(
+    root, "status", "--feature-id", "FEAT-001-alpha",
+    "--status", "planned", "--json",
+)
+if (
+    rc != 0
+    and data.get("error") == "active_feature_changed"
+    and active_state_path(root).read_text(encoding="utf-8") == before
+):
+    ok("status rejects stale feature and preserves selection")
+else:
+    bad(f"status stale-feature guard wrong :: rc={rc} data={data!r} err={err!r}")
 
 
 # ── Cleanup ──────────────────────────────────────────────────────────────────

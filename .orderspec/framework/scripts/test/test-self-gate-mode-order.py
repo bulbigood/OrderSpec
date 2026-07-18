@@ -16,12 +16,12 @@ class SelfGateModeOrderTests(unittest.TestCase):
         ):
             content = (ROOT / "prompts" / f"order.{command}.md").read_text(encoding="utf-8")
             self.assertLess(content.index(f'SELF_REPORT="$FEATURE_DIR/{report}"'), content.index(stop_marker))
-            self.assertIn("selects Refine even when `$ARGUMENTS` is empty", content)
+            self.assertIn("selects Refine even when `input.semantic_input` is empty", content)
 
     def test_spec_selects_mode_after_self_gate_intake(self):
         content = (ROOT / "prompts" / "order.spec.md").read_text(encoding="utf-8")
         self.assertLess(content.index("## Self Gate Report Intake"), content.index("### Mode selection"))
-        self.assertIn("select **Refine** even when `$ARGUMENTS` is empty", content)
+        self.assertIn("select **Refine** even when `input.semantic_input` is empty", content)
 
     def test_spec_explicit_mode_flags_keep_precedence(self):
         content = (ROOT / "prompts" / "order.spec.md").read_text(encoding="utf-8")
@@ -30,10 +30,11 @@ class SelfGateModeOrderTests(unittest.TestCase):
         self.assertIn("never override an explicit flag", content)
         self.assertIn("do not load its\nself-report or feedback", content)
 
-    def test_spec_binds_explicit_target_and_validates_every_mutation(self):
+    def test_spec_uses_active_target_and_validates_every_mutation(self):
         content = (ROOT / "prompts" / "order.spec.md").read_text(encoding="utf-8")
-        for field in ("state.feature_id", "state.feature_directory", "state.spec_file"):
-            self.assertIn(field, content)
+        self.assertIn("Use only validated active state as existing target", content)
+        self.assertIn("/order.feature --select <feature-ref>", content)
+        self.assertNotIn("active_feature.py resolve <feature-ref>", content)
         self.assertIn("every spec mutated in this run", content)
         self.assertIn("for **each** mutated target", content)
         self.assertIn("until every mutated target passes", content)

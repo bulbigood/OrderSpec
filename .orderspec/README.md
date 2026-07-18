@@ -74,6 +74,7 @@ python3 .orderspec/framework/scripts/agents_sync.py sync
 ```text
 /order.bootstrap
 /order.spec "describe the feature you want"
+/order.feature --select FEAT-001-example
 /order.plan
 /order.tasks
 /order.code

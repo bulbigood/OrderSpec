@@ -35,12 +35,16 @@ and feedback may constrain that mode but never override an explicit flag.
 Before repository inspection or mutation, run:
 
 ```bash
-python3 .orderspec/framework/scripts/command_context.py resolve order.spec --json
+python3 .orderspec/framework/scripts/command_context.py resolve order.spec \
+  --arguments "$ARGUMENTS" --json
 ```
 
 Stop when `ok` is false or `missing_required` is non-empty. Read every `to_read`
 entry once, in returned order, and apply its declared `usage` and `authority`.
 Do not build a second preload list or inspect framework internals.
+
+Use only returned `input.controls` and `input.semantic_input`; do not parse raw
+input again.
 
 If project contracts are missing or incomplete, tell the user to run
 `/order.bootstrap`; this command does not amend those contracts.
@@ -58,24 +62,16 @@ python3 .orderspec/framework/scripts/active_feature.py validate --json
 
 If validation fails, stop with the script result. Do not repair runtime state.
 
-If the request names an existing feature, resolve it read-only:
-
-```bash
-python3 .orderspec/framework/scripts/active_feature.py resolve <feature-ref> --json
-```
-
-Do not use `active_feature.py select` during target resolution: `select` mutates
-active state. Never choose among ambiguous matches. Bind the target to returned
-`state.feature_id`, `state.feature_directory`, and `state.spec_file`; after an
-explicit resolution, never fall back to the active feature. Without an explicit
-reference, use the validated active state when one exists.
+Use only validated active state as existing target. If semantic input names a
+different existing feature, do not resolve or switch it here; route the user to
+`/order.feature --select <feature-ref>` and stop without mutation.
 
 ## Self Gate Report Intake
 
 For the resolved existing target, read `spec.md` and, if present,
 `spec-report.md`. Treat report state `CONSUMED_STALE` as inactive. A `BLOCK` or
 `ROUTING_REQUIRED` finding routed to `/order.spec` is authoritative Refine input;
-other findings remain owned by their routed commands. `$ARGUMENTS` adds guidance
+other findings remain owned by their routed commands. `input.semantic_input` adds guidance
 but does not replace open routed findings.
 
 With `--new`, do not treat the active feature as target and do not load its
@@ -101,7 +97,7 @@ Select the mode only after Self Gate Report Intake above:
 - **Decompose**: `--split`; otherwise an incohesive request containing independently
   releasable contracts.
 - **Refine**: without an explicit mode flag, the request, routed report, or open feedback changes the resolved
-  existing contract. When a self-gate finding targets `/order.spec`, select **Refine** even when `$ARGUMENTS` is empty.
+  existing contract. When a self-gate finding targets `/order.spec`, select **Refine** even when `input.semantic_input` is empty.
 
 If an active spec exists but the request could reasonably mean either Refine or
 Create, ask one blocking question. If Refine has no requested change, routed
@@ -289,14 +285,24 @@ Before completion, verify no known placeholder, blocking question, contradiction
 role impurity, untraced requirement, interface gap, or unscoped absolute guarantee
 remains. Independent severity assignment belongs to `/order.spec-check`.
 
-After every target passes, set the sole target active and specified. For
-Decompose, set the newly created selected module active; parent validation does
-not make the parent active:
+After every target passes, Create activates its new target. Decompose activates
+the newly created selected module; parent validation does not make parent
+active:
 
 ```bash
 python3 .orderspec/framework/scripts/active_feature.py set \
   --feature-id "$FEATURE_ID" \
   --feature-directory "$FEATURE_DIR" \
+  --status specified \
+  --last-command order.spec --json
+```
+
+Refine must not change selection. Update status only when expected feature is
+still active:
+
+```bash
+python3 .orderspec/framework/scripts/active_feature.py status \
+  --feature-id "$FEATURE_ID" \
   --status specified \
   --last-command order.spec --json
 ```

@@ -64,12 +64,14 @@ Follow these steps in exact order. Do not skip steps.
 Resolve and load all required context files.
 
 ```bash
-python3 .orderspec/framework/scripts/command_context.py resolve order.tasks --json
+python3 .orderspec/framework/scripts/command_context.py resolve order.tasks \
+  --arguments "$ARGUMENTS" --json
 ```
 
 1.  If `ok` is `false` or `missing_required` is non-empty, STOP and report the missing context.
 2.  Read every file returned in `to_read`, in returned order.
 3.  Interpret each file according to its `usage` field (`apply`, `constrain`, `parse`, `inspect`, `reference`).
+4.  Use only returned `input.controls` and `input.semantic_input`; do not parse raw input again.
 
 Apply the resolved tooling protocol before making library-specific task claims.
 
@@ -86,7 +88,7 @@ eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 If this fails because no active feature directory can be resolved, STOP:
 ```text
 TASKS_STOPPED: no active feature
-  1. Create/select a feature with /order.spec
+  1. Create one with /order.spec, or select one with /order.feature --select
   2. Then run /order.plan
   3. Then run /order.tasks
 ```
@@ -113,9 +115,9 @@ python3 .orderspec/framework/scripts/workflow_feedback.py list \
 
 Determine mode before writing any file. State the mode in chat.
 
-1.  **Regenerate** — `tasks.md` is absent, or `$ARGUMENTS` contains the standalone `--force` flag. This discards task design only; if any task is `[X]`, STOP and require `/order.code --reset` first.
-2.  **Refine** — active `tasks.md` exists and either `$ARGUMENTS` requests specific changes, the prior `tasks-report.md` has a `⛔ BLOCK` or `🔀 ROUTING` finding targeting `/order.tasks`, or open workflow feedback targets `order.tasks`. A blocking self-gate or open feedback selects Refine even when `$ARGUMENTS` is empty.
-3.  **Existing/Stop** — `tasks.md` already exists, `$ARGUMENTS` is empty, and
+1.  **Regenerate** — `tasks.md` is absent, or `input.controls.force` is true. This discards task design only; if any task is `[X]`, STOP and require `/order.code --reset` first.
+2.  **Refine** — active `tasks.md` exists and either `input.semantic_input` requests specific changes, the prior `tasks-report.md` has a `⛔ BLOCK` or `🔀 ROUTING` finding targeting `/order.tasks`, or open workflow feedback targets `order.tasks`. A blocking self-gate or open feedback selects Refine even when `input.semantic_input` is empty.
+3.  **Existing/Stop** — `tasks.md` already exists, `input.semantic_input` is empty, and
     neither an active self-gate finding nor open feedback selects Refine → STOP:
 
 ```text
@@ -132,7 +134,8 @@ Check the upstream plan gate.
 ```bash
 eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 
-FORCE_FLAG="$(python3 -c 'import shlex,sys; print("--force" if "--force-upstream" in shlex.split(sys.argv[1]) else "")' "$ARGUMENTS")"
+Set `FORCE_FLAG=--force` only when `input.controls.force_upstream` is true;
+otherwise leave it empty.
 
 python3 .orderspec/framework/scripts/upstream_gate.py \
   --report        "$FEATURE_DIR/plan-report.md" \
@@ -181,9 +184,9 @@ To derive tasks anyway (NOT recommended), re-run with --force-upstream.
 Use self-gate result read in Step 3. Do not perform a second check.
 
 -   **ABSENT** → Proceed.
--   **PRESENT (✅ PASS)** → Ignore report; proceed with `$ARGUMENTS`.
--   **PRESENT (`CONSUMED_STALE`)** → Previous verdict is inactive. Proceed with `$ARGUMENTS`; a fresh `/order.tasks-check` is required for new PASS evidence.
--   **PRESENT (⛔ BLOCK / 🔀 ROUTING)** → This is your fix-list. Address every finding targeting `/order.tasks`. Route findings for other commands. Treat `$ARGUMENTS` as additional guidance, not a replacement.
+-   **PRESENT (✅ PASS)** → Ignore report; proceed with `input.semantic_input`.
+-   **PRESENT (`CONSUMED_STALE`)** → Previous verdict is inactive. Proceed with `input.semantic_input`; a fresh `/order.tasks-check` is required for new PASS evidence.
+-   **PRESENT (⛔ BLOCK / 🔀 ROUTING)** → This is your fix-list. Address every finding targeting `/order.tasks`. Route findings for other commands. Treat `input.semantic_input` as additional guidance, not a replacement.
 
 Use the workflow feedback result already loaded in Step 3. Every open item is
 additional mandatory refine input. Do not consume it yet.
@@ -561,9 +564,8 @@ plan-owned state from `/order.tasks`. Route contract defects to `/order.spec`.
 ```bash
 eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 
-python3 .orderspec/framework/scripts/active_feature.py set \
+python3 .orderspec/framework/scripts/active_feature.py status \
   --feature-id "$FEATURE_ID" \
-  --feature-directory "$FEATURE_DIR_REL" \
   --status tasks \
   --last-command order.tasks \
   --json

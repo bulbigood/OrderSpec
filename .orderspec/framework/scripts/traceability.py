@@ -14,7 +14,7 @@ It intentionally supports both path models:
       → <repo>/.orderspec/features/<feature-basename>
 
 2. Current OrderSpec:
-      SPECIFY_FEATURE_DIRECTORY / .orderspec/state/active-feature.json / --feature-dir
+      .orderspec/state/active-feature.json / --feature-dir
       → arbitrary repo-relative or absolute feature directory
 
 Prompts should prefer the current model. Legacy basename mode is retained for

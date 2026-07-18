@@ -101,6 +101,8 @@ class CodeReportValidatorTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertEqual(result["active_feature_status"], "verified")
             command = run.call_args.args[0]
+            self.assertIn("status", command)
+            self.assertNotIn("set", command)
             self.assertEqual(command[command.index("--status") + 1], "verified")
 
     def test_ledger_requires_complete_results(self):

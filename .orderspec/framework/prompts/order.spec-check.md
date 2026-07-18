@@ -29,8 +29,9 @@ output as completed evidence and routes defects to owners.
 $ARGUMENTS
 ```
 
-Arguments may contain at most one existing feature reference. Target resolution
-is read-only and never changes the active feature.
+This gate always targets active feature. Unflagged text is semantic inspection
+guidance: it may add attention but never narrow checks or select another
+feature. No controls are supported.
 
 ## Severity Model
 
@@ -61,7 +62,8 @@ written. Read every `to_read` entry once, in returned order, according to its
 `usage` and `authority`.
 
 Use only `target.feature_directory` and `target.feature_id` from resolver output;
-do not resolve the target again.
+do not resolve the target again. Use only resolver-parsed semantic input; do not
+parse raw input again.
 
 If `<target.feature_directory>/spec.md` is absent, initialize the report for that
 literal target:

@@ -242,11 +242,9 @@ def finalize(path, ledger_path=None):
         [
             sys.executable,
             str(active_feature),
-            "set",
+            "status",
             "--feature-id",
             str(fm["feature_id"]),
-            "--feature-directory",
-            str(fm["feature_directory"]),
             "--status",
             status,
             "--last-command",

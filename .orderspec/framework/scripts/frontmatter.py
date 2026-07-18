@@ -30,7 +30,7 @@ SPEC_STATUS_VALUES = {"draft", "review", "approved"}
 FEATURE_ID_RE = re.compile(r"^FEAT-[0-9]{3}-[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 COMMAND_PROMPT_REQUIRED_FIELDS = ["artifact", "command", "phase", "description", "handoffs"]
-COMMAND_PROMPT_PHASE_VALUES = {"bootstrap", "specify", "plan", "tasks", "implement", "check"}
+COMMAND_PROMPT_PHASE_VALUES = {"bootstrap", "state", "specify", "plan", "tasks", "implement", "check"}
 COMMAND_PROMPT_HANDOFFS_ITEM_FIELDS = {"label", "agent", "prompt"}
 
 GATE_REPORT_REQUIRED_FIELDS = [

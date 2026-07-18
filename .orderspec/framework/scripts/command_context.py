@@ -579,10 +579,10 @@ def resolve_active_feature_directory(root: Path, explicit_directory: str | None 
     """Resolve active feature directory without mutating runtime state.
 
     Command context resolution runs before command-specific path setup. It uses
-    the same two read-only sources as `setup.py paths`: explicit environment
-    override first, then active-feature state.
+    explicit resolved directory is allowed only for an internal bounded target;
+    normal command resolution reads active-feature state.
     """
-    raw_value = explicit_directory or os.environ.get("SPECIFY_FEATURE_DIRECTORY")
+    raw_value = explicit_directory
 
     if not raw_value:
         state_path = root / ".orderspec" / "state" / "active-feature.json"
@@ -967,7 +967,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_resolve.add_argument("--json", action="store_true")
     p_resolve.add_argument(
         "--arguments",
-        help="raw command arguments; gate commands resolve their target read-only before context materialization",
+        help="raw command input; named controls are parsed separately from semantic text",
     )
 
     p_list = sub.add_parser("list")
@@ -986,27 +986,38 @@ def main(argv: list[str]) -> int:
     root = Path(args.directory).resolve()
 
     if args.action == "resolve":
+        from command_input import parse_input
+
+        raw_arguments = args.arguments or ""
+        parsed_input = parse_input(args.command, raw_arguments)
+        if not parsed_input.get("ok"):
+            data = {
+                "ok": False,
+                "command": args.command,
+                "input": parsed_input,
+                "validation_errors": parsed_input.get("validation_errors", []),
+                "to_read": [],
+                "missing_required": [],
+                "skipped_if_missing": [],
+            }
+            json_print(data)
+            return 1
         feature_directory = None
         target = None
-        if args.arguments is not None:
-            from gate_target import COMMANDS as GATE_COMMANDS, resolve as resolve_gate_target
-
-            if args.command not in GATE_COMMANDS:
-                data = {
-                    "ok": False,
-                    "command": args.command,
-                    "validation_errors": ["--arguments is supported only for gate commands"],
-                    "to_read": [],
-                    "missing_required": [],
-                    "skipped_if_missing": [],
-                }
-                json_print(data)
-                return 1
-            target, target_rc = resolve_gate_target(root, args.command, args.arguments, posix(Path(".orderspec/features")))
+        from gate_target import COMMANDS as GATE_COMMANDS, resolve as resolve_gate_target
+        if args.command in GATE_COMMANDS and args.arguments is not None:
+            target, target_rc = resolve_gate_target(
+                root,
+                args.command,
+                raw_arguments,
+                posix(Path(".orderspec/features")),
+                parsed_input=parsed_input,
+            )
             if target_rc:
                 data = {
                     "ok": False,
                     "command": args.command,
+                    "input": parsed_input,
                     "target": target,
                     "validation_errors": [target.get("error", "target_resolution_failed")],
                     "to_read": [],
@@ -1017,6 +1028,7 @@ def main(argv: list[str]) -> int:
                 return 1
             feature_directory = target["feature_directory"]
         data = resolve_command(root, args.command, feature_directory)
+        data["input"] = parsed_input
         if target is not None:
             data["target"] = target
     elif args.action == "list":

@@ -57,6 +57,16 @@ non-migration work ends with Final Verification rather than artificial cleanup.
    WHAT           WHERE/HOW        ORDER            IMPLEMENT
 ```
 
+Existing-feature selection is a separate lifecycle operation:
+
+```text
+/order.feature --select <feature-id>
+```
+
+`.orderspec/state/active-feature.json` is canonical default target. Workflow
+commands consume it; gates never switch it. Unflagged prose remains semantic
+input and cannot select a feature.
+
 Each phase can be followed by an optional verification gate that checks the previous artifact before you proceed:
 
 | Phase | Author command | Gate | The gate verifies |
@@ -210,6 +220,7 @@ schema-validated semantic result per obligation before report finalization.
         ├── command-context.json
         ├── protocols/
         ├── schemas/
+        │   ├── active-feature-state.schema.json
         │   ├── agents-state.schema.json
         │   └── ...
         ├── templates/

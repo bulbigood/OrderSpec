@@ -128,9 +128,8 @@ def cmd_paths(args):
     """Resolve active feature paths without creating or modifying files.
 
     This command is intentionally read-only. It is safe to run before gates.
-    It requires the active feature directory to be resolvable from either:
-      - SPECIFY_FEATURE_DIRECTORY
-      - `.orderspec/state/active-feature.json`
+    It requires `.orderspec/state/active-feature.json` to contain an active
+    feature directory.
 
     It does NOT require spec.md, plan.md, or tasks.md to exist.
     """

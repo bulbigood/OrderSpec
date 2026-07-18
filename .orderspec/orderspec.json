@@ -1,7 +1,7 @@
 {
-  "framework_version": "0.5.0",
+  "framework_version": "0.6.0",
   "schema_versions": {
-    "frontmatter": 2,
+    "frontmatter": 3,
     "artifacts": 2,
     "lifecycle": 1,
     "traceability": 2

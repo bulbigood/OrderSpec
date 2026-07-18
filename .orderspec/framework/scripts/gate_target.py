@@ -10,7 +10,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from active_feature import find_feature, load_state, posix, safe_rel  # noqa: E402
+from active_feature import load_state, posix, safe_rel, validate_state_references  # noqa: E402
+from command_input import parse_input  # noqa: E402
 from common import SPECS_ROOT  # noqa: E402
 
 
@@ -38,62 +39,38 @@ def fail(code: str, message: str, **extra) -> int:
     return 1
 
 
-def parse_input(command: str, arguments: str) -> tuple[str | None, str | None, list[str]]:
-    try:
-        tokens = shlex.split(arguments)
-    except ValueError as exc:
-        return None, None, [f"invalid arguments: {exc}"]
-
-    if command == "order.plan-check":
-        return None, None, [] if not tokens else ["order.plan-check accepts no arguments"]
-
-    feature_ref = None
-    base_ref = None
-    errors: list[str] = []
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
-        if command == "order.code-check" and token == "--base":
-            if index + 1 >= len(tokens):
-                errors.append("--base requires one ref")
-                break
-            if base_ref is not None:
-                errors.append("--base may appear only once")
-                break
-            base_ref = tokens[index + 1]
-            index += 2
-            continue
-        if token.startswith("-"):
-            errors.append(f"unsupported argument: {token}")
-            break
-        if feature_ref is not None:
-            errors.append("at most one feature reference is allowed")
-            break
-        feature_ref = token
-        index += 1
-    return feature_ref, base_ref, errors
-
-
-def resolve(root: Path, command: str, arguments: str, specs_root: str) -> tuple[dict, int]:
-    feature_ref, base_ref, errors = parse_input(command, arguments)
-    if errors:
-        return {"ok": False, "error": "unsupported_arguments", "validation_errors": errors}, 1
+def resolve(
+    root: Path,
+    command: str,
+    arguments: str,
+    specs_root: str,
+    parsed_input: dict | None = None,
+) -> tuple[dict, int]:
+    parsed = parsed_input or parse_input(command, arguments)
+    if not parsed.get("ok"):
+        return {
+            "ok": False,
+            "error": "unsupported_arguments",
+            "validation_errors": parsed.get("validation_errors", []),
+        }, 1
 
     if not safe_rel(specs_root):
         return {"ok": False, "error": "invalid_specs_root"}, 1
 
-    explicit = feature_ref is not None
-    if explicit:
-        state, matches = find_feature(root, Path(specs_root), feature_ref)
-        if state is None:
-            error = "ambiguous_feature" if len(matches) > 1 else "feature_not_found"
-            return {"ok": False, "error": error, "feature_ref": feature_ref, "matches": matches}, 1
-    else:
-        state, state_errors, _ = load_state(root)
-        if state_errors:
-            return {"ok": False, "error": "invalid_active_feature", "validation_errors": state_errors}, 1
-        if not state.get("active"):
-            return {"ok": False, "error": "no_active_feature"}, 1
+    state, state_errors, state_exists = load_state(root)
+    if state_errors:
+        return {"ok": False, "error": "invalid_active_feature", "validation_errors": state_errors}, 1
+    if not state_exists:
+        return {"ok": False, "error": "active_feature_state_missing"}, 1
+    if not state.get("active"):
+        return {"ok": False, "error": "no_active_feature"}, 1
+    reference_errors = validate_state_references(root, state)
+    if reference_errors:
+        return {
+            "ok": False,
+            "error": "invalid_active_feature",
+            "validation_errors": reference_errors,
+        }, 1
 
     feature_dir_rel = state.get("feature_directory")
     if not isinstance(feature_dir_rel, str) or not safe_rel(feature_dir_rel):
@@ -109,12 +86,14 @@ def resolve(root: Path, command: str, arguments: str, specs_root: str) -> tuple[
     return {
         "ok": True,
         "command": command,
-        "explicit": explicit,
-        "feature_ref": feature_ref,
+        "explicit": False,
+        "feature_ref": None,
         "feature_id": state.get("feature_id"),
         "feature_directory": posix(Path(feature_dir_rel)),
         "feature_directory_abs": str(feature_dir),
-        "base_ref": base_ref,
+        "base_ref": parsed.get("controls", {}).get("base"),
+        "semantic_input": parsed.get("semantic_input", ""),
+        "input": parsed,
         "state_written": False,
     }, 0
 

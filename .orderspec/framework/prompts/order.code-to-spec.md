@@ -43,8 +43,6 @@ The text after `/order.code-to-spec` describes what feature or module to extract
 - a subsystem name;
 - a combination of the above.
 
-If `$ARGUMENTS` is empty, STOP: `No feature description or code path provided`.
-
 ## Command Context Bootstrap
 
 Before starting command-specific logic:
@@ -52,7 +50,8 @@ Before starting command-specific logic:
 1. Resolve command context:
 
    ```bash
-   python3 .orderspec/framework/scripts/command_context.py resolve order.code-to-spec --json
+   python3 .orderspec/framework/scripts/command_context.py resolve order.code-to-spec \
+     --arguments "$ARGUMENTS" --json
    ```
 
 2. If `ok` is `false` or `missing_required` is non-empty, STOP and report the missing required context.
@@ -64,6 +63,9 @@ Before starting command-specific logic:
    - `inspect`: inspect as command input/output artifact.
    - `reference`: use only as reference or evidence.
 5. Do not manually load additional framework rules, protocols, configuration files, project contracts, templates, or runtime state before the main command logic unless they are returned by `command_context.py`.
+6. Use only returned `input.controls` and `input.semantic_input`; do not parse raw input again.
+
+If `input.semantic_input` is empty, STOP: `No feature description or code path provided`.
 
 Project contracts returned with `usage: "constrain"` constrain this command, but do not override framework rules.
 
@@ -159,7 +161,7 @@ Read-only operations allowed during mode detection:
 
 - command context resolution;
 - reading files returned by resolver;
-- reading `$ARGUMENTS`;
+- reading `input.semantic_input`;
 - running `active_feature.py get --json`;
 - running `active_feature.py validate --json`;
 - running `active_feature.py list --json`;
@@ -198,11 +200,9 @@ python3 .orderspec/framework/scripts/active_feature.py validate --json
 
 If validation fails, STOP and report the script JSON.
 
-If `$ARGUMENTS` contains an explicit feature reference for an existing feature, resolve it with:
-
-```bash
-python3 .orderspec/framework/scripts/active_feature.py select <feature-ref> --last-command order.code-to-spec --json
-```
+Use only validated active state for Refine. If semantic input names a different
+existing feature, route to `/order.feature --select <feature-ref>` and stop.
+This command activates only a feature it successfully creates and validates.
 
 ### Refine vs create heuristics
 
@@ -244,7 +244,7 @@ If a target feature directory exists, check for a self gate report:
 <feature-directory>/spec-report.md
 ```
 
-If absent, proceed with `$ARGUMENTS`.
+If absent, proceed with `input.semantic_input`.
 
 If present:
 
@@ -255,7 +255,7 @@ If present:
   1. Treat findings routed to `/order.code-to-spec` as authoritative defects to resolve.
   2. Do not silently compensate for findings owned by other commands.
   3. List upstream/downstream-owned findings in the completion report.
-  4. Treat `$ARGUMENTS` as additional guidance, not a replacement for the report.
+  4. Treat `input.semantic_input` as additional guidance, not a replacement for the report.
 
 If a BLOCK/ROUTING REQUIRED report was used to modify `spec.md`, then after successful write, ID projection, and validation, replace it through the deterministic marker command:
 
@@ -341,7 +341,7 @@ Targeted bootstrap amend is allowed only with explicit user confirmation during 
 ### Phase 1: Discovery
 
 1. Read the project file tree. Respect `.gitignore` if present. Skip `node_modules`, `.git`, `__pycache__`, `dist`, `build`, `.orderspec` (except existing specs for reference).
-2. From `$ARGUMENTS`, identify the target code area:
+2. From `input.semantic_input`, identify the target code area:
    - If a directory path is given, start there.
    - If a feature name is given, search for relevant files by name patterns, route definitions, module names.
    - If ambiguous, identify candidate files and present them to the user for confirmation.
@@ -695,7 +695,7 @@ Use the same question format as `/order.spec`.
 
 ### Create flow
 
-1. Parse `$ARGUMENTS` to identify the target code area.
+1. Analyze `input.semantic_input` to identify the target code area.
 2. Perform full scanning process (Phase 1–3).
 3. Perform scope sizing.
 4. Generate a short slug from the feature description.
@@ -767,12 +767,23 @@ Rules:
 
 ### Active feature state update
 
-After successful write, ID extraction, and mechanical validation, update active feature state:
+After successful Create, ID extraction, and mechanical validation, activate new
+feature:
 
 ```bash
 python3 .orderspec/framework/scripts/active_feature.py set \
   --feature-id "$FEATURE_ID" \
   --feature-directory "$FEATURE_DIR" \
+  --status specified \
+  --last-command order.code-to-spec \
+  --json
+```
+
+After successful Refine, keep selection and update status only:
+
+```bash
+python3 .orderspec/framework/scripts/active_feature.py status \
+  --feature-id "$FEATURE_ID" \
   --status specified \
   --last-command order.code-to-spec \
   --json
@@ -885,6 +896,6 @@ Include:
 - [ ] `traceability.py init` succeeded
 - [ ] `traceability.py extract-spec-ids` succeeded
 - [ ] `traceability.py validate --stage spec --json` succeeded or residual findings were reported
-- [ ] Active feature state updated via `active_feature.py set`
+- [ ] Active feature state updated via mode-appropriate `set` or `status`
 - [ ] Refine downstream impact reported
 - [ ] Completion report emitted to chat

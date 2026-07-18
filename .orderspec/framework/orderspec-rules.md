@@ -109,6 +109,50 @@ Usage semantics:
 The manifest and its schema are framework internals. Runtime agents MUST NOT
 read them to reconstruct or override resolver output.
 
+### 5.1 Command input grammar
+
+Every command passes raw `$ARGUMENTS` to Command Context Resolution. Resolver
+output separates `input.controls` from `input.semantic_input` before command
+logic runs.
+
+- Only registered `--name` tokens are controls. Control values belong to the
+  preceding named control.
+- Unflagged text is semantic user input. It may guide the command's bounded
+  semantic work but MUST NOT be reinterpreted as a feature selector, path
+  override, lifecycle transition, capability grant, or undocumented flag.
+- Unknown, duplicate, missing-value, or incompatible controls stop before
+  repository inspection or mutation.
+- Prompts MUST consume resolver-parsed input and MUST NOT implement a second
+  argument parser.
+
+### 5.2 Active feature selection
+
+`.orderspec/state/active-feature.json` is the canonical default target for every
+feature command. `/order.bootstrap` initializes it. `active_feature.py` owns its
+validation and atomic writes; commands MUST NOT hand-edit it.
+
+- `/order.feature --select <feature-ref>` is the sole command for switching to
+  an existing feature. Selection must resolve exactly one existing feature and
+  complete before later commands run.
+- Unflagged user text never switches to another existing feature. The current
+  command keeps its active target and routes the operator to
+  `/order.feature --select`. Explicit feature creation remains owned by the
+  creating command.
+- Feature-creating owners may activate the new feature only after its owned
+  artifact passes required validation. Pipeline owners may update lifecycle
+  status only through guarded `active_feature.py status --feature-id` for the
+  already active feature they successfully processed. Status update failure
+  after concurrent selection must stop; it must not switch selection back.
+- Gates always inspect the active feature, never select another feature, and
+  never change selection. A gate-owned deterministic finalizer may update only
+  the active feature's validated lifecycle status when its contract requires it.
+- Ambient environment variables and positional feature references are not
+  target sources. A literal `--feature-dir` may be passed only between framework
+  steps after a safe target has already been resolved.
+- Missing, malformed, ambiguous, outside-root, or stale selection state is a
+  stop condition. Use `/order.bootstrap` for missing state and `/order.feature`
+  for explicit selection; never guess or silently repair a target.
+
 ## 6. Deterministic script authority
 
 Successful framework script output is authoritative for its command step.

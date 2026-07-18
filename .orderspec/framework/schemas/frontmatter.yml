@@ -33,6 +33,7 @@ command_prompt_field_constraints:
   orderspec.phase:
     enum:
       - bootstrap
+      - state
       - specify
       - plan
       - tasks

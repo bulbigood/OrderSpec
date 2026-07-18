@@ -659,18 +659,15 @@ def finish(mode: str, feature_dir_value: str, outcome: str) -> tuple[int, dict[s
         }
     feature_name = feature_dir.name
     feature_id = feature_name if feature_name.startswith("FEAT-") else f"FEAT-{feature_name}"
-    feature_rel = str(feature_dir.relative_to(repo_root)).replace("\\", "/")
 
     def update_status(payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
         status_rc, status = run_json(
             [
                 sys.executable,
                 str(SCRIPT_DIR / "active_feature.py"),
-                "set",
+                "status",
                 "--feature-id",
                 feature_id,
-                "--feature-directory",
-                feature_rel,
                 "--status",
                 "implementing",
                 "--last-command",

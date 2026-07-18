@@ -34,6 +34,7 @@ class GateTargetTests(unittest.TestCase):
             "tasks_file": None,
             "status": "specified",
             "last_command": "order.spec",
+            "updated_at": "2026-07-18T00:00:00Z",
         }) + "\n", encoding="utf-8")
         self.original_state = self.state_path.read_text(encoding="utf-8")
         self.env = os.environ.copy()
@@ -56,16 +57,17 @@ class GateTargetTests(unittest.TestCase):
             cwd=self.work, env=self.env, capture_output=True, text=True,
         )
 
-    def test_explicit_target_is_resolved_without_active_state_write(self):
+    def test_unflagged_feature_reference_is_semantic_and_does_not_switch(self):
         result = self.run_target("order.spec-check", "FEAT-002-other")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         data = json.loads(result.stdout)
-        self.assertEqual(data["feature_directory"], ".orderspec/features/002-other")
-        self.assertTrue(data["explicit"])
+        self.assertEqual(data["feature_directory"], ".orderspec/features/001-active")
+        self.assertEqual(data["semantic_input"], "FEAT-002-other")
+        self.assertFalse(data["explicit"])
         self.assertEqual(self.state_path.read_text(encoding="utf-8"), self.original_state)
 
-    def test_setup_writes_only_to_resolved_target(self):
-        target = self.run_target("order.spec-check", "FEAT-002-other")
+    def test_setup_writes_only_to_active_target(self):
+        target = self.run_target("order.spec-check", "authorization focus")
         feature_dir = json.loads(target.stdout)["feature_directory"]
         result = subprocess.run(
             [sys.executable, str(SETUP), "spec-check", "--feature-dir", feature_dir,
@@ -73,18 +75,24 @@ class GateTargetTests(unittest.TestCase):
             cwd=self.work, env=self.env, capture_output=True, text=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue((self.other / "spec-report.md").is_file())
-        self.assertFalse((self.active / "spec-report.md").exists())
+        self.assertTrue((self.active / "spec-report.md").is_file())
+        self.assertFalse((self.other / "spec-report.md").exists())
         self.assertEqual(self.state_path.read_text(encoding="utf-8"), self.original_state)
 
     def test_code_check_parses_base_separately(self):
-        result = self.run_target("order.code-check", "FEAT-002-other --base origin/main")
+        result = self.run_target("order.code-check", "focus authorization --base origin/main")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         data = json.loads(result.stdout)
         self.assertEqual(data["base_ref"], "origin/main")
+        self.assertEqual(data["semantic_input"], "focus authorization")
 
-    def test_plan_check_rejects_arguments(self):
-        result = self.run_target("order.plan-check", "FEAT-002-other")
+    def test_plan_check_accepts_semantic_guidance(self):
+        result = self.run_target("order.plan-check", "focus authorization")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout)["semantic_input"], "focus authorization")
+
+    def test_gate_rejects_unsupported_feature_control(self):
+        result = self.run_target("order.spec-check", "--feature FEAT-002-other")
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(json.loads(result.stdout)["error"], "unsupported_arguments")
 

@@ -475,11 +475,13 @@ if (
     rc == 0
     and completed.get("ok") is True
     and (WORK / ".orderspec/state/bootstrap.json").is_file()
+    and (WORK / ".orderspec/state/active-feature.json").is_file()
+    and read_json(WORK / ".orderspec/state/active-feature.json").get("active") is False
     and rc2 == 0
     and inspected.get("state_source") == "state"
     and inspected.get("state_migration_required") is False
 ):
-    ok("complete persists bootstrap state used by subsequent Refine runs")
+    ok("complete persists bootstrap and canonical inactive feature state")
 else:
     bad(f"bootstrap state persistence wrong :: complete={completed} inspect={inspected} err={err!r} {err2!r}")
 

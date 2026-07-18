@@ -36,12 +36,16 @@ are allowed only inside the resolved task envelope and project constraints.
 Run first:
 
 ```bash
-python3 .orderspec/framework/scripts/command_context.py resolve order.code --json
+python3 .orderspec/framework/scripts/command_context.py resolve order.code \
+  --arguments "$ARGUMENTS" --json
 ```
 
 If `ok` is false or `missing_required` is non-empty, stop. Read every `to_read`
 item in order and interpret its `usage` and `authority` literally. Reuse loaded
 feature artifacts; do not reopen them.
+
+Use only returned `input.controls` and `input.semantic_input`; do not parse raw
+input again.
 
 Apply the resolved tooling protocol before library-specific implementation.
 

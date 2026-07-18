@@ -14,8 +14,9 @@ description: Per-stage gate validating plan.md as a faithful, complete, role-pur
 $ARGUMENTS
 ```
 
-This gate inspects the active feature only. If arguments are non-empty, STOP
-without mutation and report `PLAN_CHECK_STOPPED: unsupported arguments`.
+This gate inspects active feature only. Unflagged text is semantic inspection
+guidance: it may add attention but never narrow required checks or change
+target. No controls are supported.
 
 ## Role
 
@@ -48,11 +49,12 @@ A terminal precondition can require a BLOCK report and stop the command independ
    so the gate can emit a report when the feature directory exists.
 3. Read every file returned in `to_read`, in returned order.
 4. Interpret each file by `usage`.
+5. Use only resolver-parsed semantic input; do not parse raw input again.
 
 ## Target Feature Resolution
 
 1. Use only `target.feature_directory` and `target.feature_id` returned by
-   Command Context Bootstrap. This gate accepts no arguments. On target failure,
+   Command Context Bootstrap. This gate accepts no controls. On target failure,
    stop in chat; no safe report path exists.
 2. Initialize the report for that exact target:
    ```bash

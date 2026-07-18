@@ -272,9 +272,8 @@ def get_feature_paths(persist_active_feature=True, feature_directory=None):
 
     Resolution priority for the feature directory:
       1. explicit ``feature_directory`` argument;
-      2. `SPECIFY_FEATURE_DIRECTORY` env var (legacy explicit override);
-      3. `.orderspec/state/active-feature.json` `feature_directory` key;
-      4. Error.
+      2. `.orderspec/state/active-feature.json` `feature_directory` key;
+      3. Error.
 
     Returns a dict with keys:
       REPO_ROOT, CURRENT_BRANCH, FEATURE_DIR, FEATURE_SPEC,
@@ -285,7 +284,7 @@ def get_feature_paths(persist_active_feature=True, feature_directory=None):
     repo_root = get_repo_root()
     current_branch = get_current_branch()
 
-    specify_feature_dir = feature_directory or os.environ.get("SPECIFY_FEATURE_DIRECTORY")
+    specify_feature_dir = feature_directory
 
     if specify_feature_dir:
         feature_dir = Path(specify_feature_dir)
@@ -306,8 +305,8 @@ def get_feature_paths(persist_active_feature=True, feature_directory=None):
             feature_dir = feature_dir.resolve()
         else:
             raise RuntimeError(
-                "Feature directory not found. Set SPECIFY_FEATURE_DIRECTORY or "
-                "ensure .orderspec/state/active-feature.json contains feature_directory."
+                "Feature directory not found. Ensure .orderspec/state/active-feature.json "
+                "contains feature_directory or select one with /order.feature --select."
             )
 
     return {

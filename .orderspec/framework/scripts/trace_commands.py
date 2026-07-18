@@ -100,10 +100,6 @@ def resolve_feature_dir(feature=None):
     if _FEATURE_DIR_OVERRIDE:
         return _repo_relative_or_abs(_FEATURE_DIR_OVERRIDE)
 
-    env_fd = os.environ.get("SPECIFY_FEATURE_DIRECTORY")
-    if env_fd:
-        return _repo_relative_or_abs(env_fd)
-
     if feature:
         fp = Path(feature)
         if fp.is_absolute() or "/" in feature or "\\" in feature:
@@ -119,7 +115,7 @@ def resolve_feature_dir(feature=None):
 
     die(
         "feature directory not found. Pass a feature name/path, use --feature-dir, "
-        "set SPECIFY_FEATURE_DIRECTORY, or ensure .orderspec/state/active-feature.json "
+        "or ensure .orderspec/state/active-feature.json "
         "contains feature_directory."
     )
 
