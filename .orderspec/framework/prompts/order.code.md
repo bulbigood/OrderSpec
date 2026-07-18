@@ -43,6 +43,8 @@ If `ok` is false or `missing_required` is non-empty, stop. Read every `to_read`
 item in order and interpret its `usage` and `authority` literally. Reuse loaded
 feature artifacts; do not reopen them.
 
+Apply the resolved tooling protocol before library-specific implementation.
+
 ## Step 2 — Select Mode
 
 State one mode before mutation:

@@ -232,7 +232,7 @@ Verify:
 Missing or implausible required mount, export, route registration, or implementation path → Route (HIGH for P1/MVP, MEDIUM otherwise). Other grounding defects → Route (MEDIUM). Minor naming-only inconsistency → Route (LOW).
 
 ### P1-009 Stack, Constraints & Constitution
-Check against `CON-NNN` in `spec.md`, `Technical Context & Stack Verification` in `plan.md`, and project contracts (`constitution.md`, `stack.md`, `architecture.md`, `conventions.md`):
+Check against applicable stable IDs in `spec.md`, `Technical Context & Stack Verification` in `plan.md`, and project contracts (`constitution.md`, `stack.md`, `architecture.md`, `conventions.md`):
 - Verified facts have evidence (runtime/package versions found in manifests; test commands real).
 - `CON` constraints honored by stack and mapping decisions.
 - Constitution `MUST` obligations reflected (e.g., route + validation files planned when constitution mandates them).

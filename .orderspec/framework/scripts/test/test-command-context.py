@@ -896,7 +896,7 @@ else:
     ok("real manifest contracts test skipped")
 
 
-# 29d. real manifest: order.tasks excludes tooling protocol and schemas
+# 29d. real manifest: order.tasks includes its tooling protocol, excludes unrelated schemas
 reset_work()
 setup_base_files()
 if _real_manifest.exists():
@@ -909,7 +909,6 @@ if _real_manifest.exists():
     rc, data, err = run_cc_json("resolve", "order.tasks", "--json")
     p = paths(data)
     excluded = [
-        ".orderspec/framework/protocols/tooling-protocol.md",
         ".orderspec/framework/schemas/frontmatter.yml",
         ".orderspec/framework/schemas/artifacts.yml",
         ".orderspec/framework/schemas/lifecycle.yml",
@@ -917,15 +916,19 @@ if _real_manifest.exists():
         ".orderspec/config/tooling.json",
         ".orderspec/orderspec.json",
     ]
-    if rc == 0 and all(x not in p for x in excluded):
-        ok("real manifest: order.tasks excludes tooling protocol + schemas + tooling.json + meta")
+    if (
+        rc == 0
+        and ".orderspec/framework/protocols/tooling-protocol.md" in p
+        and all(x not in p for x in excluded)
+    ):
+        ok("real manifest: order.tasks includes tooling protocol and excludes unrelated resources")
     else:
         bad(f"order.tasks exclusions wrong :: rc={rc} paths={p} err={err!r}")
 else:
     ok("real manifest order.tasks test skipped")
 
 
-# 29e. real manifest: order.code excludes tooling protocol and schemas
+# 29e. real manifest: order.code includes its tooling protocol, excludes unrelated schemas
 reset_work()
 setup_base_files()
 if _real_manifest.exists():
@@ -938,7 +941,6 @@ if _real_manifest.exists():
     rc, data, err = run_cc_json("resolve", "order.code", "--json")
     p = paths(data)
     excluded = [
-        ".orderspec/framework/protocols/tooling-protocol.md",
         ".orderspec/framework/schemas/frontmatter.yml",
         ".orderspec/framework/schemas/artifacts.yml",
         ".orderspec/framework/schemas/lifecycle.yml",
@@ -946,8 +948,12 @@ if _real_manifest.exists():
         ".orderspec/config/tooling.json",
         ".orderspec/orderspec.json",
     ]
-    if rc == 0 and all(x not in p for x in excluded):
-        ok("real manifest: order.code excludes tooling protocol + schemas + tooling.json + meta")
+    if (
+        rc == 0
+        and ".orderspec/framework/protocols/tooling-protocol.md" in p
+        and all(x not in p for x in excluded)
+    ):
+        ok("real manifest: order.code includes tooling protocol and excludes unrelated resources")
     else:
         bad(f"order.code exclusions wrong :: rc={rc} paths={p} err={err!r}")
 else:

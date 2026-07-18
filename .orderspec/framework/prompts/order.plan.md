@@ -24,7 +24,7 @@ Properties:
 - **Regenerable before a work order**: derived from `spec.md` + actual
   repository state. Once `tasks.md` is generated, implementation applying
   `[NEW]`/`[DEL]` transitions does not stale or relabel the plan.
-- **Non-duplicating**: reference stable Spec IDs (`REQ-`, `IF-`, `AC-`, `INV-`, `EDGE-`, `NFR-`, `CON-`) instead of copying contract text.
+- **Non-duplicating**: reference resolved stable IDs instead of copying contract text.
 - **Concrete**: exact repo-relative files, verified stack facts, and physical implementation mapping.
 - **Mechanism-aware**: implementation mechanism decisions are written to machine state (`.state/mechanisms.tsv`) via scripts, not mirrored as Markdown tables in `plan.md`.
 

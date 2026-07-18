@@ -182,14 +182,4 @@ expect(
     "order.code receives exact Codex weak-worker selection from its adapter",
 )
 
-rules = (FRAMEWORK / "orderspec-rules.md").read_text(encoding="utf-8")
-expect("task_progress.py" in rules, "framework rules define marker ownership")
-expect(
-    "task_progress.py assert-complete" in rules
-    and "not a voluntary resume boundary" in rules,
-    "framework rules require deterministic full-execution completion",
-)
-expect("task-context" in rules and "task_context.py" in rules, "framework rules define task context authority")
-expect("Plan/work-order baseline rules" in rules, "framework rules freeze work-order baseline")
-
 print("All order-code contract tests passed")

@@ -100,17 +100,49 @@ Version 2 `match.stack_id` bindings MUST be migrated with
 6. **Missing skills:** If a required skill is missing, commands MUST NOT silently continue when the missing skill is required for library-specific work.
 7. **Pre-discovery check:** Before network discovery, inspect validator output for project-local skills and runtime-provided skill metadata. Global skills may be reported as candidates but are never treated as installed project skills.
 
+Before library-specific work, validate bindings deterministically:
+
+```bash
+python3 .orderspec/framework/scripts/validate_tooling.py -C "$PWD" --json
+```
+
+Interpret its result literally:
+
+| Field | Meaning | Action |
+|---|---|---|
+| `installed_and_verified` | Binding and project-local skill files are valid | Use as declared |
+| `installed_but_missing` | Binding exists; skill files do not | Ask to install or proceed without affected claims |
+| `discovered_only` | Candidate is known but not installed | Ask before installation |
+| `pending` | Binding is unresolved | Treat as unavailable |
+
+Do not scan `.orderspec/skills/` to replace validator output. Match each
+required skill through the binding whose `contract_refs` contains the relevant
+project-contract ID. Unknown or tombstoned refs do not match.
+
 ## Documentation Source Rules
+
+Commands MUST NOT hardcode tool names. Use source names and policies from the
+resolved tooling configuration; this protocol's named default applies only
+when configuration does not override it.
 
 For each source in `docs_sources` (default: `context7`):
 
 1. If `policy == "required_if_available"` and source is available in runtime (agent can invoke it as MCP tool), commands listed in `commands` MUST consult this source before making library-specific implementation claims.
-2. Evidence from each source MUST be recorded in `plan.md` with source attribution.
+2. Evidence MUST be recorded in the artifact section designated by the owning
+   command. `/order.plan` records it under `Library Documentation Evidence`;
+   non-authoring commands report it in their command result.
 3. If a required source is unavailable, apply `fallback_when_unavailable` (default: block library-specific claims).
 4. If `policy == "optional"` — source may be used, but is not required.
 5. If `policy == "disabled"` — source MUST NOT be used.
 
 Availability is determined by the agent runtime tool list. Agents MUST NOT rely on any cache file for availability. If availability cannot be determined deterministically, agents MUST report `unknown`.
+
+## Unknown Technology Routing
+
+When library-specific work requires technology absent from `stack.md`, stop and
+route a targeted amendment to `/order.bootstrap`. Routine repository inspection
+does not trigger this rule. Do not write library-specific claims or code until
+the technology has an owning project-contract ID.
 
 ## Side Effect Rules
 

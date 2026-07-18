@@ -27,12 +27,12 @@
 | Item | Verified Value |
 |------|----------------|
 | **Language/Version** | [Verified runtime/language version, or "No runtime version found in inspected manifests"] |
-| **Primary Dependencies** | [Specific libraries/frameworks already present or planned because of `CON-NNN`] |
+| **Primary Dependencies** | [Specific libraries/frameworks already present or planned under `STACK-NNN`] |
 | **Storage** | [Target storage layer/tables/collections/files affected; reference Spec §8 logical model or IDs only] |
 | **Testing Framework** | [Verified test framework and style] |
 | **Target Platform** | [Verified platform/runtime target] |
 | **Test/Build Commands** | [`command` from repository manifest/scripts, or "No command found in inspected manifests"] |
-| **Constraints Honored** | [`CON-NNN`, `CON-NNN`; flag any conflict] |
+| **Constraints Honored** | [`GOV-NNN`, `ARCH-NNN`, `CONV-NNN`; flag any conflict] |
 | **NFR Focus** | [`NFR-NNN`, `NFR-NNN`; IDs only, no copied text] |
 | **Verified Against** | [`file1`, `file2`, ... files actually read that changed a planning decision] |
 

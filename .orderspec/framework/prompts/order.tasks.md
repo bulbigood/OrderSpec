@@ -71,6 +71,8 @@ python3 .orderspec/framework/scripts/command_context.py resolve order.tasks --js
 2.  Read every file returned in `to_read`, in returned order.
 3.  Interpret each file according to its `usage` field (`apply`, `constrain`, `parse`, `inspect`, `reference`).
 
+Apply the resolved tooling protocol before making library-specific task claims.
+
 If required project contracts (`constitution.md`, `stack.md`, `architecture.md`, `conventions.md`) are missing, STOP and tell the user to run `/order.bootstrap` first.
 
 ### Step 2: Path Resolution

@@ -193,9 +193,6 @@
     "required": [
       {
         "ref": "framework.rules"
-      },
-      {
-        "ref": "framework.identifiers"
       }
     ]
   },
@@ -222,6 +219,19 @@
       "required": [
         {
           "group": "project.contracts"
+        },
+        {
+          "ref": "framework.identifiers"
+        }
+      ]
+    },
+    "order.code-to-spec": {
+      "required": [
+        {
+          "group": "project.contracts"
+        },
+        {
+          "ref": "framework.identifiers"
         }
       ]
     },
@@ -229,6 +239,9 @@
       "required": [
         {
           "group": "project.contracts"
+        },
+        {
+          "ref": "framework.identifiers"
         }
       ],
       "feature_context": {
@@ -248,6 +261,9 @@
         },
         {
           "ref": "protocol.environment_block"
+        },
+        {
+          "ref": "framework.identifiers"
         }
       ],
       "read_if_exists": [
@@ -269,6 +285,9 @@
         },
         {
           "ref": "protocol.environment_block"
+        },
+        {
+          "ref": "framework.identifiers"
         }
       ],
       "feature_context": {
@@ -289,6 +308,17 @@
         },
         {
           "ref": "schema.task_context"
+        },
+        {
+          "ref": "protocol.tooling"
+        },
+        {
+          "ref": "framework.identifiers"
+        }
+      ],
+      "read_if_exists": [
+        {
+          "group": "tooling.optional"
         }
       ],
       "feature_context": {
@@ -309,6 +339,9 @@
         },
         {
           "ref": "schema.task_context"
+        },
+        {
+          "ref": "framework.identifiers"
         }
       ],
       "feature_context": {
@@ -333,6 +366,14 @@
         },
         {
           "ref": "schema.task_context"
+        },
+        {
+          "ref": "protocol.tooling"
+        }
+      ],
+      "read_if_exists": [
+        {
+          "group": "tooling.optional"
         }
       ],
       "feature_context": {
@@ -347,6 +388,9 @@
       "required": [
         {
           "group": "project.contracts"
+        },
+        {
+          "ref": "framework.identifiers"
         }
       ],
       "feature_context": {
