@@ -12,7 +12,7 @@ SCRIPT = Path(__file__).resolve().parents[1] / "work_order.py"
 ROOT = SCRIPT.parents[3]
 FEATURES = ROOT / ".orderspec" / "features"
 FEATURES.mkdir(parents=True, exist_ok=True)
-feature = Path(tempfile.mkdtemp(prefix="test-work-order-", dir=FEATURES))
+feature = Path(tempfile.mkdtemp(prefix="test_work_order_", dir=FEATURES))
 
 
 def run(*args: str) -> tuple[int, dict]:

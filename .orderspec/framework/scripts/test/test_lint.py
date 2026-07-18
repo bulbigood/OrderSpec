@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""test-lint.py — regression for lint engine"""
+"""test_lint.py — regression for lint engine"""
 
 import json
 import os
@@ -18,11 +18,11 @@ if not TRACE.exists():
     sys.exit(2)
 
 # ── Configuration ────────────────────────────────────────────────────────────
-LOG_TO_FILE = False  # Set to True to also write test results to test/test-lint.log
+LOG_TO_FILE = False  # Set to True to also write test results to test/test_lint.log
 
 TEST_DIR = SCRIPT_DIR / "test"
 TEST_DIR.mkdir(parents=True, exist_ok=True)
-LOG = TEST_DIR / "test-lint.log"
+LOG = TEST_DIR / "test_lint.log"
 
 if LOG_TO_FILE:
     LOG.write_text("", encoding="utf-8")

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""test-feature-spec.py — regression for feature_spec.py allocator"""
+"""test_feature_spec.py — regression for feature_spec.py allocator"""
 
 import json
 import shutil
@@ -20,11 +20,11 @@ if not FEATURE_SPEC.exists():
     sys.exit(2)
 
 # ── Configuration ────────────────────────────────────────────────────────────
-LOG_TO_FILE = False  # Set to True to also write test results to test/test-feature-spec.log
+LOG_TO_FILE = False  # Set to True to also write test results to test/test_feature_spec.log
 
 TEST_DIR = SCRIPT_DIR / "test"
 TEST_DIR.mkdir(parents=True, exist_ok=True)
-LOG = TEST_DIR / "test-feature-spec.log"
+LOG = TEST_DIR / "test_feature_spec.log"
 
 if LOG_TO_FILE:
     LOG.write_text("", encoding="utf-8")

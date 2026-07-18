@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""test-validate-grid-rows.py — regression for _extract_grid_rows.
+"""test_validate_grid_rows.py — regression for _extract_grid_rows.
 
 Tests the bug fix where a data row without a proper header was silently
 swallowed because "inv" in keywords matched "INV-001" in the cell text.

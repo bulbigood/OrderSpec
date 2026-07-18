@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""test-setup.py — regression tests for setup.py path resolution and phase setup.
+"""test_setup.py — regression tests for setup.py path resolution and phase setup.
 
 Portable: Python 3 standard library only.
 """
@@ -22,11 +22,11 @@ if not SETUP.exists():
 
 # ── Configuration ────────────────────────────────────────────────────────────
 
-LOG_TO_FILE = False  # Set to True to also write test results to test/test-setup.log
+LOG_TO_FILE = False  # Set to True to also write test results to test/test_setup.log
 
 TEST_DIR = SCRIPT_DIR / "test"
 TEST_DIR.mkdir(parents=True, exist_ok=True)
-LOG = TEST_DIR / "test-setup.log"
+LOG = TEST_DIR / "test_setup.log"
 
 if LOG_TO_FILE:
     LOG.write_text("", encoding="utf-8")

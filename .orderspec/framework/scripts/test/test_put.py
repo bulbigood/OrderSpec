@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""test-put.py — regression for writer transactionality"""
+"""test_put.py — regression for writer transactionality"""
 
 import os
 import shutil
@@ -17,11 +17,11 @@ if not TRACE.exists():
     sys.exit(2)
 
 # ── Configuration ────────────────────────────────────────────────────────────
-LOG_TO_FILE = False  # Set to True to also write test results to test/test-put.log
+LOG_TO_FILE = False  # Set to True to also write test results to test/test_put.log
 
 TEST_DIR = SCRIPT_DIR / "test"
 TEST_DIR.mkdir(parents=True, exist_ok=True)
-LOG = TEST_DIR / "test-put.log"
+LOG = TEST_DIR / "test_put.log"
 
 if LOG_TO_FILE:
     LOG.write_text("", encoding="utf-8")
@@ -32,8 +32,8 @@ from common import FEATURES_DIR
 SPECS_ROOT = WORK / FEATURES_DIR
 SPECS_ROOT.mkdir(parents=True, exist_ok=True)
 
-F = f".test-put-x-{os.getpid()}"
-SF = f".test-put-y-{os.getpid()}"
+F = f".test_put_x_{os.getpid()}"
+SF = f".test_put_y_{os.getpid()}"
 SPECS_F = SPECS_ROOT / F
 SPECS_SF = SPECS_ROOT / SF
 SDIR_F = SPECS_F / ".state"

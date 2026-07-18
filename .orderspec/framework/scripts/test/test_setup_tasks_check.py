@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test for setup.py tasks-check subcommand."""
+"""Regression tests for the setup.py tasks-check subcommand."""
 
 import json
 import os

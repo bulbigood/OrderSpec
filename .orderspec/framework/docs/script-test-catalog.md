@@ -10,7 +10,7 @@
 - CLI-файл оставляет в одном месте только разбор аргументов и композицию; доменная логика, ввод-вывод и валидация живут в отдельных модулях.
 - Один тестовый файл проверяет один production-модуль или один явно названный сквозной контракт.
 
-Текущий runner намеренно поддерживает `test-*.py`, `test_*.py` и `*_test.py`. Исторические тесты в основном используют kebab-case; массовое переименование следует делать отдельным механическим изменением вместе с обновлением docstring и любых внешних CI-фильтров.
+Текущий runner принимает только канонический шаблон `test_*.py`. Это предотвращает повторное появление смешанных стилей именования.
 
 ## Крупнейшие файлы и план декомпозиции
 
@@ -38,17 +38,19 @@
 
 | Файл | Строк | Предлагаемые кластеры |
 |---|---:|---|
-| `scripts/test/test-command-context.py` | 1244 | `test_command_context_schema.py`, `_expansion.py`, `_feature.py`, `_cli.py`; fixtures/builders — в `test/support/command_context.py`. |
-| `scripts/test/test-frontmatter.py` | 1097 | По типам артефактов: spec, prompts, reports, contracts, protocols; общий subprocess harness — в support. |
-| `scripts/test/test-traceability.py` | 1070 | По CLI-командам: init/get/put, validate, plan/mechanisms, consumed-state; feature fixture вынести отдельно. |
-| `scripts/test/test-agents-sync.py` | 1049 | detection, synchronization, rules, worker configuration и по одному adapter contract suite; mock workspace — общий fixture. |
-| `scripts/test/test-validate.py` | 973 | Разделить проверки по семействам M-rules и стадиям spec/plan/tasks; не смешивать lint/extract сценарии. |
-| `scripts/test/test-active-feature.py` | 878 | state CRUD, discovery/resolution, lifecycle status, invalid/corrupt state и CLI contract. |
-| `scripts/test/test-validate-status-codes.py` | 728 | Чистые extractor unit-тесты, M19, M29 и отдельные end-to-end validate cases. |
-| `scripts/test/test-bootstrap-contracts.py` | 643 | Stack detector suites по экосистемам, rendering, audit/migration, init/complete CLI; workspace builders — в support. |
-| `scripts/test/test-setup.py` | 518 | Path resolution и отдельные command suites для plan/tasks/code/checks. |
+| `scripts/test/test_traceability.py` | 1070 | По CLI-командам: init/get/put, validate, plan/mechanisms, consumed-state; feature fixture вынести отдельно. |
+| `scripts/test/test_agents_sync.py` | 1049 | detection, synchronization, rules, worker configuration и по одному adapter contract suite; mock workspace — общий fixture. |
+| `scripts/test/test_validate.py` | 973 | Разделить проверки по семействам M-rules и стадиям spec/plan/tasks; не смешивать lint/extract сценарии. |
+| `scripts/test/test_active_feature.py` | 878 | state CRUD, discovery/resolution, lifecycle status, invalid/corrupt state и CLI contract. |
+| `scripts/test/test_validate_status_codes.py` | 728 | Чистые extractor unit-тесты, M19, M29 и отдельные end-to-end validate cases. |
+| `scripts/test/test_bootstrap_contracts.py` | 643 | Stack detector suites по экосистемам, rendering, audit/migration, init/complete CLI; workspace builders — в support. |
+| `scripts/test/test_setup.py` | 518 | Path resolution и отдельные command suites для plan/tasks/code/checks. |
 
 Избегать одного глобального mutable workspace на весь файл: каждый кластер должен владеть временным каталогом. Повторяющиеся `ok`/`bad`, `run_*`, `write` и `reset_*` собрать в маленькие support-модули, но assertions оставить рядом со сценарием.
+
+Декомпозиция бывшего монолитного command-context теста завершена 2026-07-19: core resolution, validation/output, real-manifest и resource/group сценарии запускаются независимо, общий subprocess/workspace harness вынесен в `test/support/command_context.py`.
+
+Декомпозиция бывшего монолитного frontmatter теста завершена 2026-07-19: command prompts, gate reports, contracts/protocols, feature spec и CLI edge cases запускаются независимо, общий harness вынесен в `test/support/frontmatter.py`.
 
 ## Скрипты
 
@@ -126,83 +128,98 @@
 
 | Файл | Что проверяет |
 |---|---|
-| `scripts/test/test-active-feature.py` | CRUD, discovery, selection и validation active-feature state. |
-| `scripts/test/test-bootstrap-contracts.py` | Stack inference, создание, migration, audit и validation contracts. |
-| `scripts/test/test-bootstrap-workflow.py` | Маршрутизацию фаз unified bootstrap. |
-| `scripts/test/test-code-obligations.py` | Построение и обновление code-check obligation ledger. |
-| `scripts/test/test-code-workflow.py` | Preflight, packets, attempt lifecycle и terminal checks code workflow. |
-| `scripts/test/test-default-mode.py` | Выбор режима команд без аргументов. |
-| `scripts/test/test-feature-spec.py` | Выделение feature ID и каталога. |
-| `scripts/test/test-feedback-recovery-flow.py` | Сквозное восстановление code → spec refine → tasks refine → resume. |
-| `scripts/test/test-task-context.py` | Парсинг task context, path policy и worker whitelist. |
-| `scripts/test/test-task-contract-context.py` | Выбор минимального contract context для задачи. |
-| `scripts/test/test-task-progress.py` | Reconciliation, completion и validation worker result. |
-| `scripts/test/test-task-refine.py` | Сохранность завершённых задач при refinement. |
-| `scripts/test/test-work-order.py` | Capture и ограниченный rollback work order. |
-| `scripts/test/test-workflow-feedback.py` | Создание, listing и consumption cross-stage feedback. |
-| `scripts/test/test-workflow-supervisor.py` | Start/evaluate/answer/status/resume supervisor state machine. |
+| `scripts/test/test_active_feature.py` | CRUD, discovery, selection и validation active-feature state. |
+| `scripts/test/test_bootstrap_contracts.py` | Stack inference, создание, migration, audit и validation contracts. |
+| `scripts/test/test_bootstrap_workflow.py` | Маршрутизацию фаз unified bootstrap. |
+| `scripts/test/test_code_obligations.py` | Построение и обновление code-check obligation ledger. |
+| `scripts/test/test_code_workflow.py` | Preflight, packets, attempt lifecycle и terminal checks code workflow. |
+| `scripts/test/test_default_mode.py` | Выбор режима команд без аргументов. |
+| `scripts/test/test_feature_spec.py` | Выделение feature ID и каталога. |
+| `scripts/test/test_feedback_recovery_flow.py` | Сквозное восстановление code → spec refine → tasks refine → resume. |
+| `scripts/test/test_task_context.py` | Парсинг task context, path policy и worker whitelist. |
+| `scripts/test/test_task_contract_context.py` | Выбор минимального contract context для задачи. |
+| `scripts/test/test_task_progress.py` | Reconciliation, completion и validation worker result. |
+| `scripts/test/test_task_refine.py` | Сохранность завершённых задач при refinement. |
+| `scripts/test/test_work_order.py` | Capture и ограниченный rollback work order. |
+| `scripts/test/test_workflow_feedback.py` | Создание, listing и consumption cross-stage feedback. |
+| `scripts/test/test_workflow_supervisor.py` | Start/evaluate/answer/status/resume supervisor state machine. |
 
 ### Command setup, gates и prompt contracts
 
 | Файл | Что проверяет |
 |---|---|
-| `scripts/test/test-blocking-feedback-contract.py` | Статический контракт blocking-feedback routing/intake. |
-| `scripts/test/test-command-context.py` | Manifest schema, expansion, feature context и CLI command context. |
-| `scripts/test/test-command-input.py` | Разделение controls и semantic input. |
-| `scripts/test/test-gate-purity.py` | Отсутствие мутаций у inspector-only gate surfaces. |
-| `scripts/test/test-gate-target.py` | Read-only разрешение target и command args. |
-| `scripts/test/test-order-bootstrap-tooling.py` | Политику discovery/install skills в bootstrap prompt. |
-| `scripts/test/test-order-code-contract.py` | Статическую wiring-схему `/order.code`. |
-| `scripts/test/test-order-plan-prompt.py` | Структуру и правила plan/plan-check prompts и template. |
-| `scripts/test/test-order-plan-tooling.py` | Tooling delegation в plan prompt. |
-| `scripts/test/test-order-tasks-check-prompt.py` | Контракт tasks-check prompt. |
-| `scripts/test/test-self-gate-mode-order.py` | Приоритет Refine перед Refresh при blocking self-gate. |
-| `scripts/test/test-setup-code-check.py` | Setup payload и prerequisites для code-check. |
-| `scripts/test/test-setup-shell-vars.py` | Форматы `--shell-vars` и `--json`. |
-| `scripts/test/test-setup.py` | Path resolution и основные setup subcommands. |
-| `scripts/test/test-setup_spec_check.py` | Setup для spec-check. |
-| `scripts/test/test-setup_tasks_check.py` | Setup для tasks-check. |
-| `scripts/test/test-upstream-gate.py` | Artifact/report lifecycle и exit codes upstream gate. |
-| `scripts/test/test-validate-code-report.py` | Parsing, validation, finalization и finding IDs code report. |
-| `scripts/test/test-validate-gate-report.py` | Финализацию generic gate report по mechanical result. |
+| `scripts/test/test_blocking_feedback_contract.py` | Статический контракт blocking-feedback routing/intake. |
+| `scripts/test/test_command_context_core.py` | Загрузку manifest и базовое разрешение command context. |
+| `scripts/test/test_command_context_validation.py` | Manifest validation и стабильность выходного JSON-контракта. |
+| `scripts/test/test_command_context_manifest.py` | Разрешение контекста по реальному framework manifest. |
+| `scripts/test/test_command_context_resources.py` | Resource references, groups, порядок expansion и циклы. |
+| `scripts/test/test_command_input.py` | Разделение controls и semantic input. |
+| `scripts/test/test_gate_purity.py` | Отсутствие мутаций у inspector-only gate surfaces. |
+| `scripts/test/test_gate_target.py` | Read-only разрешение target и command args. |
+| `scripts/test/test_order_bootstrap_tooling.py` | Политику discovery/install skills в bootstrap prompt. |
+| `scripts/test/test_order_code_contract.py` | Статическую wiring-схему `/order.code`. |
+| `scripts/test/test_order_plan_prompt.py` | Структуру и правила plan/plan-check prompts и template. |
+| `scripts/test/test_order_plan_tooling.py` | Tooling delegation в plan prompt. |
+| `scripts/test/test_order_tasks_check_prompt.py` | Контракт tasks-check prompt. |
+| `scripts/test/test_self_gate_mode_order.py` | Приоритет Refine перед Refresh при blocking self-gate. |
+| `scripts/test/test_setup_code_check.py` | Setup payload и prerequisites для code-check. |
+| `scripts/test/test_setup_shell_vars.py` | Форматы `--shell-vars` и `--json`. |
+| `scripts/test/test_setup.py` | Path resolution и основные setup subcommands. |
+| `scripts/test/test_setup_spec_check.py` | Setup для spec-check. |
+| `scripts/test/test_setup_tasks_check.py` | Setup для tasks-check. |
+| `scripts/test/test_upstream_gate.py` | Artifact/report lifecycle и exit codes upstream gate. |
+| `scripts/test/test_validate_code_report.py` | Parsing, validation, finalization и finding IDs code report. |
+| `scripts/test/test_validate_gate_report.py` | Финализацию generic gate report по mechanical result. |
 
 ### Traceability, parsing и validation
 
 | Файл | Что проверяет |
 |---|---|
-| `scripts/test/test-diff.py` | Traceability diff summary. |
-| `scripts/test/test-extract-spec-ids.py` | Извлечение spec IDs. |
-| `scripts/test/test-extract-trace.py` | Извлечение trace rows. |
-| `scripts/test/test-extract.py` | Совместный extract-spec/extract-trace/lint regression flow. |
-| `scripts/test/test-frontmatter.py` | Frontmatter всех поддерживаемых типов артефактов. |
-| `scripts/test/test-get.py` | Чтение traceability state командой get. |
-| `scripts/test/test-lint.py` | Lint mechanisms/trace/spec-ids. |
-| `scripts/test/test-nfr-provenance.py` | MUST-level NFR provenance. |
-| `scripts/test/test-put.py` | Transactional запись traceability tables. |
-| `scripts/test/test-test-topology.py` | Проверку test topology в mechanisms. |
-| `scripts/test/test-trace-matrices.py` | Качество IF/AC/category matrices. |
-| `scripts/test/test-trace_validate_categories.py` | Определение semantic categories и journey matrix. |
-| `scripts/test/test-trace_validate_glossary.py` | Определение glossary независимо от номера раздела. |
-| `scripts/test/test-traceability-get-feature-dir.py` | `get` с явным `--feature-dir` без positional feature. |
-| `scripts/test/test-traceability-mark-consumed.py` | Запись marker `CONSUMED_STALE`. |
-| `scripts/test/test-traceability.py` | Основной traceability CLI и cross-artifact validation. |
-| `scripts/test/test-validate-grid-rows.py` | Парсинг grid rows и защиту от ложного header match. |
-| `scripts/test/test-validate-status-codes.py` | Status-code extraction и M19/M29 coverage checks. |
-| `scripts/test/test-validate.py` | Полный набор traceability validation rules. |
+| `scripts/test/test_diff.py` | Traceability diff summary. |
+| `scripts/test/test_extract_spec_ids.py` | Извлечение spec IDs. |
+| `scripts/test/test_extract_trace.py` | Извлечение trace rows. |
+| `scripts/test/test_extract.py` | Совместный extract-spec/extract-trace/lint regression flow. |
+| `scripts/test/test_frontmatter_prompts.py` | Frontmatter command prompts. |
+| `scripts/test/test_frontmatter_reports.py` | Frontmatter gate reports. |
+| `scripts/test/test_frontmatter_contracts.py` | Frontmatter project contracts, framework rules и protocols. |
+| `scripts/test/test_frontmatter_spec.py` | Frontmatter feature spec и вложенные refs/generator fields. |
+| `scripts/test/test_frontmatter_cli.py` | Exit codes и текстовый режим frontmatter CLI. |
+| `scripts/test/test_get.py` | Чтение traceability state командой get. |
+| `scripts/test/test_lint.py` | Lint mechanisms/trace/spec-ids. |
+| `scripts/test/test_nfr_provenance.py` | MUST-level NFR provenance. |
+| `scripts/test/test_put.py` | Transactional запись traceability tables. |
+| `scripts/test/test_test_topology.py` | Проверку test topology в mechanisms. |
+| `scripts/test/test_trace_matrices.py` | Качество IF/AC/category matrices. |
+| `scripts/test/test_trace_validate_categories.py` | Определение semantic categories и journey matrix. |
+| `scripts/test/test_trace_validate_glossary.py` | Определение glossary независимо от номера раздела. |
+| `scripts/test/test_traceability_get_feature_dir.py` | `get` с явным `--feature-dir` без positional feature. |
+| `scripts/test/test_traceability_mark_consumed.py` | Запись marker `CONSUMED_STALE`. |
+| `scripts/test/test_traceability.py` | Основной traceability CLI и cross-artifact validation. |
+| `scripts/test/test_validate_grid_rows.py` | Парсинг grid rows и защиту от ложного header match. |
+| `scripts/test/test_validate_status_codes.py` | Status-code extraction и M19/M29 coverage checks. |
+| `scripts/test/test_validate.py` | Полный набор traceability validation rules. |
 
 ### Agents, automation и tooling
 
 | Файл | Что проверяет |
 |---|---|
-| `scripts/test/test-agents-sync.py` | Detection/sync/rules/workers для всех agent adapters. |
-| `scripts/test/test-automation-policy.py` | Event/config validation, classification и safety overrides. |
-| `scripts/test/test-validate-tooling.py` | Tooling v3 bindings и generic contract references. |
+| `scripts/test/test_agents_sync.py` | Detection/sync/rules/workers для всех agent adapters. |
+| `scripts/test/test_automation_policy.py` | Event/config validation, classification и safety overrides. |
+| `scripts/test/test_validate_tooling.py` | Tooling v3 bindings и generic contract references. |
 
 ## Состояние именования и документации
 
 - Все 36 файлов непосредственно в `scripts/` соответствуют `snake_case.py`.
-- Все 56 тестов начинаются с `test-`, но 52 используют kebab-case, а четыре смешивают дефисы и подчёркивания: `test-setup_spec_check.py`, `test-setup_tasks_check.py`, `test-trace_validate_categories.py`, `test-trace_validate_glossary.py`.
-- Целевой формат тестов — `test_<subject>.py`; это совместимо с Python tooling и уже поддерживается runner.
-- На дату аудита все 36 script-модулей, 56 тестов и 7 adapter-модулей имеют module docstring в начале файла.
+- Все 63 запускаемых теста соответствуют формату `test_<subject>.py` и используют только `snake_case`.
+- Runner обнаруживает только канонический формат, поэтому новое несовместимое имя не будет незаметно принято suite.
+- На дату аудита все 36 script-модулей, 63 теста, 3 test-support модуля и 7 adapter-модулей имеют module docstring в начале файла.
 
-Рекомендуемый порядок миграции имён: сначала заменить четыре гибридных имени, затем механически перевести остальные `test-*.py` в `test_*.py`, после чего сузить `PATTERNS` в `run_all_tests.py` до `test_*.py`. Каждый этап должен проходить полный runner и поиск старых путей по репозиторию.
+Миграция исторических kebab-case имён завершена 2026-07-19. При добавлении теста используйте имя production-модуля после `test_`, например `active_feature.py` → `test_active_feature.py`.
+
+## Test support
+
+| Файл | Назначение |
+|---|---|
+| `scripts/test/support/__init__.py` | Обозначает пакет переиспользуемой тестовой инфраструктуры. |
+| `scripts/test/support/command_context.py` | Даёт command-context тестам изолированный workspace, builders, subprocess helpers и summary/cleanup. |
+| `scripts/test/support/frontmatter.py` | Даёт frontmatter тестам изолированный workspace, CLI helpers и summary/cleanup. |

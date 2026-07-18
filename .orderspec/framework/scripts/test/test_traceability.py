@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""test-traceability.py — regression for traceability.py validate command."""
+"""test_traceability.py — regression for traceability.py validate command."""
 
 import json
 import shutil

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""test-diff.py — regression for diff engine"""
+"""test_diff.py — regression for diff engine"""
 
 import json
 import shutil
@@ -21,7 +21,7 @@ LOG_TO_FILE = False
 
 TEST_DIR = SCRIPT_DIR / "test"
 TEST_DIR.mkdir(parents=True, exist_ok=True)
-LOG = TEST_DIR / "test-diff.log"
+LOG = TEST_DIR / "test_diff.log"
 
 if LOG_TO_FILE:
     LOG.write_text("", encoding="utf-8")

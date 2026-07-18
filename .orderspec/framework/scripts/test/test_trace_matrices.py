@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""test-trace-matrices.py — regression tests for matrix data quality in trace_validate.py.
+"""test_trace_matrices.py — regression tests for matrix data quality in trace_validate.py.
 
 Tests:
   1. covers_reqs must not contain IF-* IDs (only REQ-)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""test-extract.py — comprehensive extract-spec + extract-trace + lint regression"""
+"""test_extract.py — comprehensive extract-spec + extract-trace + lint regression"""
 
 import os
 import shutil
@@ -17,11 +17,11 @@ if not TRACE.exists():
     sys.exit(2)
 
 # ── Configuration ────────────────────────────────────────────────────────────
-LOG_TO_FILE = False  # Set to True to also write test results to test/test-extract.log
+LOG_TO_FILE = False  # Set to True to also write test results to test/test_extract.log
 
 TEST_DIR = SCRIPT_DIR / "test"
 TEST_DIR.mkdir(parents=True, exist_ok=True)
-LOG = TEST_DIR / "test-extract.log"
+LOG = TEST_DIR / "test_extract.log"
 
 if LOG_TO_FILE:
     LOG.write_text("", encoding="utf-8")

@@ -14,8 +14,8 @@ from pathlib import Path
 SCRIPTS_DIR = Path(__file__).resolve().parent
 TEST_DIR = SCRIPTS_DIR / "test"
 
-# Discover test files: test-*.py, test_*.py, *_test.py
-PATTERNS = ["test-*.py", "test_*.py", "*_test.py"]
+# Canonical discovery pattern for OrderSpec regression tests.
+PATTERNS = ["test_*.py"]
 
 
 def find_test_files() -> list[Path]:

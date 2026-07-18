@@ -1,4 +1,4 @@
-"""test-order-plan-tooling.py — verify tooling delegation in order.plan.md"""
+"""test_order_plan_tooling.py — verify tooling delegation in order.plan.md"""
 
 import unittest
 from pathlib import Path

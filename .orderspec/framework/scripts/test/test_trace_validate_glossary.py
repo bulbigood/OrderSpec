@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test for trace_validate.py glossary detection fix."""
+"""Regression tests for trace_validate.py glossary detection."""
 
 import sys
 from pathlib import Path

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""test-validate-status-codes.py — regression for _extract_status_codes and M29.
+"""test_validate_status_codes.py — regression for _extract_status_codes and M29.
 
 Tests:
 1. _extract_status_codes: per-clause context (not per-line)
@@ -27,7 +27,7 @@ if not TRACE.exists():
 LOG_TO_FILE = False
 TEST_DIR_LOCAL = SCRIPT_DIR / "test"
 TEST_DIR_LOCAL.mkdir(parents=True, exist_ok=True)
-LOG = TEST_DIR_LOCAL / "test-validate-status-codes.log"
+LOG = TEST_DIR_LOCAL / "test_validate_status_codes.log"
 
 if LOG_TO_FILE:
     LOG.write_text("", encoding="utf-8")

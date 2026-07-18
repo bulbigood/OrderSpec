@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""test-bootstrap-contracts.py — regression for deterministic bootstrap_contracts.py"""
+"""test_bootstrap_contracts.py — regression for deterministic bootstrap_contracts.py"""
 
 import json
 import shutil
@@ -23,7 +23,7 @@ LOG_TO_FILE = False
 
 TEST_DIR = SCRIPT_DIR
 TEST_DIR.mkdir(parents=True, exist_ok=True)
-LOG = TEST_DIR / "test-bootstrap-contracts.log"
+LOG = TEST_DIR / "test_bootstrap_contracts.log"
 
 if LOG_TO_FILE:
     LOG.write_text("", encoding="utf-8")

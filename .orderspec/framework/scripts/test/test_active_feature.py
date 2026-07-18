@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""test-active-feature.py — regression for active_feature.py state manager"""
+"""test_active_feature.py — regression for active_feature.py state manager"""
 
 import json
 import shutil
@@ -20,11 +20,11 @@ if not ACTIVE.exists():
     sys.exit(2)
 
 # ── Configuration ────────────────────────────────────────────────────────────
-LOG_TO_FILE = False  # Set to True to also write test results to test/test-active-feature.log
+LOG_TO_FILE = False  # Set to True to also write test results to test/test_active_feature.log
 
 TEST_DIR = SCRIPT_DIR / "test"
 TEST_DIR.mkdir(parents=True, exist_ok=True)
-LOG = TEST_DIR / "test-active-feature.log"
+LOG = TEST_DIR / "test_active_feature.log"
 
 if LOG_TO_FILE:
     LOG.write_text("", encoding="utf-8")

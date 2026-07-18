@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""test-get.py — regression for get command"""
+"""test_get.py — regression for get command"""
 
 import os
 import shutil
@@ -17,11 +17,11 @@ if not TRACE.exists():
     sys.exit(2)
 
 # ── Configuration ────────────────────────────────────────────────────────────
-LOG_TO_FILE = False  # Set to True to also write test results to test/test-get.log
+LOG_TO_FILE = False  # Set to True to also write test results to test/test_get.log
 
 TEST_DIR = SCRIPT_DIR / "test"
 TEST_DIR.mkdir(parents=True, exist_ok=True)
-LOG = TEST_DIR / "test-get.log"
+LOG = TEST_DIR / "test_get.log"
 
 if LOG_TO_FILE:
     LOG.write_text("", encoding="utf-8")
@@ -32,7 +32,7 @@ from common import FEATURES_DIR
 SPECS_ROOT = WORK / FEATURES_DIR
 SPECS_ROOT.mkdir(parents=True, exist_ok=True)
 
-F = f".test-get-{os.getpid()}"
+F = f".test_get_{os.getpid()}"
 SPECS = SPECS_ROOT / F
 SDIR = SPECS / ".state"
 TAB = "\t"

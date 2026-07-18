@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""test-agents-sync.py — regression tests for agents_sync.py and adapters
+"""test_agents_sync.py — regression tests for agents_sync.py and adapters
 
 Tests:
 - Detection of Kilo Code, Claude Code, and Codex
@@ -34,7 +34,7 @@ LOG_TO_FILE = False
 
 TEST_DIR = SCRIPT_DIR
 TEST_DIR.mkdir(parents=True, exist_ok=True)
-LOG = TEST_DIR / "test-agents-sync.log"
+LOG = TEST_DIR / "test_agents_sync.log"
 
 if LOG_TO_FILE:
     LOG.write_text("", encoding="utf-8")
