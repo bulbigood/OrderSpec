@@ -236,6 +236,7 @@ If present:
 
 - Read it.
 - If verdict is PASS, proceed.
+- If state is `CONSUMED_STALE`, ignore it as an active verdict and proceed; `/order.spec-check` is required for new PASS evidence.
 - If verdict is BLOCK or ROUTING REQUIRED:
   1. Treat findings routed to `/order.spec` as authoritative defects to resolve.
   2. Do not silently compensate for findings owned by other commands.
@@ -264,12 +265,14 @@ select among Create, Refine, and Decompose using candidate modes, explicit
 flags, and refine-vs-create heuristics above. Explicit `--new` and `--split`
 retain precedence.
 
-If a BLOCK/ROUTING REQUIRED report was used to modify `spec.md`, then after successful write, ID projection, and validation, replace the old report with a `CONSUMED_STALE` marker that states:
+If a BLOCK/ROUTING REQUIRED report was used to modify `spec.md`, then after successful write, ID projection, and validation, replace it through the deterministic marker command:
 
-- the previous report was consumed by `/order.spec`;
-- it is no longer an active verdict;
-- this is not PASS;
-- `/order.spec-check` is required for a fresh verdict.
+```bash
+python3 .orderspec/framework/scripts/traceability.py mark-consumed \
+  --report "<feature-directory>/spec-report.md" \
+  --consumer /order.spec \
+  --recheck /order.spec-check
+```
 
 Do not add a changelog row merely for report consumption. Changelog records actual contract changes only.
 

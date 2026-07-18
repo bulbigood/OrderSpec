@@ -5,7 +5,9 @@ Deterministic; no LLM judgement. Checks, in order:
 
   0. Invocation sanity: required path arguments must not be empty.
   1. The upstream ARTIFACT must exist — else HARD STOP (exit 2).
-  2. If a gate REPORT exists, its verdict must be PASS — else HALT (exit 1).
+  2. A CONSUMED_STALE report is inactive — proceed with advisory (exit 0).
+  3. Otherwise, if a gate REPORT exists, its verdict must be PASS — else HALT
+     (exit 1).
 
 Output: single JSON line on stdout.
 
@@ -76,6 +78,24 @@ def parse_verdict(report_path):
     except OSError:
         pass
     return ""
+
+
+def report_is_consumed_stale(report_path):
+    """Recognize current and legacy canonical mark-consumed output.
+
+    A missing verdict alone is not enough: malformed reports must remain
+    fail-closed instead of being mistaken for consumed workflow state.
+    """
+    marker = "<!-- orderspec-report-state: CONSUMED_STALE -->"
+    try:
+        with open(report_path, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if stripped == marker or stripped.startswith("# CONSUMED_STALE — "):
+                    return True
+            return False
+    except OSError:
+        return False
 
 
 def parse_date(report_path):
@@ -204,6 +224,16 @@ def main():
             "status": "advisory",
             "block": False,
             "reason": f"upstream gate ({recheck_cmd}) was not run",
+            "recheck": recheck_cmd,
+        })
+        sys.exit(0)
+
+    if report_is_consumed_stale(report):
+        output_json({
+            "status": "advisory",
+            "block": False,
+            "state": "consumed_stale",
+            "reason": "upstream gate report was consumed; fresh verdict not available",
             "recheck": recheck_cmd,
         })
         sys.exit(0)

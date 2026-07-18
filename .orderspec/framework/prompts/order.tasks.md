@@ -178,6 +178,7 @@ Use self-gate result read in Step 3. Do not perform a second check.
 
 -   **ABSENT** → Proceed.
 -   **PRESENT (✅ PASS)** → Ignore report; proceed with `$ARGUMENTS`.
+-   **PRESENT (`CONSUMED_STALE`)** → Previous verdict is inactive. Proceed with `$ARGUMENTS`; a fresh `/order.tasks-check` is required for new PASS evidence.
 -   **PRESENT (⛔ BLOCK / 🔀 ROUTING)** → This is your fix-list. Address every finding targeting `/order.tasks`. Route findings for other commands. Treat `$ARGUMENTS` as additional guidance, not a replacement.
 
 Use the workflow feedback result already loaded in Step 3. Every open item is
@@ -535,7 +536,10 @@ If a BLOCK/ROUTING `tasks-report.md` was used in Step 5, mark it consumed.
 
 ```bash
 eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
-python3 .orderspec/framework/scripts/traceability.py mark-consumed --report "$FEATURE_DIR/tasks-report.md"
+python3 .orderspec/framework/scripts/traceability.py mark-consumed \
+  --report "$FEATURE_DIR/tasks-report.md" \
+  --consumer /order.tasks \
+  --recheck /order.tasks-check
 ```
 
 After successful validation, consume each open `order.tasks` workflow feedback

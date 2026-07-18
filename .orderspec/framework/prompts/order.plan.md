@@ -170,6 +170,7 @@ Use self-gate result read in Step 3. Do not perform a second check.
 
 -   **ABSENT** → Proceed.
 -   **PRESENT (✅ PASS)** → Ignore report; proceed with `$ARGUMENTS`.
+-   **PRESENT (`CONSUMED_STALE`)** → Previous verdict is inactive. Proceed with `$ARGUMENTS`; a fresh `/order.plan-check` is required for new PASS evidence.
 -   **PRESENT (⛔ BLOCK / 🔀 ROUTING)** → This is your fix-list. Address every finding targeting `/order.plan`. Route findings for other commands. Treat `$ARGUMENTS` as additional guidance, not a replacement.
 
 Treat every open `order.plan` workflow feedback item loaded in Step 3 as an
@@ -411,7 +412,10 @@ If a BLOCK/ROUTING `plan-report.md` was used in Step 5, mark it consumed.
 
 ```bash
 eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
-python3 .orderspec/framework/scripts/traceability.py mark-consumed --report "$FEATURE_DIR/plan-report.md"
+python3 .orderspec/framework/scripts/traceability.py mark-consumed \
+  --report "$FEATURE_DIR/plan-report.md" \
+  --consumer /order.plan \
+  --recheck /order.plan-check
 ```
 
 After successful plan validation, consume each addressed workflow feedback item:

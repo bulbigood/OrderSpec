@@ -79,8 +79,13 @@ def main():
     sum_parser.add_argument("--json", action="store_true")
     sum_parser.add_argument("feature", nargs="?")
 
-    mc_parser = subparsers.add_parser("mark-consumed", help="mark-consumed --report <path>")
+    mc_parser = subparsers.add_parser(
+        "mark-consumed",
+        help="mark-consumed --report <path> --consumer <command> --recheck <command>",
+    )
     mc_parser.add_argument("--report", required=True, help="Path to the gate report file to mark as consumed")
+    mc_parser.add_argument("--consumer", required=True, help="Command that consumed the report")
+    mc_parser.add_argument("--recheck", required=True, help="Gate command that creates a fresh verdict")
 
     diff_parser = subparsers.add_parser("diff-summary", help="diff-summary --old <ref> [--new <ref>] [--json] <feature>")
     diff_parser.add_argument("--old", required=True, help="Git ref for old version")

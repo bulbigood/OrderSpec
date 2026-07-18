@@ -112,6 +112,7 @@ If feature resolution itself fails, no safe report path exists; report the stop 
 Do not re-run `spec-check`, `plan-check`, `tasks-check`, or `sync-check` inside this gate. Read existing reports only as signals.
 
 - Existing upstream `BLOCK` or `ROUTING_REQUIRED` report is a routing finding to its owner. Do not claim code verification is clean.
+- Existing upstream `CONSUMED_STALE` report is inactive advisory state, not a finding and not PASS evidence. Continue inspection; name the relevant `*-check` when fresh evidence is needed.
 - Missing upstream report is an advisory note; it does not become a code defect.
 - A report older than its artifact is stale evidence. Record a routing finding to the relevant `*-check`; never use stale `PASS` as current proof.
 - If spec and plan disagree on behavior, emit one `/order.sync-check` routing block and verify only obligations that remain unambiguous.

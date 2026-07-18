@@ -14,7 +14,12 @@ def test_mark_consumed():
     
     try:
         result = subprocess.run(
-            ["python3", str(SCRIPT), "mark-consumed", "--report", report_path],
+            [
+                "python3", str(SCRIPT), "mark-consumed",
+                "--report", report_path,
+                "--consumer", "/order.spec",
+                "--recheck", "/order.spec-check",
+            ],
             capture_output=True, text=True
         )
         
@@ -32,8 +37,12 @@ def test_mark_consumed():
             print(f"FAIL: 'not a PASS verdict' not found", file=sys.stderr)
             sys.exit(1)
         
-        if "/order.plan-check" not in content:
-            print(f"FAIL: /order.plan-check reference not found", file=sys.stderr)
+        if "orderspec-report-state: CONSUMED_STALE" not in content:
+            print("FAIL: machine-readable consumed marker not found", file=sys.stderr)
+            sys.exit(1)
+
+        if "/order.spec" not in content or "/order.spec-check" not in content:
+            print("FAIL: consumer/recheck references not found", file=sys.stderr)
             sys.exit(1)
         
         print("OK: mark-consumed writes correct CONSUMED_STALE marker")

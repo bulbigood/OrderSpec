@@ -250,13 +250,21 @@ If present:
 
 - Read it.
 - If verdict is PASS, proceed.
+- If state is `CONSUMED_STALE`, ignore it as an active verdict and proceed; `/order.spec-check` is required for new PASS evidence.
 - If verdict is BLOCK or ROUTING REQUIRED:
   1. Treat findings routed to `/order.code-to-spec` as authoritative defects to resolve.
   2. Do not silently compensate for findings owned by other commands.
   3. List upstream/downstream-owned findings in the completion report.
   4. Treat `$ARGUMENTS` as additional guidance, not a replacement for the report.
 
-If a BLOCK/ROUTING REQUIRED report was used to modify `spec.md`, then after successful write, ID projection, and validation, replace the old report with a `CONSUMED_STALE` marker.
+If a BLOCK/ROUTING REQUIRED report was used to modify `spec.md`, then after successful write, ID projection, and validation, replace it through the deterministic marker command:
+
+```bash
+python3 .orderspec/framework/scripts/traceability.py mark-consumed \
+  --report "<feature-directory>/spec-report.md" \
+  --consumer /order.code-to-spec \
+  --recheck /order.spec-check
+```
 
 ## Project Contracts and §6
 

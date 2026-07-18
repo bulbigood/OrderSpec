@@ -73,6 +73,12 @@ A gate does not silently rewrite a spec to resolve ambiguity. It does not pick a
 
 Gates never edit the artifact they inspect. Their writes are limited to the gate report and explicitly defined workflow state. Every defect is routed to the command that owns the artifact.
 
+When an owner successfully addresses a blocking report, the report becomes
+`CONSUMED_STALE`. This is inactive historical workflow state: downstream
+commands continue with an advisory, while a fresh gate run remains required
+for new PASS evidence. A consumed report is neither PASS nor an active BLOCK.
+Malformed or unknown report state remains fail-closed.
+
 This is what makes OrderSpec safe under a weak model: the model is never trusted to silently "improve" your contract.
 
 ## Governance and capabilities

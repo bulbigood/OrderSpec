@@ -774,12 +774,13 @@ def cmd_mark_consumed(args):
     if not report_path.exists():
         die(f"mark-consumed: report file not found: {report_path}")
 
-    marker = f"""# CONSUMED_STALE \u2014 {report_path.name}
+    marker = f"""<!-- orderspec-report-state: CONSUMED_STALE -->
+# CONSUMED_STALE \u2014 {report_path.name}
 
 This is not a PASS verdict.
 
-The previous `/order.plan-check` report was consumed by `/order.plan` and is now stale.
-Run `/order.plan-check` for a fresh verdict.
+The previous gate report was consumed by `{args.consumer}` and is now stale.
+Run `{args.recheck}` for a fresh verdict.
 """
     report_path.write_text(marker, encoding="utf-8")
     print(f"mark-consumed: wrote CONSUMED_STALE marker to {report_path}")

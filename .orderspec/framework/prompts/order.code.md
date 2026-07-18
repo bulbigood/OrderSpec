@@ -342,6 +342,7 @@ test -e "$SELF_REPORT" && echo "SELF_REPORT_PRESENT" || echo "SELF_REPORT_ABSENT
 
 - **ABSENT** → Proceed.
 - **PRESENT (✅ PASS)** → Ignore report; proceed with `$ARGUMENTS`.
+- **PRESENT (`CONSUMED_STALE`)** → Previous verdict is inactive. Proceed; a fresh `/order.tasks-check` is required for new PASS evidence.
 - **PRESENT (⛔ BLOCK / 🔀 ROUTING)** → This is your fix-list IF findings target `/order.code`. But `/order.code` executes a frozen `tasks.md`; findings targeting `/order.tasks` or upstream MUST NOT be patched here. If any finding targets `/order.code` execution behavior (e.g. "task Tnnn path missing"), STOP and route back to `/order.tasks`. Otherwise proceed — `tasks.md` was already gated in Step 4.
 
 ### Step 7: Load Execution Context
@@ -703,7 +704,10 @@ If a BLOCK/ROUTING `tasks-report.md` was used as a fix-list in Step 6, mark it c
 
 ```bash
 eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
-python3 .orderspec/framework/scripts/traceability.py mark-consumed --report "$FEATURE_DIR/tasks-report.md"
+python3 .orderspec/framework/scripts/traceability.py mark-consumed \
+  --report "$FEATURE_DIR/tasks-report.md" \
+  --consumer /order.code \
+  --recheck /order.tasks-check
 ```
 
 ---
