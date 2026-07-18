@@ -26,13 +26,23 @@ It runs after `/order.tasks` and answers: Is `tasks.md` a faithful, well-ordered
 
 This gate is a **pure inspector**. It writes only `tasks-report.md`. It MUST NOT edit `spec.md`, `plan.md`, `tasks.md`, or source code.
 
+## Severity Model
+
+Severity measures defect impact, not whether the command can continue:
+- **CRITICAL**: constitution `MUST` violation; violated or unenforced invariant with a reachable write path; atomicity, security, data-loss, or data-corruption risk.
+- **HIGH**: missing, contradicted, invented, or weakly evidenced P1/MVP obligation; missing required upstream artifact or implementation path; P1 ordering, test-first, prerequisite, or evidence-topology failure; upstream non-PASS.
+- **MEDIUM**: non-P1 defect or evidence gap; unavailable or invalid operational context; stale upstream evidence; task scope or sequencing defect without critical risk.
+- **LOW**: cosmetic or organizational residue with no implementation, orchestration, or runtime impact.
+
+A terminal precondition can require a BLOCK report and stop the command independently of finding severity. Do not inflate an operational/context finding to CRITICAL merely because inspection cannot continue. Unless a rule explicitly says otherwise, P1/MVP scope raises a material defect to HIGH and non-P1 scope is MEDIUM. Escalate to CRITICAL only when the defect meets the CRITICAL definition above.
+
 ## Command Context Bootstrap
 
 1. Resolve command context:
    ```bash
    python3 .orderspec/framework/scripts/command_context.py resolve order.tasks-check --json
    ```
-2. If `ok` is `false` or `missing_required` is non-empty, STOP and report missing required context.
+2. If `ok` is `false` or `missing_required` is non-empty, treat this as the terminal precondition `T0-011 (MEDIUM): command context unavailable` and STOP. If a report target can be resolved safely from the available context, write a BLOCK report; otherwise report the finding in chat.
 3. Read every file returned in `to_read`, in returned order.
 4. Interpret each file by `usage`.
 
@@ -50,12 +60,12 @@ This gate is a **pure inspector**. It writes only `tasks-report.md`. It MUST NOT
    python3 .orderspec/framework/scripts/active_feature.py get --json
    python3 .orderspec/framework/scripts/active_feature.py validate --json
    ```
-3. If active state validation fails, write BLOCK report with `T0-002 (HIGH): active feature state invalid`, then stop.
+3. If active state validation fails, write BLOCK report with `T0-002 (MEDIUM): active feature state invalid`, then stop.
 4. If `$ARGUMENTS` contains an explicit feature reference, resolve it read-only using `active_feature.py list --json`.
-   - If ambiguous: `T0-003 (HIGH): ambiguous feature reference`.
-   - If not found: `T0-004 (HIGH): feature not found`.
+   - If ambiguous: write a BLOCK report with `T0-003 (MEDIUM): ambiguous feature reference`, then stop.
+   - If not found: write a BLOCK report with `T0-004 (MEDIUM): feature not found`, then stop.
 5. Do not use `active_feature.py select` in this gate.
-6. If no target is resolved, write BLOCK report with `T0-000 (CRITICAL): no active feature`.
+6. If no target is resolved, write BLOCK report with `T0-000 (MEDIUM): no active feature`, then stop.
 
 This gate MUST NOT modify `.orderspec/state/active-feature.json`.
 
@@ -77,11 +87,11 @@ python3 .orderspec/framework/scripts/upstream_gate.py \
 ```
 
 Interpret exit codes:
-- **exit 2 (stop)** — upstream artifact (`plan.md`) missing. Write BLOCK report with `T0-005 (CRITICAL): upstream plan.md missing`, route to `/order.plan`, then stop.
+- **exit 2 (stop)** — upstream artifact (`plan.md`) missing. Write BLOCK report with `T0-005 (HIGH): upstream plan.md missing`, route to `/order.plan`, then stop.
 - **exit 1 (halt)** — plan gate report exists and is non-PASS. Write BLOCK report with `T0-006 (HIGH): upstream plan gate non-PASS (verdict: {verdict})`, route to `/order.plan` then `/order.plan-check`, then stop.
-- **exit 0 (advisory)** — plan gate report absent or stale. Proceed, but record `T0-007 (LOW): plan gate advisory ({reason})`.
+- **exit 0 (advisory)** — plan gate report absent or stale. Proceed, but record `T0-007 (MEDIUM): plan gate advisory ({reason})`.
 - **exit 0 (ok)** — Proceed.
-- **exit 64 (error)** — invocation error. Write BLOCK report with `T0-008 (HIGH): upstream_gate invocation error`.
+- **exit 64 (error)** — invocation error. Write BLOCK report with `T0-008 (MEDIUM): upstream_gate invocation error`, then stop.
 
 Do not use `--force` in this gate.
 
@@ -108,13 +118,15 @@ python3 .orderspec/framework/scripts/task_contract_context.py validate \
 ```
 
 If this exits non-zero, import one blocking finding:
-`T0-009 (HIGH): task context whitelist invalid`, include the script's exact
-validation errors, route to `/order.tasks`, and stop semantic inspection.
+`T0-009: task context whitelist invalid`, include the script's exact validation
+errors, assign HIGH when affected context belongs to P1/MVP and MEDIUM otherwise,
+route to `/order.tasks`, and stop semantic inspection.
 
 If contract-context validation exits non-zero, import one blocking finding:
-`T0-010 (HIGH): task contract context invalid`, include the script's exact
-errors, and route an undefined spec ID to `/order.spec` or a missing phase
-context to `/order.tasks`.
+`T0-010: task contract context invalid`, include the script's exact errors,
+assign HIGH when affected context belongs to P1/MVP and MEDIUM otherwise, and
+route an undefined spec ID to `/order.spec` or a missing phase context to
+`/order.tasks`.
 
 The JSON output is the **ground truth** for mechanical findings, inventory, categories, matrices, and contradiction grid data.
 You MUST import all findings exactly as provided, including their `severity` and `disposition`.
@@ -135,7 +147,7 @@ tasks. Do not route such tasks merely because they carry `[USn]`.
 Read `tasks.md`, `plan.md`, and `spec.md`. Perform the following checks that require LLM judgment.
 For any finding, assign disposition `Route` and create a routing block.
 
-Semantic findings (T1-xxx through T7-xxx) must be integrated into the report's Findings table alongside mechanical findings. Each semantic finding gets its own row with:
+Semantic findings (T1-xxx through T8-xxx) must be integrated into the report's Findings table alongside mechanical findings. Each semantic finding gets its own row with:
 - `ID`: T{n}-NNN (prefix by pass)
 - `Source`: "semantic"
 - `Severity`: CRITICAL/HIGH/MEDIUM/LOW
@@ -145,24 +157,24 @@ Semantic findings (T1-xxx through T7-xxx) must be integrated into the report's F
 
 ### T1. No New Decisions (faithfulness to plan)
 
-- **T1a**: Any task introducing a design decision **absent from spec and plan** (file, mechanism, library, schema field, endpoint not derivable upstream) → **Route** (CRITICAL if MVP/P1, else HIGH). The gate never silently keeps or deletes an invented decision.
-- **T1b**: Any task referencing a plan mechanism/file/path **not in the current plan** (prose mention, not field-3 ref) → **Route** to `/order.tasks` (HIGH).
+- **T1a**: Any task introducing a design decision **absent from spec and plan** (file, mechanism, library, schema field, endpoint not derivable upstream) → **Route** (HIGH for P1/MVP, MEDIUM otherwise). The gate never silently keeps or deletes an invented decision. Escalate to CRITICAL only when the invented decision violates a constitution `MUST`, leaves an invariant unenforced, or creates atomicity, security, data-loss, or data-corruption risk.
+- **T1b**: Any task referencing a plan mechanism/file/path **not in the current plan** (prose mention, not field-3 ref) → **Route** to `/order.tasks` (HIGH for P1/MVP, MEDIUM otherwise).
 
 ### T2. Operational Granularity (NOT a coverage or cap check)
 
 - **T2a**: A task whose description bundles **unrelated** work sharing no coherent behavior (genuine grab-bag), such that `/order.code` cannot execute it as one discrete step → **Route** (MEDIUM). Do NOT raise this merely because a task lists several refs — that is legal and capped.
-- **T2b**: A TEST task legitimately exercising one coherent multi-AC flow is NOT a defect. Flag only a test task bundling genuinely unrelated scenarios (LOW/MEDIUM).
+- **T2b**: A TEST task legitimately exercising one coherent multi-AC flow is NOT a defect. Flag only a test task bundling genuinely unrelated scenarios: MEDIUM when the bundle prevents discrete execution or diagnosis; LOW only when it is an organizational defect with no implementation or orchestration impact.
 
 ### T3. E-M-C Ordering
 
-- **T3a**: Phase 1 (Expand) tasks are **additive only** (read descriptions). A destructive step in Expand → **Route** to `/order.tasks` (HIGH if MVP/P1, MEDIUM otherwise).
+- **T3a**: Phase 1 (Expand) tasks are **additive only** (read descriptions). A destructive step in Expand → **Route** to `/order.tasks` (HIGH if MVP/P1, MEDIUM otherwise). Escalate to CRITICAL only when the step creates an atomicity, security, data-loss, data-corruption, or unenforced-invariant risk.
 - **T3b**: Story phases follow UJ priority order from spec (P1 before P2). Out-of-order phases → **Route** to `/order.tasks` (HIGH if P1 ordering is affected, MEDIUM otherwise).
-- **T3c**: The Contract phase begins with a GATE task; no destructive task precedes it. Missing GATE or a destructive task before it → **Route** to `/order.tasks` (CRITICAL if it blocks the MVP/P1 path, HIGH otherwise).
+- **T3c**: The Contract phase begins with a GATE task; no destructive task precedes it. Missing GATE or a destructive task before it → **Route** to `/order.tasks` (HIGH for P1/MVP, MEDIUM otherwise). Escalate to CRITICAL only when the ordering creates an atomicity, security, data-loss, data-corruption, or unenforced-invariant risk.
 
 ### T4. Test-First Discipline
 
 - **T4a**: Within each story phase, test tasks **precede** implementation. A test-after-implementation pair → **Route** to `/order.tasks` (HIGH for P1, MEDIUM otherwise).
-- **T4b**: Each story phase is closed by a **Checkpoint prose line** (per `/order.tasks` rules: "Checkpoint is prose, not a task"). Missing checkpoint → **Route** to `/order.tasks` (HIGH for P1, MEDIUM otherwise).
+- **T4b**: Each story phase is closed by a **Checkpoint prose line** (per `/order.tasks` rules: "Checkpoint is prose, not a task"). Missing checkpoint → **Route** to `/order.tasks` (MEDIUM).
 - **T4c**: Test tasks state the expectation to **fail first** (red). Missing red-state note → **Route** to `/order.tasks` (MEDIUM).
 - **T4d**: Inspect Setup/Expand and earlier phases for behavior already
   implemented before a later test-writing task that targets it. If that task
@@ -172,30 +184,36 @@ Semantic findings (T1-xxx through T7-xxx) must be integrated into the report's F
 - **T4e**: A final command-only lint/typecheck task must use a `VERIFY:` gloss,
   declare no automatic write behavior, and remain read-only. A task that says
   "fix violations" under one arbitrary binding path is a scope defect; route
-  to `/order.tasks` (HIGH).
+  to `/order.tasks` (HIGH when the task authorizes broad or P1/MVP-significant
+  mutation; MEDIUM otherwise).
 
 ### T5. SC Buildability
 
-- **T5a**: Each Success Criterion (spec) implying **buildable work** (load tests, security tooling, performance assertions) is reflected by ≥1 task. Post-launch/business KPIs exempt. A buildable SC with no task → **Route** (HIGH). The gate never picks how the SC is realized.
+- **T5a**: Each Success Criterion (spec) implying **buildable work** (load tests, security tooling, performance assertions) is reflected by ≥1 task. Post-launch/business KPIs exempt. A buildable SC with no task → **Route** (HIGH for P1/MVP, MEDIUM otherwise). Escalate to CRITICAL only when the omission leaves an invariant unenforced or creates atomicity, security, data-loss, or data-corruption risk. The gate never picks how the SC is realized.
 
 ### T6. Evidence Topology
 
-- **T6a**: Read the feature state mechanisms.tsv and compare each direct row's test_type with actual test-writing task paths from plan.md. A direct unit mechanism must have a unit-test task; a direct integration mechanism must have an integration-test task. A generic GATE or checkpoint prose line does not provide evidence, and an integration test does not silently satisfy a unit claim. Route the root defect to /order.plan when mechanism topology is wrong, or /order.tasks when the plan is correct but the task list omits the test (HIGH for P1, MEDIUM otherwise).
+- **T6a**: Read the feature state mechanisms.tsv and compare each direct row's test_type with actual test-writing task paths from plan.md. A direct unit mechanism must have a unit-test task; a direct integration mechanism must have an integration-test task. A generic GATE or checkpoint prose line does not provide evidence, and an integration test does not silently satisfy a unit claim. Route the root defect to /order.plan when mechanism topology is wrong, or /order.tasks when the plan is correct but the task list omits the test (HIGH for P1, MEDIUM otherwise). Escalate to CRITICAL only when an invariant with a reachable write path has no executable evidence or the gap creates atomicity, security, data-loss, or data-corruption risk.
 
 ### T7. Upstream Reroute
 
-- **T7a**: Where tasks cannot be made faithful because the **root defect lives upstream** — a wrong/inadequate/mis-classified plan mechanism, or a spec ambiguity → **Route** to `/order.plan` or `/order.spec` describing the suspected root. Do NOT patch tasks around it. Severity inherits MVP-scope (CRITICAL if blocks P1 story).
+- **T7a**: Where tasks cannot be made faithful because the **root defect lives upstream** — a wrong/inadequate/mis-classified plan mechanism, or a spec ambiguity → **Route** to `/order.plan` or `/order.spec` describing the suspected root. Do NOT patch tasks around it. Severity is HIGH when it blocks P1/MVP and MEDIUM otherwise. Escalate to CRITICAL only for a constitution `MUST`, unenforced invariant with a reachable write path, atomicity, security, data-loss, or data-corruption defect.
 
 ### T8. Cross-Boundary Prerequisite Closure
 
 - **T8a**: For each behavior-bearing support task with empty or insufficient
   field-3 refs, require minimal `contract_refs` in task-context so the worker
   receives exact contract excerpts. Missing context is `/order.tasks` (HIGH for
-  P1/MVP, MEDIUM otherwise).
+  P1/MVP, MEDIUM otherwise). Escalate to CRITICAL only when the missing context
+  leaves an invariant unenforced or creates atomicity, security, data-loss, or
+  data-corruption risk.
 - **T8b**: Verify required model fields, schema operations, exports, routes,
   serializer values, and fixtures are established before their first consumer.
   If plan mapping is complete but task sequencing/content omits the prerequisite,
   route to `/order.tasks`. If plan mapping omitted it, route to `/order.plan`.
+  Assign HIGH for P1/MVP and MEDIUM otherwise. Escalate to CRITICAL only when
+  the missing prerequisite leaves an invariant unenforced or creates atomicity,
+  security, data-loss, or data-corruption risk.
 
 ## Report Generation
 
@@ -229,7 +247,7 @@ You MUST fill this template file in place. Do not invent report sections, table 
 - `{gate_focus}`: `ordering, faithfulness, test-first discipline`
 - `{routing_blocks}`: insert routing blocks for all findings with disposition `Route`
 - `{deferred_rows}`: `(none)` — tasks-check defers nothing
-- `{findings_rows}`: combine mechanical findings (from `findings` array) with semantic findings (T1-T7). Each row: `| ID | Source | Severity | Disposition | Location | Summary |`
+- `{findings_rows}`: combine mechanical findings (from `findings` array) with semantic findings (T1-T8). Each row: `| ID | Source | Severity | Disposition | Location | Summary |`
 - `{coverage_taxonomy_rows}`: from `categories` object. Each row: `| Category | § | Status | Disposition |`
 - `{contradiction_grid_rows}`: from `contradiction_grid` array. Each row: `| Pair | Verdict | Reason |`
 - `{journey_matrix_rows}`: from `matrices.uj_coverage` array. Each row: `| UJ | Priority | Covers REQs | ACs | ACs trace to REQs | Status |`
@@ -264,7 +282,7 @@ Use `/order.spec` for spec-rooted defects (contract contradiction, missing decis
 
 | Verdict | Conditions |
 |---|---|
-| BLOCK | any routed CRITICAL; any routed HIGH that breaks MVP/P1 ordering or faithfulness; upstream plan gate non-PASS; required artifact missing; validator unavailable |
+| BLOCK | any routed CRITICAL/HIGH; any terminal precondition explicitly requiring BLOCK; upstream plan gate non-PASS; required artifact missing; validator unavailable |
 | ROUTING_REQUIRED | no BLOCK condition, but at least one routed MEDIUM/LOW |
 | PASS | validator succeeded, no routed findings remain, no unresolved CRITICAL/HIGH |
 
