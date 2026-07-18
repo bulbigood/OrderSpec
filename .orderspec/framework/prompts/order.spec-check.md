@@ -44,7 +44,7 @@ This command acts as **semantic glue** between deterministic scripts. It does no
    - If ambiguous: `S0-004 (HIGH): ambiguous feature reference`.
    - If not found: `S0-005 (HIGH): feature not found`.
 5. Do not use `active_feature.py select` in this gate.
-6. If no target is resolved, write BLOCK report with `S0-000 (CRITICAL): no active feature`.
+6. If no target is resolved, write BLOCK report with `S0-000 (HIGH): no active feature`.
 
 ## Mechanical Validation
 
@@ -63,49 +63,66 @@ You MUST NOT downgrade or suppress imported findings.
 ## Semantic Inspection
 
 Read `spec.md`. Perform the following checks that require LLM judgment.
-For any semantic finding, assign disposition `Route` and create a routing block.
+For any semantic finding, assign disposition `Route` and create a routing block,
+except findings explicitly marked `Informational` below.
 Keep each mechanical finding's `severity` and `disposition` exactly as provided by
 `traceability.py`; create a routing block for it only when its imported disposition
 is `Route`.
+
+Do not create a semantic finding for the same underlying defect already reported
+by a mechanical check. The mechanical finding is authoritative. Create a separate
+semantic finding only when it identifies additional affected behaviour not covered
+by the mechanical finding.
 
 **Important**: Semantic findings (S1-xxx) must be integrated into the report's Findings table alongside mechanical findings from traceability.py. Each semantic finding gets its own row with:
 - `ID`: S1-NNN
 - `Source`: "semantic"
 - `Severity`: CRITICAL/HIGH/MEDIUM/LOW
-- `Disposition`: "Route"
+- `Disposition`: "Route" or "Informational" as specified by the check
 - `Location`: spec section or ID
 - `Summary`: concise description
 
 ### S1-001 REQ Contradictions
 Verify no REQ contradicts another REQ, INV, or project contract constraint.
-MVP/core contradiction → Route (CRITICAL or HIGH).
+MVP/core contradiction → Route (HIGH). Use CRITICAL only when no coherent
+implementation can satisfy the core contract or the contradiction creates a
+systemic security, privacy, or irreversible-data-loss risk. Non-core
+contradiction → Route (MEDIUM).
 
 ### S1-002 AC vs REQ/IF
 Verify ACs do not contradict covered REQs or IFs.
-Contradiction → Route (HIGH).
+Contradiction affecting P1/core behaviour → Route (HIGH). Otherwise → Route
+(MEDIUM).
 
 ### S1-003 Narrowing ASMs
 For every `[narrowing REQ-NNN]` ASM, verify all REQ cases are still satisfied.
-If narrowing silently excludes required action/state → Route (HIGH).
+If narrowing silently excludes required P1/core action or state → Route (HIGH).
+Otherwise → Route (MEDIUM).
 
 ### S1-004 NFR vs Scope
 NFR must not mandate behaviour excluded in §2 Out of Scope.
-Contradiction → Route (HIGH).
+MUST-level or core contradiction → Route (HIGH). SHOULD-level, advisory, or
+non-core contradiction → Route (MEDIUM).
 
 ### S1-005 Quantitative NFR Hallucination
 For each quantitative NFR threshold, verify it appears in user input or project contracts.
-Threshold without source → Route (HIGH).
+Unsourced threshold used as a MUST, acceptance boundary, or core constraint →
+Route (HIGH). Unsourced SHOULD/advisory threshold → Route (MEDIUM).
 
 ### S1-006 Qualitative NFR Oracle
 Every NFR needs an oracle (sourced threshold, named standard, or qualitative SHOULD).
-MUST-level qualitative NFR without oracle → Route (MEDIUM or HIGH).
+MUST-level qualitative NFR without oracle → Route (HIGH). If a SHOULD-level
+statement is too vague to act as its own qualitative oracle → Route (MEDIUM).
 
 ### S1-007 REQ Testability
 Every REQ must be observable and verifiable.
 Untestable MVP/core REQ → Route (HIGH). Untestable non-core → Route (MEDIUM).
 
 ### S1-008 Scope Sizing
-Assess cohesion. Oversized but coherent → Route (MEDIUM) recommending `/order.spec --split`.
+Assess cohesion. Oversized but coherent → Informational (LOW), recommending
+`/order.spec --split`; it does not prevent planning. Oversized and incoherent,
+with independently releasable behaviours or conflicting scope boundaries →
+Route (MEDIUM).
 
 ### S1-009 Cross-Section Contradictions
 Compare REQ/INV/IF wording with EDGE, DEC, ASM, information-model fields, and
@@ -113,7 +130,9 @@ out-of-scope statements. Do not limit contradiction review to the §10 grid:
 for example, an EDGE claiming an empty post-create history conflicts with a
 REQ that mandates a create audit entry, and a DEC choosing full snapshots may
 conflict with a REQ that promises changed-field deltas.
-Contradiction affecting P1 behaviour → Route (HIGH or CRITICAL).
+Contradiction affecting P1/core behaviour → Route (HIGH). Use CRITICAL only
+for an incoherent core contract or systemic security, privacy, or
+irreversible-data-loss risk. Non-core contradiction → Route (MEDIUM).
 
 ### S1-010 Multi-Entity Failure Semantics
 When one user operation writes more than one entity or persistence record and
@@ -135,7 +154,28 @@ For invariants using exactly, every, always, or never, identify all
 supported write paths and failure states covered by the guarantee. If the
 scope is only successful requests, or only HTTP routes, say so in the
 contract; otherwise route the missing boundary/partial-failure decision.
-Ambiguous P1 guarantee scope → Route (HIGH).
+Ambiguous P1/core guarantee scope → Route (HIGH). Otherwise → Route
+(MEDIUM).
+
+### S1-013 Coverage Taxonomy Completeness
+Use the validator's `categories` values as inventory evidence, then decide whether
+a missing or incomplete category is applicable to this feature:
+
+- missing/incomplete Functional Requirements, Acceptance Criteria & User Journeys,
+  Success Criteria, or applicable Project Constraints → Route (HIGH);
+- missing/incomplete applicable Information Model or Interface Contracts →
+  Route (HIGH for P1/core, MEDIUM otherwise);
+- missing/incomplete Architecture & Behaviour, Invariants, or Edge Cases →
+  Route (MEDIUM), unless the omission makes P1/core behaviour unimplementable or
+  untestable, then HIGH;
+- missing Non-Functional Requirements, Decisions, Assumptions, Open Questions,
+  Glossary, or Changelog is not a finding when the category is inapplicable or
+  explicitly states `None`/`N/A`; a missing optional heading alone →
+  Informational (LOW).
+
+Do not infer `empty` or `partial` from the `categories` object: the validator
+currently emits only `present...` or `missing`. Determine content completeness
+during semantic inspection.
 
 ## Report Generation
 
@@ -172,7 +212,7 @@ Map the JSON output from `traceability.py validate` to the template variables:
 - `{routing_blocks}`: insert routing blocks for all findings with disposition `Route`
 - `{deferred_rows}`: `(none)` — spec-check defers nothing to plan
 - `{findings_rows}`: combine mechanical findings (from `findings` array) with semantic findings (S1-xxx). Each row: `| ID | Source | Severity | Disposition | Location | Summary |`
-- `{coverage_taxonomy_rows}`: from `categories` object. Each row: `| Category | § | Status | Disposition |`. Use the `categories` value as the Status string. `missing` MVP/core → Route (HIGH); `empty`/`partial` → Route (MEDIUM)
+- `{coverage_taxonomy_rows}`: from `categories` object. Each row: `| Category | § | Status | Disposition |`. Use the `categories` value as the Status string. Set Disposition from S1-013 when a corresponding semantic finding exists; otherwise use `—`.
 - `{contradiction_grid_rows}`: from `contradiction_grid` array. Each row: `| Pair | Verdict | Reason |`. If `tension` is non-empty, render Reason as `{tension} — {reason}`. Example row: `| INV-001 × ASM-002 | compatible | ASM-002 narrows the mechanism — REQ-002 is a specific instance |`
 - `{journey_matrix_rows}`: from `matrices.uj_coverage` array. Each row: `| UJ | Priority | Covers REQs | ACs | ACs trace to REQs | Status |`. Example row: `| UJ-001 | P1 | REQ-001, REQ-002 | AC-001, AC-002 | yes | ok |`
 - `{if_matrix_rows}`: from `matrices.if_coverage` array. Each row: `| IF | Kind | Actor | Success | Failure | Covered by ACs | Status |`. Example row: `| IF-001 | HTTP endpoint | Authenticated user | 201 | 400, 401 | AC-001, AC-002 | ok |`

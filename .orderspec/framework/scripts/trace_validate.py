@@ -118,6 +118,7 @@ def _check_m18(if_records, add):
 
 
 def _check_m19(if_records, if_to_acs, section_12, add):
+    ac_priorities = _extract_ac_priorities(section_12)
     for if_id, rec in if_records.items():
         fields = rec["fields"]
         kind = fields.get("Kind", "")
@@ -139,9 +140,13 @@ def _check_m19(if_records, if_to_acs, section_12, add):
                     ac_statuses = _extract_status_codes(line)
                     for st in ac_statuses:
                         if st not in if_statuses:
+                            severity = (
+                                "HIGH" if ac_priorities.get(ac_id) == "P1"
+                                else "MEDIUM"
+                            )
                             add(
                                 "M19",
-                                "MEDIUM",
+                                severity,
                                 "spec.md:\u00a712",
                                 f"{ac_id} references status {st} for {if_id} but it is not in IF Success/Failure",
                             )
@@ -461,7 +466,24 @@ def _check_m32(spec_text, add):
             add("M32", "MEDIUM", "spec.md:\u00a714", f"{dec_id} missing required '**Rationale**' sub-item")
 
 
-def _check_contract_risks(spec_text, if_records, section_9, add):
+def _extract_ac_priorities(acceptance_text):
+    """Map nested AC IDs to the priority of their current UJ."""
+    priorities = {}
+    current_priority = ""
+    for line in acceptance_text.splitlines():
+        if re.match(r"^\s*- \*\*UJ-\d{3}\*\*", line):
+            match = re.search(r"Priority\s*:\s*(P\d)", line, re.IGNORECASE)
+            current_priority = match.group(1).upper() if match else ""
+            continue
+        match = re.match(r"^\s*- \*\*(AC-\d{3})\*\*", line)
+        if match:
+            priorities[match.group(1)] = current_priority
+    return priorities
+
+
+def _check_contract_risks(
+    spec_text, if_records, section_9, if_to_acs, acceptance_text, add
+):
     """Catch high-value contract gaps that lexical coverage cannot prove.
 
     These checks deliberately flag only explicit wording patterns. They do not
@@ -495,6 +517,7 @@ def _check_contract_risks(spec_text, if_records, section_9, add):
 
     # Pagination is not a complete contract when it is only named as an input
     # and the response shape remains an unqualified array.
+    ac_priorities = _extract_ac_priorities(acceptance_text)
     for if_id, record in if_records.items():
         input_text = record["fields"].get("Input", "")
         if not re.search(r"\bpagination\b", input_text, re.IGNORECASE):
@@ -504,9 +527,13 @@ def _check_contract_risks(spec_text, if_records, section_9, add):
             or re.search(r"\bCONV-\d{3}\b", section_9)
         )
         if not has_envelope:
+            is_p1 = any(
+                ac_priorities.get(ac_id) == "P1"
+                for ac_id in if_to_acs.get(if_id, set())
+            )
             add(
                 "M34",
-                "HIGH",
+                "HIGH" if is_p1 else "MEDIUM",
                 f"spec.md:\u00a79 ({if_id})",
                 "Pagination is named in interface input without a response envelope or CONV definition",
             )
@@ -915,7 +942,9 @@ def cmd_validate(args):
     _check_m30(spec_text, defined_ids, ac_inline_covers, add)
     _check_m31(spec_text, add)
     _check_m32(spec_text, add)
-    _check_contract_risks(spec_text, if_records, section_9, add)
+    _check_contract_risks(
+        spec_text, if_records, section_9, if_to_acs, acceptance_sections, add
+    )
     _check_m11(spec, plan, tasks, have_plan, have_tasks, add)
 
     total = len(findings)
@@ -925,9 +954,16 @@ def cmd_validate(args):
     nl = sum(1 for f in findings if f["severity"] == "LOW")
 
     exit_code = 1 if (nc + nh) > 0 else 0
-    pass_allowed = nc == 0
-    block_required = nc > 0
-    verdict_floor = "PASS" if nc == 0 and nh == 0 else ("BLOCK" if nc > 0 else "ROUTING_REQUIRED")
+    routed_findings = [f for f in findings if f["disposition"] == "Route"]
+    block_required = any(
+        f["severity"] in {"CRITICAL", "HIGH"} for f in routed_findings
+    )
+    pass_allowed = not routed_findings
+    verdict_floor = (
+        "BLOCK" if block_required
+        else "ROUTING_REQUIRED" if routed_findings
+        else "PASS"
+    )
 
     # compute inventory
     inv = {}

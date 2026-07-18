@@ -394,6 +394,18 @@ if rc == 0 and "M13" in out:
 else:
     no("validate M13", f"rc={rc} out={out} err={err}")
 
+rc, out, err = run_trace("validate", "--json", "--stage", "spec", F)
+summary = json.loads(out)["summary"]
+if (
+    rc == 0
+    and summary["verdict_floor"] == "ROUTING_REQUIRED"
+    and summary["pass_allowed"] is False
+    and summary["block_required"] is False
+):
+    ok("validate: routed LOW finding sets ROUTING_REQUIRED floor")
+else:
+    no("validate LOW verdict floor", f"rc={rc} summary={summary}")
+
 # V7: JSON output
 reset_feature()
 write_spec("""- **REQ-001** user can log in
@@ -409,6 +421,25 @@ try:
         no("validate JSON", f"out={out}")
 except json.JSONDecodeError:
     no("validate JSON", f"rc={rc} out={out} err={err}")
+
+# V7b: routed HIGH finding sets BLOCK floor
+reset_feature()
+write_spec("""- **REQ-001** user can log in
+- **UJ-001** Login journey
+  Covers: REQ-001
+- **Q-001** unresolved blocking question
+""")
+rc, out, err = run_trace("validate", "--json", "--stage", "spec", F)
+summary = json.loads(out)["summary"]
+if (
+    rc == 1
+    and summary["verdict_floor"] == "BLOCK"
+    and summary["pass_allowed"] is False
+    and summary["block_required"] is True
+):
+    ok("validate: routed HIGH finding sets BLOCK floor")
+else:
+    no("validate HIGH verdict floor", f"rc={rc} summary={summary}")
 
 # V8: task gap → no M7 (gaps are allowed)
 reset_feature()
@@ -492,7 +523,7 @@ if rc == 1 and "M18" in out:
 else:
     no("validate M18", f"rc={rc} out={out} err={err}")
 
-# V_M19: IF-AC status mismatch → M19 (MEDIUM)
+# V_M19: IF-AC status mismatch in an unprioritized journey → M19 (MEDIUM)
 reset_feature()
 write_spec("""- **REQ-001** user can log in
 - **UJ-001** Login journey
@@ -517,6 +548,31 @@ if "M19" in out:
     ok("validate: IF-AC status mismatch → M19")
 else:
     no("validate M19", f"rc={rc} out={out} err={err}")
+
+# V_M19_P1: the same mismatch in a P1 journey → M19 (HIGH)
+reset_feature()
+write_spec("""- **REQ-001** user can log in
+## 9. Interface Contracts
+- **IF-001**: Get Task
+  | Field | Value |
+  |-------|-------|
+  | Kind | HTTP endpoint |
+  | Operation | Get Task |
+  | Actor | Authenticated user |
+  | Success | 200 OK |
+  | Failure | 404 Not Found |
+  | Covers | REQ-001 |
+## 12. Acceptance Criteria
+- **UJ-001** Journey (Priority: P1)
+  Covers: REQ-001
+  - **AC-001** [Covers: REQ-001, IF-001] returns 500
+""")
+rc, out, err = run_trace("validate", "--json", "--stage", "spec", F)
+m19 = [f for f in json.loads(out)["findings"] if f["check"] == "M19"]
+if m19 and all(f["severity"] == "HIGH" for f in m19):
+    ok("validate: P1 IF-AC status mismatch → M19 HIGH")
+else:
+    no("validate P1 M19 severity", f"rc={rc} findings={m19}")
 
 # V_M20: IF uncovered by AC → M20 (HIGH)
 reset_feature()
@@ -835,11 +891,9 @@ if rc == 1 and "M33" in out:
 else:
     no("validate M33", f"rc={rc} out={out} err={err}")
 
-# V_M34: pagination named in IF input without envelope → M34
+# V_M34: pagination in a P1 interface without envelope → M34 HIGH
 reset_feature()
 write_spec("""- **REQ-001** user can list tasks
-- **UJ-001** Task journey
-  Covers: REQ-001
 ## 9. Interface Contracts
 - **IF-001**: List tasks
   | Field | Value |
@@ -851,12 +905,28 @@ write_spec("""- **REQ-001** user can list tasks
   | Success | Returns 200 with an array |
   | Failure | Returns 401 |
   | Covers | REQ-001 |
+## 12. Acceptance Criteria
+- **UJ-001** Task journey (Priority: P1)
+  Covers: REQ-001
+  - **AC-001** [Covers: REQ-001, IF-001] returns 200 or 401
 """)
-rc, out, err = run_trace("validate", "--stage", "spec", F)
-if rc == 1 and "M34" in out:
-    ok("validate: bare pagination input -> M34")
+rc, out, err = run_trace("validate", "--json", "--stage", "spec", F)
+parsed = json.loads(out)
+m34 = [f for f in parsed["findings"] if f["check"] == "M34"]
+if rc == 1 and m34 and m34[0]["severity"] == "HIGH":
+    ok("validate: bare P1 pagination input -> M34 HIGH")
 else:
-    no("validate M34", f"rc={rc} out={out} err={err}")
+    no("validate P1 M34", f"rc={rc} findings={m34} err={err}")
+
+# V_M34_P2: the same gap outside P1 → M34 MEDIUM
+write_spec((SPECS / "spec.md").read_text().replace("Priority: P1", "Priority: P2"))
+rc, out, err = run_trace("validate", "--json", "--stage", "spec", F)
+parsed = json.loads(out)
+m34 = [f for f in parsed["findings"] if f["check"] == "M34"]
+if m34 and m34[0]["severity"] == "MEDIUM":
+    ok("validate: bare non-P1 pagination input -> M34 MEDIUM")
+else:
+    no("validate non-P1 M34", f"rc={rc} findings={m34} err={err}")
 
 # V_M35: newly-created empty audit history contradicts creation audit
 reset_feature()
