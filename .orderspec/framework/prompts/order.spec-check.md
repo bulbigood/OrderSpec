@@ -3,261 +3,308 @@ orderspec:
   artifact: command_prompt
   command: order.spec-check
   phase: check
-description: Per-stage gate validating spec.md for coverage, internal integrity, and contract completeness. Pure inspector; routes contractual changes to /order.spec and writes a report on every run.
+description: Inspect spec.md for completeness, consistency, role purity, and testability; write spec-report.md and route defects.
 ---
-
-# OrderSpec Spec Check
 
 ## Role
 
-`/order.spec-check` is the independent inspection gate for `spec.md`.
-It runs after `/order.spec` and answers: Is `spec.md` a complete, internally consistent, repo-independent, testable feature contract?
+`/order.spec-check` is the independent gate for `spec.md`. It answers whether the
+spec is a complete, internally consistent, repository-independent, testable
+WHAT-contract.
 
-This command acts as **semantic glue** between deterministic scripts. It does not perform mechanical counting, matrix generation, or manual ID parsing. All such data is provided by `traceability.py`.
+This gate is a **pure inspector**. It may overwrite only the resolved target's
+`spec-report.md`. It MUST NOT edit `spec.md`, other feature artifacts, runtime
+state, traceability state, project contracts, framework files, or source code.
+Mechanical evidence comes only from framework scripts; semantic judgment stays
+bounded to the checks below. After context succeeds and a safe target exists, the
+gate writes a report for an artifact precondition failure. Validator failure
+before report initialization preserves prior evidence. A later setup or report
+finalization failure blocks completion; the current report remains untrusted
+until fresh setup or finalization succeeds. The gate never presents unvalidated
+output as completed evidence and routes defects to owners.
 
-## Command Context Bootstrap
+## User Input
 
-1. Resolve command context and the read-only gate target together:
-   ```bash
-   python3 .orderspec/framework/scripts/command_context.py resolve order.spec-check \
-     --arguments "$ARGUMENTS" --json
-   ```
-2. If `ok` is `false` or `missing_required` is non-empty, STOP and report missing required context.
-3. Read every file returned in `to_read`, in returned order.
-4. Interpret each file by `usage`.
+```text
+$ARGUMENTS
+```
 
-## Target Feature Resolution
+Arguments may contain at most one existing feature reference. Target resolution
+is read-only and never changes the active feature.
 
-1. Use only `target.feature_directory` and `target.feature_id` returned by
-   Command Context Bootstrap. If target resolution failed, stop in chat; no safe
-   report path exists. Never select or mutate active feature state.
-2. Initialize the report for that exact target:
-   ```bash
-   TARGET_VARS="$(python3 .orderspec/framework/scripts/gate_target.py \
-     --command order.spec-check --arguments "$ARGUMENTS" --shell-vars)" || exit $?
-   eval "$TARGET_VARS"
-   eval "$(python3 .orderspec/framework/scripts/setup.py spec-check \
-     --feature-dir "$FEATURE_DIR_REL" --refresh-template --shell-vars)"
-   ```
-3. If `SPEC_EXISTS` is false, write `S0-001 (HIGH): spec.md missing`, route
-   `/order.spec`, finalize a BLOCK report, and stop.
+## Severity Model
 
-## Mechanical Validation
+Severity measures contract impact, not whether inspection can continue:
 
-Run the deterministic validator:
+- **CRITICAL**: no coherent implementation can satisfy the core contract, or a
+  contradiction creates systemic security, privacy, corruption, or irreversible
+  data-loss risk.
+- **HIGH**: a P1/core obligation is contradictory, unimplementable, or untestable.
+- **MEDIUM**: a non-core contract defect or material ambiguity.
+- **LOW**: informational sizing or minor clarity issue with no contract risk.
+
+A missing prerequisite may require a BLOCK report without inflating its severity
+to CRITICAL.
+
+## 1. Resolve Context and Target
+
+Run before other inspection or mutation:
+
+```bash
+python3 .orderspec/framework/scripts/command_context.py resolve order.spec-check \
+  --arguments "$ARGUMENTS" --json
+```
+
+If `ok` is false, `missing_required` is non-empty, or target resolution failed,
+stop in chat. When no safe feature directory was resolved, no report may be
+written. Read every `to_read` entry once, in returned order, according to its
+`usage` and `authority`.
+
+Use only `target.feature_directory` and `target.feature_id` from resolver output;
+do not resolve the target again.
+
+If `<target.feature_directory>/spec.md` is absent, initialize the report for that
+literal target:
+
+```bash
+eval "$(python3 .orderspec/framework/scripts/setup.py spec-check \
+  --feature-dir "<target.feature_directory>" \
+  --refresh-template --shell-vars)"
+```
+
+If setup fails, stop. Otherwise fill the report as BLOCK with operational finding
+`S0-001 (HIGH): spec.md missing`, route it to `/order.spec`, replace every other
+template placeholder with `(none)`, `—`, `0`, or `unavailable` as appropriate,
+and stop. Do not fabricate validator JSON; deterministic finalization is
+unavailable without it.
+
+## 2. Mechanical Validation
+
+Run the validator read-only:
 
 ```bash
 MECHANICAL_RESULT_FILE="$(mktemp "${TMPDIR:-/tmp}/orderspec-spec-check.XXXXXX.json")" || exit 2
 python3 .orderspec/framework/scripts/traceability.py -C "$PWD" \
-  --feature-dir "$FEATURE_DIR" validate --stage spec --json \
+  --feature-dir "<target.feature_directory>" validate --stage spec --json \
   > "$MECHANICAL_RESULT_FILE"
 MECHANICAL_RC=$?
 ```
 
-Exit 0 or 1 is a completed validation: exit 1 means the JSON contains blocking
-mechanical findings. Any other exit, empty output, or invalid JSON means the
-validator is unavailable. Read `$MECHANICAL_RESULT_FILE`; its JSON is the
-**ground truth** for mechanical findings, inventory, categories, matrices, and
-contradiction grid data. The temporary file is evidence transport only; never
-write gate evidence into feature state.
-You MUST import all findings exactly as provided, including their `severity` and `disposition`.
-You MUST NOT downgrade or suppress imported findings.
+Exit 0 or 1 is a completed validation; exit 1 means its JSON contains blocking
+mechanical findings. Parse the file and require valid JSON. Its `findings`,
+`summary`, `inventory`, `categories`, `matrices`, and `contradiction_grid` are
+authoritative. Import every mechanical finding unchanged, including ID,
+severity, disposition, location, and message. Never suppress, downgrade,
+reinterpret, or duplicate one.
 
-## Semantic Inspection
+Any other exit, empty output, or invalid JSON is an authoritative framework
+failure. Preserve any prior `spec-report.md`, stop without feature mutation, and
+report the observed exit/error under `Framework concerns`. Do not invent
+mechanical evidence or run the report finalizer against fabricated JSON.
 
-Read `spec.md`. Perform the following checks that require LLM judgment.
-For any semantic finding, assign disposition `Route` and create a routing block,
-except findings explicitly marked `Informational` below.
-Keep each mechanical finding's `severity` and `disposition` exactly as provided by
-`traceability.py`; create a routing block for it only when its imported disposition
-is `Route`.
+After valid JSON is available, initialize a fresh report for the same literal
+target:
 
-Do not create a semantic finding for the same underlying defect already reported
-by a mechanical check. The mechanical finding is authoritative. Create a separate
-semantic finding only when it identifies additional affected behaviour not covered
-by the mechanical finding.
+```bash
+eval "$(python3 .orderspec/framework/scripts/setup.py spec-check \
+  --feature-dir "<target.feature_directory>" \
+  --refresh-template --shell-vars)"
+```
 
-**Important**: Semantic findings (S1-xxx) must be integrated into the report's Findings table alongside mechanical findings from traceability.py. Each semantic finding gets its own row with:
-- `ID`: S1-NNN
-- `Source`: "semantic"
-- `Severity`: CRITICAL/HIGH/MEDIUM/LOW
-- `Disposition`: "Route" or "Informational" as specified by the check
-- `Location`: spec section or ID
-- `Summary`: concise description
+If setup fails, stop with its result. Do not continue with a stale or partial
+template. Because setup may already have refreshed the report, describe it as
+untrusted and require a rerun; do not claim prior evidence was preserved.
 
-Precondition or tooling findings use `Source: "operational"` and an `S0-NNN`
-ID. They are not semantic findings and must not impersonate mechanical output.
+## 3. Semantic Inspection
 
-### S1-001 REQ Contradictions
-Verify no REQ contradicts another REQ, INV, or project contract constraint.
-MVP/core contradiction → Route (HIGH). Use CRITICAL only when no coherent
-implementation can satisfy the core contract or the contradiction creates a
-systemic security, privacy, or irreversible-data-loss risk. Non-core
-contradiction → Route (MEDIUM).
+Use the already loaded `spec.md` only for semantic judgment. Do not manually count
+IDs, generate matrices, or use prose parsing to override validator output.
 
-### S1-002 AC vs REQ/IF
-Verify ACs do not contradict covered REQs or IFs.
-Contradiction affecting P1/core behaviour → Route (HIGH). Otherwise → Route
-(MEDIUM).
+Process checks in numeric order, one bounded semantic judgment at a time. Finish
+and record one check before starting the next; do not replace them with a combined
+free-form review. Emit at most one row per semantic check ID; aggregate that
+check's locations and summary, using the highest applicable severity. Do not
+repeat a mechanical finding or report one defect under overlapping semantic
+checks. Semantic findings use `Source: semantic` and disposition `Route`, except
+S1-008's informational case. Operational findings use `Source: operational` and
+`S0-NNN`.
 
-### S1-003 Narrowing ASMs
-For every `[narrowing REQ-NNN]` ASM, verify all REQ cases are still satisfied.
-If narrowing silently excludes required P1/core action or state → Route (HIGH).
-Otherwise → Route (MEDIUM).
+### S1-001 — REQ contradictions
 
-### S1-004 NFR vs Scope
-NFR must not mandate behaviour excluded in §2 Out of Scope.
-MUST-level or core contradiction → Route (HIGH). SHOULD-level, advisory, or
-non-core contradiction → Route (MEDIUM).
+Compare each REQ with other REQs, INVs, and project constraints. Route HIGH for
+P1/core and MEDIUM otherwise; use CRITICAL only under the severity model.
 
-### S1-005 Quantitative NFR Hallucination
-For each quantitative NFR threshold, require explicit provenance in its NFR
-record: a valid project-contract ID or `user-request`. Validate project IDs
-against loaded contracts. The gate cannot independently reconstruct historical
-user input; absent or contradictory provenance is the defect.
-Unsourced threshold used as a MUST, acceptance boundary, or core constraint →
-Route (HIGH). Unsourced SHOULD/advisory threshold → Route (MEDIUM).
+### S1-002 — Acceptance fidelity
 
-### S1-006 Qualitative NFR Oracle
-Every NFR needs an oracle (sourced threshold, named standard, or qualitative SHOULD).
-MUST-level qualitative NFR without oracle → Route (HIGH). If a SHOULD-level
-statement is too vague to act as its own qualitative oracle → Route (MEDIUM).
+Verify each AC agrees with every covered REQ and IF, including observable result
+and failure. Route HIGH for P1/core, MEDIUM otherwise.
 
-### S1-007 REQ Testability
-Every REQ must be observable and verifiable.
-Untestable MVP/core REQ → Route (HIGH). Untestable non-core → Route (MEDIUM).
+### S1-003 — Narrowing assumptions
 
-### S1-008 Scope Sizing
-Assess cohesion. Oversized but coherent → Informational (LOW), recommending
-`/order.spec --split`; it does not prevent planning. Oversized and incoherent,
-with independently releasable behaviours or conflicting scope boundaries →
-Route (MEDIUM).
+For every `[narrowing REQ-NNN]` assumption, verify all required cases remain
+satisfied. Silent exclusion is HIGH for P1/core and MEDIUM otherwise.
 
-### S1-009 Cross-Section Contradictions
-Compare REQ/INV/IF wording with EDGE, DEC, ASM, information-model fields, and
-out-of-scope statements. Do not limit contradiction review to the §10 grid:
-for example, an EDGE claiming an empty post-create history conflicts with a
-REQ that mandates a create audit entry, and a DEC choosing full snapshots may
-conflict with a REQ that promises changed-field deltas.
-Contradiction affecting P1/core behaviour → Route (HIGH). Use CRITICAL only
-for an incoherent core contract or systemic security, privacy, or
-irreversible-data-loss risk. Non-core contradiction → Route (MEDIUM).
+### S1-004 — NFR versus scope
 
-### S1-010 Multi-Entity Failure Semantics
-When one user operation writes more than one entity or persistence record and
-the contract says exactly one, every, or MUST produce, verify that the
-contract specifies atomic, best-effort, compensating, or partial-failure
-semantics and the observable result of failure. Missing semantics → Route
-(HIGH). Do not leave this as an unrecorded ASM.
+Verify no NFR mandates out-of-scope behaviour. Route a MUST/core contradiction
+HIGH and another material contradiction MEDIUM.
 
-### S1-011 Interface Input/Response Completeness
-For every IF, reconcile every declared input option with success/failure
-behaviour and response shape. Pagination requires an envelope or a referenced
-project convention with bounds, ordering, and empty-page semantics. Filters,
-optional fields, nullability, and malformed identifiers need explicit
-observable outcomes. Missing contract detail → Route (HIGH for P1, MEDIUM
-otherwise).
+### S1-005 — Quantitative NFR provenance
 
-### S1-012 Absolute Guarantee Scope
-For invariants using exactly, every, always, or never, identify all
-supported write paths and failure states covered by the guarantee. If the
-scope is only successful requests, or only HTTP routes, say so in the
-contract; otherwise route the missing boundary/partial-failure decision.
-Ambiguous P1/core guarantee scope → Route (HIGH). Otherwise → Route
-(MEDIUM).
+Every quantitative threshold must cite `user-request` or a valid loaded
+project-contract ID. Historical user intent cannot be reconstructed; missing or
+contradictory provenance is the defect. Route MUST/core boundaries HIGH and
+SHOULD/advisory thresholds MEDIUM.
 
-### S1-013 Coverage Taxonomy Completeness
-Use the validator's `categories` values as inventory evidence, then decide whether
-a missing or incomplete category is applicable to this feature:
+### S1-006 — Qualitative NFR oracle
 
-- missing/incomplete Functional Requirements, Acceptance Criteria & User Journeys,
-  Success Criteria, or applicable Project Constraints → Route (HIGH);
-- missing/incomplete applicable Information Model or Interface Contracts →
-  Route (HIGH for P1/core, MEDIUM otherwise);
-- missing/incomplete Architecture & Behaviour, Invariants, or Edge Cases →
-  Route (MEDIUM), unless the omission makes P1/core behaviour unimplementable or
-  untestable, then HIGH;
-- missing Non-Functional Requirements, Decisions, Assumptions, Open Questions,
-  Glossary, or Changelog is not a finding when the category is inapplicable or
-  explicitly states `None`/`N/A`; a missing optional heading alone →
-  Informational (LOW).
+Every NFR needs a usable oracle: sourced threshold, named standard, or sufficiently
+precise qualitative SHOULD. An unverifiable MUST is HIGH; a vague SHOULD is
+MEDIUM.
 
-Do not infer `empty` or `partial` from the `categories` object: the validator
-currently emits only `present...` or `missing`. Determine content completeness
-during semantic inspection.
+### S1-007 — Requirement testability
 
-## Report Generation
+Every REQ must expose a verifiable outcome. Route HIGH for P1/core and MEDIUM
+otherwise.
 
-The report template has already been copied to `$FEATURE_DIR/spec-report.md` by `setup.py spec-check --refresh-template` in the Target Feature Resolution step.
+### S1-008 — Scope cohesion
 
-You MUST fill this template file in place. Do not invent report sections, table structures, or alter the YAML frontmatter schema. Fill the template variables exactly as specified using the data from `traceability.py` JSON output and your semantic findings.
+An oversized but cohesive contract is Informational (LOW) and may recommend
+`/order.spec --split`; it does not block planning. Independently releasable or
+conflicting scope groups are Route (MEDIUM).
 
-### CRITICAL: Data Source Rules
-- Do NOT read `spec.md` to fill matrices, categories, or inventory. Use ONLY the JSON fields from `traceability.py`.
-- If a JSON field is missing or empty, render the cell as `(none)` or `—`.
-- Render booleans as text: `true` → `yes`, `false` → `no`.
-- Join arrays with `, ` (comma + space).
+### S1-009 — Cross-section contradictions
 
-### Template Variable Mapping Guide
+Compare REQ/INV/IF with EDGE, DEC, ASM, information fields, and Out of Scope.
+S1-001 owns direct REQ-vs-REQ/INV/project conflicts; do not duplicate them here.
+Route HIGH for P1/core and MEDIUM otherwise; use CRITICAL only under the severity
+model.
 
-Map the JSON output from `traceability.py validate` to the template variables:
+### S1-010 — Multi-record failure semantics
 
-**YAML Frontmatter** (replace placeholders at top of file):
-- `{generator_cmd}`: `order.spec-check`
-- `{model_name}`: identifier of the AI model running this command
-- `{DATE}`: current ISO 8601 timestamp
-- `{VERDICT}`: computed from findings (see Verdict table below)
-- `{FEATURE_ID}`: from `$FEATURE_ID` shell variable
-- `{FEATURE_DIR}`: from `$FEATURE_DIR` shell variable
+When one operation must write multiple logical records, require an observable
+atomic, partial, best-effort, or compensating guarantee and failure result.
+Missing semantics is HIGH. Do not infer an implementation mechanism.
 
-**HTML Comment Header** (second line of body):
-- `{report_name}`: `spec-report.md`
-- All other variables same as frontmatter
+### S1-011 — Interface completeness
 
-**Body Section Variables** — map from `traceability.py validate` JSON:
-- `{gate_title}`: `Spec Check`
-- `{target_doc}`: `spec.md`
-- `{gate_focus}`: `completeness, consistency, testability`
-- `{routing_blocks}`: insert routing blocks for all findings with disposition `Route`
-- `{deferred_rows}`: `| (none) | — | — |` — spec-check defers nothing to plan
-- `{findings_rows}`: combine mechanical findings (from `findings` array) with semantic findings (S1-xxx). Each value is a complete Markdown row: `| ID | Source | Severity | Disposition | Location | Summary |`. With no findings, use `| (none) | — | — | — | — | — |`.
-- `{coverage_taxonomy_rows}`: from `categories` object. Each row: `| Category | § | Status | Disposition |`. Use the `categories` value as the Status string. Set Disposition from S1-013 when a corresponding semantic finding exists; otherwise use `—`.
-- `{contradiction_grid_rows}`: from `contradiction_grid` array. Each row: `| Pair | Verdict | Reason |`. If `tension` is non-empty, render Reason as `{tension} — {reason}`. Example row: `| INV-001 × ASM-002 | compatible | ASM-002 narrows the mechanism — REQ-002 is a specific instance |`
-- `{journey_matrix_rows}`: from `matrices.uj_coverage` array. Each row: `| UJ | Priority | Covers REQs | ACs | ACs trace to REQs | Status |`. Example row: `| UJ-001 | P1 | REQ-001, REQ-002 | AC-001, AC-002 | yes | ok |`
-- `{if_matrix_rows}`: from `matrices.if_coverage` array. Each row: `| IF | Kind | Actor | Success | Failure | Covered by ACs | Status |`. Example row: `| IF-001 | HTTP endpoint | Authenticated user | 201 | 400, 401 | AC-001, AC-002 | ok |`
+Reconcile every input option, optionality/nullability rule, authorization rule,
+success shape, failure, and malformed identifier. Pagination needs bounds,
+ordering, envelope, and empty-page semantics, defined locally or by a valid
+project convention. Missing P1/core meaning is HIGH; otherwise MEDIUM.
 
-**Metrics Section**:
-- `{inventory_summary}`: formatted string from `inventory` object, e.g. `REQ=10 · NFR=2 · SC=3 · ... · Total=64`
-- `{critical_count}`, `{high_count}`, `{medium_count}`, `{low_count}`: counts from combined findings
-- `{routing_count}`: count of findings with disposition `Route`
-- `{deferred_count}`: `0`
-- `{exit_code}`: from `summary.exit_code`
-- `{floor_status}`: `yes` if `verdict_floor` applied, `no` otherwise
-- `{report_path}`: `$FEATURE_DIR/spec-report.md`
+### S1-012 — Absolute guarantee scope
 
-### Routing Block Format
+For `exactly`, `every`, `always`, or `never`, verify the contract identifies the
+supported operations and failure states covered. Ambiguous P1/core scope is HIGH;
+otherwise MEDIUM.
+
+### S1-013 — Applicable category completeness
+
+Use validator `categories` only as inventory evidence; judge applicability from
+the feature contract:
+
+- missing/incomplete functional requirements, journeys/ACs, success outcomes, or
+  applicable project constraints: HIGH;
+- applicable information model or interfaces: HIGH for P1/core, MEDIUM otherwise;
+- logical behaviour, invariants, or edges: MEDIUM, raised to HIGH only when P1/core
+  becomes unimplementable or untestable;
+- NFR, DEC, ASM, Q, glossary, or changelog: no finding when inapplicable or
+  explicitly `None`/`N/A`.
+
+The validator currently distinguishes `present...` and `missing`, not semantic
+`empty` or `partial`; do not claim otherwise.
+
+### S1-014 — Role purity
+
+Verify normative contract content remains repository- and stack-independent.
+Technology or library names, versions, repository paths, code symbols, physical
+components, database/query syntax, and implementation mechanisms are defects.
+Interface addresses such as HTTP paths, event names, and command syntax are
+contract data, not repository paths. Route HIGH when impurity controls P1/core
+meaning or makes the stable contract depend on one implementation; otherwise
+MEDIUM. Do not duplicate a mechanical finding for the same text.
+
+## 4. Render the Report
+
+Fill the setup-created `$FEATURE_DIR/spec-report.md` in place. Preserve the
+canonical template structure and frontmatter. Report rendering may format
+validator JSON but MUST NOT reinterpret it. Escape Markdown table pipes and
+collapse embedded newlines in cells.
+
+Use these fixed values:
+
+| Placeholder | Value |
+|---|---|
+| `{generator_cmd}` | `order.spec-check` |
+| `{model_name}` | current model identifier |
+| `{DATE}` | current ISO 8601 timestamp |
+| `{VERDICT}` | combined verdict defined below |
+| `{FEATURE_ID}` | `$FEATURE_ID` |
+| `{FEATURE_DIR}` | `$FEATURE_DIR` |
+| `{report_name}` | `spec-report.md` |
+| `{gate_title}` | `Spec Check` |
+| `{target_doc}` | `spec.md` |
+| `{gate_focus}` | `completeness, consistency, testability` |
+| `{routing_blocks}` | one block per routed finding, or `(none)` |
+| `{deferred_rows}` | `| (none) | — | — |` |
+| `{deferred_count}` | `0` |
+| `{report_path}` | `$FEATURE_DIR/spec-report.md` |
+
+Map validator JSON without adding evidence:
+
+- `findings_rows`: all mechanical rows plus semantic/operational rows, each
+  `| ID | Source | Severity | Disposition | Location | Summary |`; use the
+  template's `(none)` row when empty.
+- `coverage_taxonomy_rows`: one row per `categories` entry; disposition is the
+  related S1-013 disposition or `—`. Canonical section labels are: Success=§2,
+  Glossary=§3, Functional=§4, NFR=§5, Project=§6, Architecture=§7,
+  Information=§8, Interface=§9, Invariants=§10, Edge=§11, Acceptance/UJ=§12,
+  Questions=§13, Decisions=§14, Assumptions=§15, Changelog=§16.
+- `contradiction_grid_rows`: `pair`, `verdict`, then `tension — reason` (omit
+  the separator when tension is empty).
+- `journey_matrix_rows`: each `matrices.uj_coverage` entry in the template's
+  column order; render booleans as `yes`/`no` and arrays joined by `, `.
+- `if_matrix_rows`: each `matrices.if_coverage` entry in the template's column
+  order; arrays joined by `, `.
+- `inventory_summary`: `inventory` entries as `KEY=value`, joined by ` · `.
+- `{critical_count}`, `{high_count}`, `{medium_count}`, `{low_count}`, and
+  `{routing_count}`: compute from combined report findings.
+- `exit_code`: `summary.exit_code`.
+- `floor_status`: `yes` when `summary.verdict_floor` is not `PASS`, else `no`.
+
+Missing or empty JSON values render as `(none)` for a whole empty table and `—`
+for an empty cell. Do not derive these tables from `spec.md`.
+
+Create one routing block for every finding whose disposition is `Route`:
+
 ```markdown
 ### Routing Required: {short title}
 
-**Finding**: {what is wrong or missing}
-**Location**: {ID / section / missing category}
-**Why owner, not gate**: {why this changes contract meaning/scope/test obligation}
-**Impact if unresolved**: {downstream impact}
+**Finding**: {defect}
+**Location**: {ID or section}
+**Why owner, not gate**: {contract meaning the gate cannot choose}
+**Impact if unresolved**: {downstream effect}
 **Suggested direction**: {advisory only}
-**Run**: `/order.spec "{ready-to-run refinement request}"`
+**Run**: `/order.spec "{bounded refinement request}"`
 ```
 
-### Verdict
-| Verdict | Conditions |
+All completed-validation content findings route to `/order.spec`. Do not put an
+informational finding in routing blocks.
+
+Compute the combined verdict exactly:
+
+| Verdict | Condition |
 |---|---|
-| BLOCK | any routed CRITICAL/HIGH; traceability failure; spec missing |
-| ROUTING_REQUIRED | no routed CRITICAL/HIGH, but at least one routed MEDIUM/LOW |
-| PASS | traceability succeeded and no routed findings remain |
+| `BLOCK` | any routed CRITICAL/HIGH, or mechanical `summary.exit_code != 0` |
+| `ROUTING_REQUIRED` | no BLOCK condition and at least one routed finding |
+| `PASS` | completed mechanical validation and no routed finding |
 
-## Deterministic Report Finalization
+Use the same verdict in frontmatter, body, and metrics.
 
-After filling the report, validate that no mechanical finding was lost or
-altered and that IDs, severities, dispositions, metrics, and verdict agree:
+## 5. Finalize Deterministically
+
+After completed mechanical validation, validate report fidelity:
 
 ```bash
 python3 .orderspec/framework/scripts/validate_gate_report.py \
@@ -267,16 +314,17 @@ REPORT_RC=$?
 if [ "$REPORT_RC" -eq 0 ]; then rm -f "$MECHANICAL_RESULT_FILE"; fi
 ```
 
-Do not complete while `REPORT_RC` is non-zero. Correct only the report rendering
-from the already collected mechanical and semantic evidence, then rerun the
-finalizer. Never change an artifact under inspection to make the report pass.
+Do not complete while `REPORT_RC` is non-zero. Correct only rendering from the
+already collected evidence, then rerun. Never alter the inspected artifact to
+make the report pass. On finalizer failure without a safe rendering correction,
+stop, label the current report untrusted in chat, and report the framework
+concern. Do not cite that report as completed gate evidence.
 
 ## Completion Response
 
-After writing the report, respond in chat with:
-- Verdict (BLOCK, ROUTING_REQUIRED, or PASS)
-- Report path
-- Number of findings by severity
-- Manual/orchestrator next action:
-  - PASS -> human or orchestrator may start `/order.plan`
-  - ROUTING_REQUIRED/BLOCK -> human or orchestrator may run routed `/order.spec` request(s), then rerun `/order.spec-check`
+Report verdict, report path, finding counts by severity, and next action:
+
+- PASS: human/orchestrator may run `/order.plan`;
+- content BLOCK or ROUTING_REQUIRED: run routed `/order.spec` request(s), then
+  rerun `/order.spec-check`;
+- framework failure: resolve the reported framework concern, then rerun the check.

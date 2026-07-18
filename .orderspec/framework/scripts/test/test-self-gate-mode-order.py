@@ -23,6 +23,32 @@ class SelfGateModeOrderTests(unittest.TestCase):
         self.assertLess(content.index("## Self Gate Report Intake"), content.index("### Mode selection"))
         self.assertIn("select **Refine** even when `$ARGUMENTS` is empty", content)
 
+    def test_spec_explicit_mode_flags_keep_precedence(self):
+        content = (ROOT / "prompts" / "order.spec.md").read_text(encoding="utf-8")
+        self.assertIn("`--new` always selects Create", content)
+        self.assertIn("`--split` always selects Decompose", content)
+        self.assertIn("never override an explicit flag", content)
+        self.assertIn("do not load its\nself-report or feedback", content)
+
+    def test_spec_binds_explicit_target_and_validates_every_mutation(self):
+        content = (ROOT / "prompts" / "order.spec.md").read_text(encoding="utf-8")
+        for field in ("state.feature_id", "state.feature_directory", "state.spec_file"):
+            self.assertIn(field, content)
+        self.assertIn("every spec mutated in this run", content)
+        self.assertIn("for **each** mutated target", content)
+        self.assertIn("until every mutated target passes", content)
+
+    def test_spec_uses_one_consequential_question_per_round(self):
+        content = (ROOT / "prompts" / "order.spec.md").read_text(encoding="utf-8")
+        self.assertIn("Ask one question per round", content)
+        self.assertNotIn("Ask at most three questions per round", content)
+
+    def test_spec_check_covers_role_purity_as_bounded_judgment(self):
+        content = (ROOT / "prompts" / "order.spec-check.md").read_text(encoding="utf-8")
+        self.assertIn("### S1-014 — Role purity", content)
+        self.assertIn("one bounded semantic judgment at a time", content)
+        self.assertIn("label the current report untrusted", content)
+
     def test_all_report_readers_treat_consumed_as_inactive(self):
         for command in ("spec", "code-to-spec", "plan", "tasks", "code-check"):
             content = (ROOT / "prompts" / f"order.{command}.md").read_text(encoding="utf-8")
