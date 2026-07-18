@@ -174,11 +174,12 @@ expect("MUST be copied verbatim" in protocol, "protocol forbids coordinator whit
 expect("contract_context" in protocol and "task_contract_context.py" in protocol, "protocol carries exact contract context")
 expect("NEEDS_CONTEXT" in protocol and "changed_files" in protocol, "protocol defines bounded worker result")
 
-subagent_rules = (FRAMEWORK / "protocols" / "sub-agent-rules.md").read_text(encoding="utf-8")
+codex_adapter = (FRAMEWORK / "adapters" / "codex.py").read_text(encoding="utf-8")
 expect(
-    "If delegation is prohibited" in subagent_rules
-    and "Do not inspect, configure" in subagent_rules,
-    "sub-agent rules skip worker resolution when user prohibits delegation",
+    "ORDERSPEC:ADAPTER_SUBAGENT_RULES" in code_prompt
+    and "orderspec.worker.weak" in codex_adapter
+    and "built-in `worker`" in codex_adapter,
+    "order.code receives exact Codex weak-worker selection from its adapter",
 )
 
 rules = (FRAMEWORK / "orderspec-rules.md").read_text(encoding="utf-8")

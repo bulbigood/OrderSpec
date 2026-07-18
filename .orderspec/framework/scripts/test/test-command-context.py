@@ -111,10 +111,6 @@ def setup_base_files(
         "# Sub-agent Execution\n",
     )
     write(
-        WORK / ".orderspec" / "framework" / "protocols" / "sub-agent-rules.md",
-        "# Sub-agent Rules\n",
-    )
-    write(
         WORK / ".orderspec" / "framework" / "protocols" / "environment-block.md",
         "# Environment Block Protocol\n",
     )

@@ -154,7 +154,7 @@ def setup_prompts_source(prompts=None):
         prompts = {
             "order.spec.md": "---\norderspec:\n  artifact: command_prompt\n  command: order.spec\n---\n# /order.spec\nTest spec prompt.",
             "order.plan.md": "---\norderspec:\n  artifact: command_prompt\n  command: order.plan\n---\n# /order.plan\nTest plan prompt.",
-            "order.code.md": "---\norderspec:\n  artifact: command_prompt\n  command: order.code\n---\n# /order.code\nTest code prompt.",
+            "order.code.md": "---\norderspec:\n  artifact: command_prompt\n  command: order.code\n---\n# /order.code\n<!-- ORDERSPEC:ADAPTER_SUBAGENT_RULES -->\nTest code prompt.",
         }
     for name, content in prompts.items():
         write(prompts_dir / name, content)
@@ -368,6 +368,10 @@ else:
 assert_exists(".kilo/commands/order.spec.md", "Kilo Code: order.spec.md copied")
 assert_exists(".kilo/commands/order.plan.md", "Kilo Code: order.plan.md copied")
 assert_exists(".kilo/commands/order.code.md", "Kilo Code: order.code.md copied")
+if "Kilo Code worker rules (adapter-owned)" in read(WORK / ".kilo/commands/order.code.md"):
+    ok("Kilo Code sync injects adapter-owned worker rules")
+else:
+    bad("Kilo Code worker rules were not injected")
 
 
 # 9. re-sync prompts to Kilo Code — all skipped (hash match)
@@ -399,6 +403,10 @@ else:
 assert_exists(".claude/commands/order.spec.md", "Claude Code: order.spec.md copied")
 assert_exists(".claude/commands/order.plan.md", "Claude Code: order.plan.md copied")
 assert_exists(".claude/commands/order.code.md", "Claude Code: order.code.md copied")
+if "Claude Code worker rules (adapter-owned)" in read(WORK / ".claude/commands/order.code.md"):
+    ok("Claude Code sync injects adapter-owned worker rules")
+else:
+    bad("Claude Code worker rules were not injected")
 
 
 # 11. re-sync prompts to Claude Code — all skipped
@@ -570,6 +578,11 @@ if "name: order-spec" in codex_skill and "command_prompt" not in codex_skill and
     ok("Codex skill contains valid name and argument handoff")
 else:
     bad("Codex skill rendering lost metadata or argument handoff")
+codex_code_skill = read(WORK / ".agents" / "skills" / "order-code" / "SKILL.md")
+if "orderspec.worker.weak" in codex_code_skill and "built-in `worker`" in codex_code_skill:
+    ok("Codex sync injects exact OrderSpec weak-worker policy")
+else:
+    bad(f"Codex worker rules were not injected :: {codex_code_skill!r}")
 
 
 # 21. re-sync prompts to Codex — all skipped
@@ -870,7 +883,7 @@ else:
 
 # 41. Missing Codex worker is reported before dispatch/configuration
 rc, data, err = run_sync_json(
-    "subagents", "inspect", "--agent", "codex", "--name", "orderspec-worker", "--json"
+    "subagents", "inspect", "--agent", "codex", "--name", "orderspec.worker.weak", "--json"
 )
 if rc == 0 and data.get("status") == "missing" and not data.get("requested", {}).get("configured"):
     ok("Codex sub-agents — missing worker reported")
@@ -879,14 +892,25 @@ else:
 
 
 # 42. Explicit project configuration writes native Codex custom-agent TOML
-rc, data, err = run_sync_json(
-    "subagents", "configure", "--agent", "codex", "--name", "orderspec-worker",
-    "--reasoning", "high", "--json"
+rc, rejected, err = run_sync_json(
+    "subagents", "configure", "--agent", "codex", "--name", "orderspec.worker.medium",
+    "--reasoning", "medium", "--json"
 )
-agent_file = WORK / ".codex" / "agents" / "orderspec-worker.toml"
+if rc == 0 and rejected.get("status") == "error" and "explicit --model" in rejected.get("details", ""):
+    ok("Codex OrderSpec worker creation — inherited model rejected before write")
+else:
+    bad(f"Codex model-less OrderSpec worker creation :: rc={rc} data={rejected} err={err!r}")
+
+rc, data, err = run_sync_json(
+    "subagents", "configure", "--agent", "codex", "--name", "orderspec.worker.weak",
+    "--reasoning", "low", "--model", "test-weak-model", "--json"
+)
+agent_file = WORK / ".codex" / "agents" / "orderspec-worker-weak.toml"
 if rc == 0 and data.get("status") == "created" and agent_file.exists():
     content = read(agent_file)
-    if 'name = "orderspec-worker"' in content and 'model_reasoning_effort = "high"' in content:
+    if ('name = "orderspec.worker.weak"' in content
+            and 'model = "test-weak-model"' in content
+            and 'model_reasoning_effort = "low"' in content):
         ok("Codex sub-agents — project worker TOML created")
     else:
         bad(f"Codex worker TOML content :: {content!r}")
@@ -896,13 +920,29 @@ else:
 
 # 43. Configured Codex worker is validated by name field and required fields
 rc, data, err = run_sync_json(
-    "subagents", "inspect", "--agent", "codex", "--name", "orderspec-worker", "--json"
+    "subagents", "inspect", "--agent", "codex", "--name", "orderspec.worker.weak", "--json"
 )
 requested = data.get("requested", {})
-if rc == 0 and requested.get("configured") and requested.get("valid") and requested.get("source") == "custom":
+if (rc == 0 and requested.get("configured") and requested.get("valid")
+        and requested.get("source") == "custom" and requested.get("model") == "test-weak-model"):
     ok("Codex sub-agents — custom worker validates successfully")
 else:
     bad(f"Codex custom worker inspection :: rc={rc} data={data} err={err!r}")
+
+
+# 43a. OrderSpec roles reject inherited model selection
+write(
+    WORK / ".codex" / "agents" / "orderspec-worker-medium.toml",
+    'name = "orderspec.worker.medium"\ndescription = "medium"\ndeveloper_instructions = "bounded"\nmodel_reasoning_effort = "medium"\n',
+)
+rc, data, err = run_sync_json(
+    "subagents", "inspect", "--agent", "codex", "--name", "orderspec.worker.medium", "--json"
+)
+if (rc == 0 and data.get("status") == "invalid"
+        and "explicit non-empty model" in " ".join(data.get("requested", {}).get("errors", []))):
+    ok("Codex OrderSpec roles — explicit model is mandatory")
+else:
+    bad(f"Codex inherited OrderSpec model accepted :: rc={rc} data={data} err={err!r}")
 
 
 # 44. Invalid custom worker is rejected instead of being dispatched
@@ -930,6 +970,31 @@ if rc == 0 and data.get("status") == "needs_user_input" and not (WORK / ".codex"
     ok("Codex sub-agents — non-interactive ensure does not guess or write")
 else:
     bad(f"Codex non-interactive ensure :: rc={rc} data={data} err={err!r}")
+
+
+# 46. Bootstrap delivery injects AI-selected, operator-approved three-role setup
+reset_work()
+setup_prompts_source({
+    "order.bootstrap.md": (
+        "---\norderspec:\n  artifact: command_prompt\n"
+        "  command: order.bootstrap\n---\n"
+        "<!-- ORDERSPEC:ADAPTER_SUBAGENT_RULES -->\n"
+    )
+})
+setup_codex()
+rc, data, err = run_sync_json("sync", "--agents", "codex", "--json")
+bootstrap_skill = WORK / ".agents" / "skills" / "order-bootstrap" / "SKILL.md"
+content = read(bootstrap_skill) if bootstrap_skill.exists() else ""
+if (rc == 0
+        and all(role in content for role in (
+            "orderspec.worker.weak", "orderspec.worker.medium", "orderspec.worker.strong"
+        ))
+        and "current model knowledge/documentation" in content
+        and "operator confirmation" in content
+        and "ORDERSPEC:ADAPTER_SUBAGENT_RULES" not in content):
+    ok("Codex bootstrap injects three AI-selected, operator-approved worker roles")
+else:
+    bad(f"Codex bootstrap worker provisioning was not injected :: rc={rc} content={content!r} err={err!r}")
 
 
 # ── Cleanup ──────────────────────────────────────────────────────────────────

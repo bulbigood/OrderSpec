@@ -18,6 +18,7 @@ class AgentInfo:
 
 class AgentAdapter(ABC):
     agent_id: str = "base"
+    SUBAGENT_RULES_MARKER = "<!-- ORDERSPEC:ADAPTER_SUBAGENT_RULES -->"
 
     @abstractmethod
     def detect(self, project_root: str) -> Optional[AgentInfo]:
@@ -53,6 +54,29 @@ class AgentAdapter(ABC):
             "global_scope": None,
             "built_in_agents": [],
         }
+
+    def subagent_rules(self, command: str) -> str:
+        """Return runtime-native delegation rules injected into a command.
+
+        Worker discovery and dispatch syntax change with the local agent, so
+        these rules belong to adapters rather than the agent-agnostic prompt
+        source. ``agents_sync.py sync`` materializes them in delivered files.
+        """
+        return (
+            "## Adapter-owned worker rules\n\n"
+            "This runtime has no adapter-managed named-worker surface. Use the "
+            "command's documented local mode; do not infer worker readiness from "
+            "`.orderspec/state/agents.json`."
+        )
+
+    def render_prompt(self, prompt_text: str, command: str) -> str:
+        """Inject adapter-owned runtime rules into a canonical prompt."""
+        if self.SUBAGENT_RULES_MARKER not in prompt_text:
+            return prompt_text
+        return prompt_text.replace(
+            self.SUBAGENT_RULES_MARKER,
+            self.subagent_rules(command).rstrip(),
+        )
 
     def inspect_subagents(
         self,

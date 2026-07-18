@@ -195,6 +195,8 @@ preferences into governance.
 
 ## Phase 3: agents
 
+<!-- ORDERSPEC:ADAPTER_SUBAGENT_RULES -->
+
 Run deterministic adapter discovery:
 
 ```bash

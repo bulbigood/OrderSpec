@@ -61,10 +61,12 @@ every implementation mode: completed `[X]` tasks stay untouched.
 Local constraints are resolved before capability detection. In local modes do
 not inspect, configure, dispatch, or wait for a worker.
 
-For `DELEGATED`, apply loaded `sub-agent-rules.md`, inspect the requested worker
-through the current runtime adapter, and continue only when it reports
-`configured: true` and `valid: true`. Never infer runtime identity from
-`agents.json` or silently create global configuration.
+For `DELEGATED`, inspect the requested worker through the current runtime
+adapter and continue only under the adapter-owned rules injected below by
+`agents_sync.py sync`. Never infer runtime identity from `agents.json` or
+silently create global configuration.
+
+<!-- ORDERSPEC:ADAPTER_SUBAGENT_RULES -->
 
 ## Step 3 — Deterministic Preflight
 

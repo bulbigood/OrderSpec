@@ -480,6 +480,8 @@ Each adapter implements the `AgentAdapter` interface defined in `.orderspec/fram
 | `sync_skills_dir(project_root, skills_dir)` | Register the OrderSpec skills directory in the agent's config |
 | `sync_prompts(project_root, prompts_source)` | Deliver OrderSpec prompts to the agent's commands/workflows directory |
 | `read_rules(project_root)` | Read external rule files owned by the agent (AGENTS.md, .cursorrules, etc.) |
+| `subagent_rules(command)` | Return runtime-specific worker rules for one delivered command |
+| `render_prompt(prompt_text, command)` | Inject adapter-owned rules into the local agent's command file |
 | `subagent_policy()` | Describe agent-specific worker discovery, scopes, built-ins, and fields |
 | `inspect_subagents(project_root, requested_name, scope)` | Validate worker availability without changing files |
 | `configure_subagent(...)` | Write one explicit worker definition in the agent's native format |
@@ -503,7 +505,7 @@ The file MUST NOT be edited manually. Use `.orderspec/framework/scripts/agents_s
 
 The sync orchestrator is at `.orderspec/framework/scripts/agents_sync.py`.
 
-It provides four subcommands:
+It provides these subcommands:
 
 | Command | Purpose |
 |---|---|
@@ -546,14 +548,18 @@ This ensures one source of truth — skills are maintained in `.orderspec/skills
 
 ### Sub-agent worker management
 
-Worker selection and shared safety rules live in
-`.orderspec/framework/protocols/sub-agent-rules.md`. They apply to `/order.code`
-and to future commands or skills that delegate work. Agent-specific discovery,
-validation, and configuration remain adapter responsibilities.
+Worker selection, runtime discovery, model binding, and native dispatch rules
+live in agent adapters. Canonical prompts contain an adapter marker;
+`agents_sync.py sync` replaces it while delivering the prompt to the local
+agent. The framework keeps only agent-independent task-packet and result
+boundaries in `sub-agent-execution.md`.
 
 `agents_sync.py sync` only inspects workers and records the result. It does not
-silently create one. A delegating command must inspect its selected worker and
-stop for operator input when the worker is missing or invalid.
+silently create one. `/order.bootstrap` proposes current model candidates for
+the stable roles `orderspec.worker.weak`, `orderspec.worker.medium`, and
+`orderspec.worker.strong`, obtains operator confirmation, and then asks the
+adapter to materialize native configurations. Current framework execution uses
+only `orderspec.worker.weak` from `/order.code`.
 
 Project-scoped configuration is the default because it is reproducible and
 reviewable. Global configuration requires explicit operator choice.

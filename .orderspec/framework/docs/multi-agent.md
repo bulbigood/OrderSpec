@@ -13,9 +13,9 @@ OrderSpec is not tied to a specific AI agent. It uses a deterministic **adapter 
 ## How it works
 
 1. **Detection**: each adapter's `detect()` method checks the project for signs of its agent.
-2. **Prompt sync**: OrderSpec prompts live in `.orderspec/framework/prompts/` as a single source of truth. Each adapter delivers them to the agent's command surface. SHA-256 hashing avoids unnecessary copies; Codex renders each prompt as a `SKILL.md`.
+2. **Prompt sync**: OrderSpec prompts live in `.orderspec/framework/prompts/` as a single source of truth. Each adapter injects its runtime-specific worker rules and delivers the result to the agent's command surface. SHA-256 hashing avoids unnecessary copies; Codex renders each prompt as a `SKILL.md`.
 3. **Skills registration**: instead of copying project skills, each adapter registers `.orderspec/skills/` in the agent's config or native discovery path — one source of truth.
-4. **Worker inspection**: before delegation, the command asks the current runtime adapter to validate its selected worker. Sync never creates one silently.
+4. **Worker provisioning and inspection**: bootstrap proposes current weak/medium/strong model bindings, asks for operator confirmation, and writes native config through the current adapter. Before delegation, the command asks that adapter to validate the selected role. Sync never creates workers silently.
 5. **External rules**: each adapter reads agent-specific rule files for optional, operator-approved integration into the owning governance, stack, architecture, or conventions contract during bootstrap.
 
 ## Adapter architecture
@@ -42,7 +42,8 @@ This file is generated and maintained by `.orderspec/framework/scripts/agents_sy
 
 ## Worker selection and configuration
 
-Prompt synchronization is separate from sub-agent dispatch. `/order.code`
+Prompt synchronization injects adapter-owned sub-agent rules but remains
+separate from dispatch. `/order.code`
 checks the current runtime's actual dispatch capability, then selects delegated
 execution, phase-local execution, or an explicit all-local fallback.
 `/order.code --all --local` and `--no-subagents` keep work in the current agent
@@ -52,7 +53,7 @@ Inspect a selected worker before dispatch:
 
 ```bash
 python3 .orderspec/framework/scripts/agents_sync.py subagents inspect \
-  --agent codex --name worker --json
+  --agent codex --name orderspec.worker.weak --json
 ```
 
 Create a missing worker through the adapter's default policy, or configure one
@@ -60,25 +61,27 @@ explicitly:
 
 ```bash
 python3 .orderspec/framework/scripts/agents_sync.py subagents ensure \
-  --agent codex --name worker --json
+  --agent codex --name orderspec.worker.weak --json
 
 python3 .orderspec/framework/scripts/agents_sync.py subagents configure \
   --agent codex \
-  --name worker \
-  --reasoning high \
+  --name orderspec.worker.weak \
+  --reasoning low \
   --scope project \
   --model <model-id> \
   --json
 ```
 
-For Codex, the built-in `worker` inherits the parent session's model and
-reasoning settings. A project-scoped custom definition is written to
-`.codex/agents/worker.toml` and takes precedence. Omit `--model` when inherited
-model selection is desired. Global worker configuration is available only
-when explicitly selected with `--scope global`.
+For Codex, bootstrap manages `orderspec.worker.weak`,
+`orderspec.worker.medium`, and `orderspec.worker.strong`. Each is a
+project-scoped custom definition with an explicit current model selected by the
+local AI agent and approved by the operator. Current OrderSpec prompts dispatch
+only `orderspec.worker.weak` during `/order.code`; they never fall back to the
+built-in `worker` or inherit the coordinator model. Global configuration is
+available only when explicitly selected with `--scope global`.
 
-Worker selection follows
-`.orderspec/framework/protocols/sub-agent-rules.md`.
+Worker selection follows the rules injected by the active adapter during
+`agents_sync.py sync`.
 
 ### Task boundary
 
@@ -106,7 +109,9 @@ not the protocol file or the whole OrderSpec context.
 1. Create a new file in `.orderspec/framework/adapters/` implementing the `AgentAdapter` interface from `base.py`.
 2. Register it in `registry.py`.
 3. The adapter must implement four core methods: `detect`, `sync_skills_dir`, `sync_prompts`, `read_rules`.
-4. If the agent has named worker configuration, implement `subagent_policy`,
+4. Implement `subagent_rules` for the runtime-specific instructions injected
+   into delegating/bootstrap commands.
+5. If the agent has named worker configuration, implement `subagent_policy`,
    `inspect_subagents`, and `configure_subagent`; otherwise report runtime-only
    worker management through the base implementation.
 

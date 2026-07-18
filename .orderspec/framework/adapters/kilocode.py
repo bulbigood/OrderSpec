@@ -1,6 +1,7 @@
 import os
 import hashlib
 import shutil
+from pathlib import Path
 from typing import Optional, Dict, Any, List
 from .base import AgentAdapter, AgentInfo
 from .jsonc_utils import read_jsonc, write_jsonc
@@ -25,6 +26,18 @@ class KiloCodeAdapter(AgentAdapter):
 
     # Rules
     RULES_FILENAME = "AGENTS.md"
+
+    def subagent_rules(self, command: str) -> str:
+        return f"""## Kilo Code worker rules (adapter-owned)
+
+Kilo Code worker dispatch is runtime-managed; this adapter cannot create or
+validate named project workers. For `{command}`, use the runtime's native
+sub-agent capability only when it can preserve the bounded task packet and wait
+for the structured result. The semantic OrderSpec role is
+`orderspec.worker.weak` for `/order.code`. Do not infer readiness from sync or
+`agents.json`. If named/model-bound roles cannot be configured by this runtime,
+report that limitation during `/order.bootstrap`; local execution remains the
+safe fallback."""
 
     def subagent_policy(self) -> Dict[str, Any]:
         """Kilo Code delegation is runtime-managed, not project-file managed."""
@@ -183,12 +196,19 @@ class KiloCodeAdapter(AgentAdapter):
                     abs_tgt = os.path.join(target_dir, rel_path)
                     os.makedirs(os.path.dirname(abs_tgt), exist_ok=True)
 
-                    src_hash = self._hash_file(abs_src)
+                    try:
+                        source_text = Path(abs_src).read_text(encoding="utf-8")
+                        command = Path(file).stem
+                        rendered = self.render_prompt(source_text, command)
+                    except (OSError, UnicodeError) as e:
+                        report["errors"].append(f"Failed to read {rel_path}: {e}")
+                        continue
+                    src_hash = hashlib.sha256(rendered.encode("utf-8")).hexdigest()
                     tgt_hash = self._hash_file(abs_tgt)
 
                     if src_hash != tgt_hash:
                         try:
-                            shutil.copy2(abs_src, abs_tgt)
+                            Path(abs_tgt).write_text(rendered, encoding="utf-8")
                             report["copied"].append(rel_path)
                         except Exception as e:
                             report["errors"].append(f"Failed to copy {rel_path}: {e}")

@@ -364,7 +364,7 @@ Examples:
   %(prog)s sync --agents kilocode --json
   %(prog)s sync --agents kilocode claude_code codex
   %(prog)s read-rules --agents kilocode claude_code codex --json
-  %(prog)s subagents inspect --agent codex --name worker --json
+  %(prog)s subagents inspect --agent codex --name orderspec.worker.weak --json
   %(prog)s subagents ensure --agent codex
         """
     )

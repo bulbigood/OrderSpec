@@ -22,13 +22,6 @@
       "usage": "apply",
       "authority": "framework"
     },
-    "protocol.sub_agent_rules": {
-      "path": ".orderspec/framework/protocols/sub-agent-rules.md",
-      "kind": "protocol",
-      "reason": "worker selection, readiness, and configuration ownership",
-      "usage": "apply",
-      "authority": "framework"
-    },
     "protocol.environment_block": {
       "path": ".orderspec/framework/protocols/environment-block.md",
       "kind": "protocol",
@@ -337,9 +330,6 @@
         },
         {
           "ref": "protocol.sub_agent_execution"
-        },
-        {
-          "ref": "protocol.sub_agent_rules"
         },
         {
           "ref": "schema.task_context"

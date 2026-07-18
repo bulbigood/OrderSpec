@@ -42,6 +42,60 @@ class CodexAdapter(AgentAdapter):
     REASONING_EFFORTS = {
         "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"
     }
+    ORDERSPEC_WORKERS = (
+        "orderspec.worker.weak",
+        "orderspec.worker.medium",
+        "orderspec.worker.strong",
+    )
+
+    def subagent_rules(self, command: str) -> str:
+        if command == "order.bootstrap":
+            return """## Codex worker provisioning (adapter-owned)
+
+Codex project workers are native TOML definitions under `.codex/agents/`.
+After approved-agent sync, bootstrap owns these three stable OrderSpec roles:
+
+- `orderspec.worker.weak` — cheapest current model that can reliably execute one bounded task packet;
+- `orderspec.worker.medium` — balanced model for broader semantic work;
+- `orderspec.worker.strong` — strongest available model for exceptional complexity.
+
+Inspect all three through `agents_sync.py subagents inspect --agent codex --name <role> --json`.
+If any role is absent, invalid, or no longer an appropriate current candidate,
+use the runtime's current model knowledge/documentation to propose an exact
+`model` and `model_reasoning_effort` for every role. Show the three mappings and
+brief cost/capability rationale, then obtain one explicit operator confirmation.
+Do not let a script choose models and do not use inherited or built-in workers
+for these roles. After confirmation, create/update each role only through:
+
+```bash
+python3 .orderspec/framework/scripts/agents_sync.py subagents configure \\
+  --agent codex --name <role> --model <exact-model-id> \\
+  --reasoning <level> --scope project [--overwrite] --json
+```
+
+Re-inspect every role. Bootstrap may complete only when each is a valid custom
+worker with an explicit model. Never overwrite an existing role before showing
+the proposed replacement and receiving confirmation."""
+        if command == "order.code":
+            return """## Codex worker selection (adapter-owned)
+
+Delegated `/order.code` MUST use the exact custom role
+`orderspec.worker.weak`; this is the only OrderSpec role used by current
+framework prompts. Before the first dispatch run:
+
+```bash
+python3 .orderspec/framework/scripts/agents_sync.py subagents inspect \\
+  --agent codex --name orderspec.worker.weak --scope project --json
+```
+
+Continue only when it reports `configured: true`, `valid: true`,
+`source: custom`, and a non-empty explicit `model`. Dispatch with the runtime
+agent type/name `orderspec.worker.weak` for every task in this command. Never
+substitute Codex's built-in `worker`, inherit the coordinator model, create a
+worker from `/order.code`, or silently select medium/strong. If the role is
+missing or invalid, stop before task writes and route to `/order.bootstrap`.
+If runtime dispatch/wait is unavailable, use the documented local fallback."""
+        return super().subagent_rules(command)
 
     def _hash_file(self, filepath: str) -> Optional[str]:
         if not os.path.isfile(filepath):
@@ -130,6 +184,9 @@ class CodexAdapter(AgentAdapter):
             ],
             "reasoning_efforts": sorted(self.REASONING_EFFORTS),
             "name_source_of_truth": "name field in TOML",
+            "orderspec_roles": list(self.ORDERSPEC_WORKERS),
+            "provisioning_owner": "order.bootstrap",
+            "current_framework_worker": "orderspec.worker.weak",
         }
 
     def _subagent_dir(self, project_root: str, scope: str) -> Optional[Path]:
@@ -175,6 +232,12 @@ class CodexAdapter(AgentAdapter):
                 or len(set(nicknames)) != len(nicknames)
             ):
                 errors.append("nickname_candidates must be a non-empty list of unique strings")
+
+        agent_name = data.get("name")
+        if agent_name in self.ORDERSPEC_WORKERS:
+            model = data.get("model")
+            if not isinstance(model, str) or not model.strip():
+                errors.append("OrderSpec worker roles require an explicit non-empty model")
 
         return errors
 
@@ -271,6 +334,7 @@ class CodexAdapter(AgentAdapter):
                     "source": "custom",
                     "file": entry.get("file"),
                     "reasoning_effort": entry.get("model_reasoning_effort"),
+                    "model": entry.get("model"),
                     "errors": entry.get("errors", []),
                 }
             elif builtin_matches:
@@ -351,6 +415,14 @@ class CodexAdapter(AgentAdapter):
                 + ", ".join(sorted(self.REASONING_EFFORTS))
             )
             return result
+        if name in self.ORDERSPEC_WORKERS and (
+            not isinstance(model, str) or not model.strip()
+        ):
+            result["details"] = (
+                "OrderSpec worker roles require an explicit --model selected "
+                "by the local AI agent and approved by the operator"
+            )
+            return result
 
         filename = self._safe_agent_filename(name)
         if filename is None:
@@ -375,7 +447,15 @@ class CodexAdapter(AgentAdapter):
             result["errors"] = requested["errors"]
             return result
 
-        description = description or "Executes one bounded worker task for an OrderSpec command or skill."
+        role_descriptions = {
+            "orderspec.worker.weak": "Executes bounded OrderSpec task packets with the approved weak model.",
+            "orderspec.worker.medium": "Handles bounded OrderSpec work requiring balanced semantic capability.",
+            "orderspec.worker.strong": "Handles exceptional bounded OrderSpec work requiring the strongest approved model.",
+        }
+        description = description or role_descriptions.get(
+            name,
+            "Executes one bounded worker task for an OrderSpec command or skill.",
+        )
         developer_instructions = developer_instructions or (
             "You are an OrderSpec worker. Execute exactly one bounded task packet "
             "from the coordinator, use only supplied context and write paths, "
@@ -579,6 +659,8 @@ class CodexAdapter(AgentAdapter):
 
                 try:
                     prompt_text = Path(source_path).read_text(encoding="utf-8")
+                    command, _, _ = self._parse_prompt(prompt_text)
+                    prompt_text = self.render_prompt(prompt_text, command)
                     rendered = self._render_skill(prompt_text)
                 except (OSError, UnicodeError) as exc:
                     report["errors"].append(f"Failed to read {rel_path}: {exc}")
