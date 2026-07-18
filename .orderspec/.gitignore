@@ -2,3 +2,7 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+
+# Ephemeral /order.code snapshots and worker results. Successful attempts are
+# removed after their tasks are marked; failed attempts remain local evidence.
+/features/*/.state/code-attempts/

@@ -58,6 +58,10 @@ expect(
 )
 expect("task_progress.py mark" in code_prompt, "order.code delegates marker writes to deterministic script")
 expect(
+    "attempt-cleanup" in code_prompt and "only after every task owned by the attempt is marked" in code_prompt,
+    "order.code cleans successful attempt state only after progress is durable",
+)
+expect(
     "task_progress.py reconcile" in code_prompt and "ALREADY_COMPLETE" in code_prompt,
     "order.code reconciles previously completed unchecked work from evidence",
 )

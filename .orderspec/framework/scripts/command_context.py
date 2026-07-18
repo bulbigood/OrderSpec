@@ -1031,6 +1031,29 @@ def main(argv: list[str]) -> int:
         data["input"] = parsed_input
         if target is not None:
             data["target"] = target
+        from workflow_feedback import TARGETS as FEEDBACK_TARGETS, load_open_for_command
+
+        feedback_feature = None
+        if args.command in FEEDBACK_TARGETS:
+            feature_feedback_errors = []
+            skip_active = args.command == "order.spec" and parsed_input.get("controls", {}).get("new")
+            if not skip_active:
+                try:
+                    feedback_feature = resolve_active_feature_directory(root, feature_directory)
+                except ValueError as exc:
+                    feature_feedback_errors.append(str(exc))
+            open_feedback, feedback_errors = load_open_for_command(
+                root,
+                feedback_feature,
+                args.command,
+            )
+            data["feedback"] = {
+                "open": open_feedback,
+                "count": len(open_feedback),
+                "errors": feature_feedback_errors + feedback_errors,
+            }
+        else:
+            data["feedback"] = {"open": [], "count": 0, "errors": []}
     elif args.action == "list":
         data = list_commands(root)
     elif args.action == "validate":

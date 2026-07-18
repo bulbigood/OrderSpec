@@ -621,6 +621,14 @@ def attempt_finish(
             "workers": failed,
             "observed_by_task": observed_by_task,
         }
+    state["finish_status"] = "accepted"
+    state["state_digest"] = hashlib.sha256(
+        json.dumps(state, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    try:
+        state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    except OSError as exc:
+        return stop("attempt_state_update_failed", str(exc))
     return 0, {
         "ok": True,
         "action": "READY_TO_VERIFY_AND_MARK",
@@ -628,6 +636,77 @@ def attempt_finish(
         "task_ids": state["task_ids"],
         "observed_by_task": observed_by_task,
         "results": results,
+    }
+
+
+def attempt_cleanup(feature_dir_value: str, attempt_id: str) -> tuple[int, dict[str, Any]]:
+    """Remove a closed successful attempt after every owned task is marked."""
+    repo_root = get_repo_root().resolve()
+    try:
+        feature_dir = safe_feature_dir(feature_dir_value, repo_root)
+    except ValueError as exc:
+        return stop("invalid_feature_dir", str(exc))
+    if not attempt_id or any(char not in "0123456789abcdef" for char in attempt_id):
+        return stop("invalid_attempt_id", "attempt ID must be lowercase hexadecimal")
+
+    state_path = feature_dir / ATTEMPT_STATE_DIR / f"{attempt_id}.json"
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        return stop("invalid_attempt_state", str(exc))
+    if state.get("attempt_id") != attempt_id or state.get("version") != 1:
+        return stop("invalid_attempt_state", "attempt state identity or version mismatch")
+    state_digest = state.pop("state_digest", None)
+    expected_digest = hashlib.sha256(
+        json.dumps(state, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    if state_digest != expected_digest:
+        return stop("invalid_attempt_state", "attempt state integrity check failed")
+    if state.get("finish_status") != "accepted":
+        return stop(
+            "attempt_not_accepted",
+            "preserving attempt because attempt-finish did not accept it",
+        )
+
+    records, errors = parse_tasks(feature_dir / "tasks.md")
+    if errors:
+        return stop("invalid_tasks", "; ".join(errors), route="/order.tasks")
+    statuses = {record["task_id"]: record["status"] for record in records}
+    unmarked = [task_id for task_id in state.get("task_ids", []) if statuses.get(task_id) not in {"x", "X"}]
+    if unmarked:
+        return stop(
+            "attempt_not_marked",
+            f"preserving attempt because tasks are not marked [X]: {', '.join(unmarked)}",
+        )
+
+    results_value = state.get("results_file")
+    if not isinstance(results_value, str):
+        return stop("invalid_attempt_state", "attempt results path is invalid")
+    results_path = (repo_root / results_value).resolve()
+    try:
+        results_path.relative_to(repo_root)
+    except ValueError:
+        return stop("invalid_attempt_state", "attempt results path escapes repository root")
+
+    removed = []
+    try:
+        if results_path.is_file() or results_path.is_symlink():
+            results_path.unlink()
+            removed.append(results_value)
+        state_path.unlink()
+        removed.append(state_path.relative_to(repo_root).as_posix())
+        attempt_dir = state_path.parent
+        try:
+            attempt_dir.rmdir()
+        except OSError:
+            pass
+    except OSError as exc:
+        return stop("attempt_cleanup_failed", str(exc))
+    return 0, {
+        "ok": True,
+        "action": "ATTEMPT_CLEANED",
+        "attempt_id": attempt_id,
+        "removed": removed,
     }
 
 
@@ -746,6 +825,10 @@ def main() -> int:
     attempt_finish_parser.add_argument("--attempt-id", required=True)
     attempt_finish_parser.add_argument("--results-file", required=True)
 
+    attempt_cleanup_parser = subparsers.add_parser("attempt-cleanup")
+    attempt_cleanup_parser.add_argument("--feature-dir", required=True)
+    attempt_cleanup_parser.add_argument("--attempt-id", required=True)
+
     finish_parser = subparsers.add_parser("finish")
     finish_parser.add_argument("--mode", required=True, choices=sorted(FULL_MODES | {"LOCAL_PHASE"}))
     finish_parser.add_argument("--feature-dir", required=True)
@@ -760,6 +843,8 @@ def main() -> int:
         rc, payload = attempt_begin(args.mode, args.feature_dir, args.task_id, args.selected_phase)
     elif args.command == "attempt-finish":
         rc, payload = attempt_finish(args.feature_dir, args.attempt_id, args.results_file)
+    elif args.command == "attempt-cleanup":
+        rc, payload = attempt_cleanup(args.feature_dir, args.attempt_id)
     else:
         rc, payload = finish(args.mode, args.feature_dir, args.outcome)
     emit(payload)

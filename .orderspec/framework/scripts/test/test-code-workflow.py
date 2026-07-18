@@ -111,6 +111,17 @@ with tempfile.TemporaryDirectory(prefix="orderspec-code-workflow-") as temp:
     assert rc == 0 and finished["action"] == "READY_TO_VERIFY_AND_MARK", finished
     assert finished["observed_by_task"] == {"T001": ["src/service.py"]}, finished
 
+    rc, premature_cleanup = run(
+        root,
+        "attempt-cleanup",
+        "--feature-dir",
+        str(feature),
+        "--attempt-id",
+        attempt["attempt_id"],
+    )
+    assert rc == 2 and premature_cleanup["error"] == "attempt_not_marked", premature_cleanup
+    assert (feature / ".state" / "code-attempts" / f"{attempt['attempt_id']}.json").is_file()
+
     rc, attempt = run(
         root,
         "attempt-begin",
@@ -146,5 +157,41 @@ with tempfile.TemporaryDirectory(prefix="orderspec-code-workflow-") as temp:
     assert rc == 2 and rejected["error"] == "attempt_changes_rejected", rejected
     assert "forbidden.txt" in rejected["unexpected_changed_paths"], rejected
     assert any(path.endswith("worker-intrusion.txt") for path in rejected["unexpected_changed_paths"]), rejected
+
+    rejected_state = attempt_state_dir / f"{attempt['attempt_id']}.json"
+    rejected_result = result_path
+    assert rejected_state.is_file() and rejected_result.is_file()
+
+    tasks_path = feature / "tasks.md"
+    tasks_path.write_text(
+        tasks_path.read_text(encoding="utf-8").replace("- [ ] T001", "- [X] T001"),
+        encoding="utf-8",
+    )
+    successful_state = attempt_state_dir / f"{finished['attempt_id']}.json"
+    first_result_path = root / (
+        json.loads(successful_state.read_text(encoding="utf-8"))["results_file"]
+    )
+    rc, cleaned = run(
+        root,
+        "attempt-cleanup",
+        "--feature-dir",
+        str(feature),
+        "--attempt-id",
+        finished["attempt_id"],
+    )
+    assert rc == 0 and cleaned["action"] == "ATTEMPT_CLEANED", cleaned
+    assert not successful_state.exists() and not first_result_path.exists()
+    assert rejected_state.is_file() and rejected_result.is_file()
+
+    rc, rejected_cleanup = run(
+        root,
+        "attempt-cleanup",
+        "--feature-dir",
+        str(feature),
+        "--attempt-id",
+        attempt["attempt_id"],
+    )
+    assert rc == 2 and rejected_cleanup["error"] == "attempt_not_accepted", rejected_cleanup
+    assert rejected_state.is_file() and rejected_result.is_file()
 
 print("All code-workflow tests passed")

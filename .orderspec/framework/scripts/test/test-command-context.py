@@ -114,6 +114,10 @@ def setup_base_files(
         WORK / ".orderspec" / "framework" / "protocols" / "environment-block.md",
         "# Environment Block Protocol\n",
     )
+    write(
+        WORK / ".orderspec" / "framework" / "protocols" / "blocking-feedback.md",
+        "# Blocking Feedback Protocol\n",
+    )
     write(WORK / ".orderspec" / "framework" / "schemas" / "task-context.schema.json", "{}\n")
 
 
@@ -1034,6 +1038,61 @@ if _real_manifest.exists():
         ok("real manifest: order.code-check treats feature lifecycle inputs as optional")
     else:
         bad(f"order.code-check feature context wrong :: rc={rc} items={items} data={data} err={err!r}")
+
+
+# 29h. owner command intake includes open feature feedback
+reset_work()
+setup_base_files()
+if _real_manifest.exists():
+    _shutil.copy2(_real_manifest, manifest_path())
+    feature = WORK / ".orderspec" / "features" / "001-demo"
+    write(feature / "spec.md", "# spec.md\n")
+    write(
+        WORK / ".orderspec" / "state" / "active-feature.json",
+        json.dumps(
+            {
+                "feature_id": "001-demo",
+                "feature_directory": ".orderspec/features/001-demo",
+                "status": "specified",
+            }
+        ),
+    )
+    feedback = {
+        "version": 1,
+        "id": "FB-001",
+        "scope": "feature",
+        "status": "open",
+        "source": "order.tasks",
+        "target": "order.plan",
+        "category": "mapping",
+        "summary": "missing mapping",
+        "evidence": "REQ-001 has no path",
+        "location": "REQ-001",
+        "requested_change": "map REQ-001",
+    }
+    write(feature / ".state" / "feedback" / "FB-001.json", json.dumps(feedback))
+    write(feature / ".state" / "feedback" / "FB-002.json", "{broken")
+    project_feedback = {
+        **feedback,
+        "id": "PFB-001",
+        "scope": "project",
+        "source": "order.bootstrap",
+    }
+    write(
+        WORK / ".orderspec" / "state" / "feedback" / "PFB-001.json",
+        json.dumps(project_feedback),
+    )
+    rc, data, err = run_cc_json("resolve", "order.plan", "--json")
+    intake = data.get("feedback", {})
+    if (
+        rc == 0
+        and intake.get("count") == 2
+        and {item.get("id") for item in intake.get("open", [])} == {"FB-001", "PFB-001"}
+        and len(intake.get("errors", [])) == 1
+    ):
+        ok("owner context merges project/feature feedback without making malformed peers fatal")
+    else:
+        bad(f"owner feedback intake wrong :: rc={rc} feedback={intake} err={err!r}")
 
 
 # 30. v2 ref and group entries expand in order

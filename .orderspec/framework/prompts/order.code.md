@@ -183,6 +183,18 @@ python3 .orderspec/framework/scripts/task_progress.py mark \
   --tasks "$FEATURE_DIR/tasks.md" --result-file "$RESULT_FILE"
 ```
 
+After every result in the accepted execution unit is marked `[X]`, remove its
+successful transient snapshot and result pair:
+
+```bash
+python3 .orderspec/framework/scripts/code_workflow.py attempt-cleanup \
+  --feature-dir "$FEATURE_DIR" --attempt-id "$ATTEMPT_ID"
+```
+
+Cleanup is permitted only after every task owned by the attempt is marked. A
+failed, blocked, rejected, interrupted, or otherwise unmarked attempt remains
+in `.state/code-attempts/` as local diagnostic evidence and is not committed.
+
 A rejected result is terminal for this run. Preserve it and the exact error.
 Never alter `changed_files`, `deviation`, evidence, or task path and retry.
 

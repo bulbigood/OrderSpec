@@ -106,12 +106,8 @@ test -e "$SELF_REPORT" && echo "SELF_REPORT_PRESENT" || echo "SELF_REPORT_ABSENT
 
 If `SELF_REPORT_PRESENT`, read it before mode selection.
 
-Also inspect downstream workflow feedback before mode selection:
-
-```bash
-python3 .orderspec/framework/scripts/workflow_feedback.py list \
-  --feature-dir "$FEATURE_DIR" --target order.tasks
-```
+Use `feedback.open` returned by Step 1 before mode selection. Every feature- or
+project-scoped item targeting `order.tasks` is mandatory Refine input.
 
 Determine mode before writing any file. State the mode in chat.
 
@@ -593,8 +589,14 @@ After successful validation, consume each open `order.tasks` workflow feedback
 item that this run addressed:
 
 ```bash
+# Feature-scoped FB-NNN:
 python3 .orderspec/framework/scripts/workflow_feedback.py consume \
   --feature-dir "$FEATURE_DIR" --id "FB-NNN" --consumer order.tasks
+
+# Project-scoped PFB-NNN:
+python3 .orderspec/framework/scripts/workflow_feedback.py consume \
+  --scope project --project-root "$PWD" \
+  --id "PFB-NNN" --consumer order.tasks
 ```
 
 ---

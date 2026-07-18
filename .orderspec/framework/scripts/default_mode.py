@@ -16,6 +16,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from common import get_repo_root
+from workflow_feedback import load_open_for_command
+
 
 COMMANDS = {
     "order.bootstrap",
@@ -53,17 +56,8 @@ def safe_feature_dir(value: str | None) -> Path | None:
 
 
 def open_feedback(feature: Path | None, target: str) -> list[str]:
-    if feature is None:
-        return []
-    result: list[str] = []
-    for path in sorted((feature / ".state" / "feedback").glob("FB-*.json")):
-        try:
-            value = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise ValueError(f"invalid feedback report {path}: {exc}") from exc
-        if value.get("status") == "open" and value.get("target") == target:
-            result.append(str(value.get("id", path.stem)))
-    return result
+    items, _ = load_open_for_command(get_repo_root().resolve(), feature, target)
+    return [str(item["id"]) for item in items]
 
 
 def newer(left: Path, right: Path) -> bool:

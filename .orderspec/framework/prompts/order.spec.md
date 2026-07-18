@@ -78,15 +78,10 @@ With `--new`, do not treat the active feature as target and do not load its
 self-report or feedback. With `--split`, parent intake may constrain the split,
 but mode remains Decompose.
 
-Also load persistent feedback for that target:
-
-```bash
-python3 .orderspec/framework/scripts/workflow_feedback.py list \
-  --feature-dir "<feature-directory>" --target order.spec
-```
-
-Open feedback targeting `order.spec` is authoritative Refine input. Consume it
-only after the revised spec passes mechanical validation.
+Use `feedback.open` returned by Command Context Bootstrap. Open feature- or
+project-scoped feedback targeting `order.spec` is authoritative Refine input.
+Consume it only after the revised spec passes mechanical validation. `--new`
+intentionally excludes active-feature feedback from resolver intake.
 
 ### Mode selection
 
@@ -337,8 +332,14 @@ python3 .orderspec/framework/scripts/traceability.py mark-consumed \
 Consume each addressed feedback item against its owning target only now:
 
 ```bash
+# Feature-scoped FB-NNN:
 python3 .orderspec/framework/scripts/workflow_feedback.py consume \
   --feature-dir "$FEATURE_DIR" --id "FB-NNN" --consumer order.spec
+
+# Project-scoped PFB-NNN:
+python3 .orderspec/framework/scripts/workflow_feedback.py consume \
+  --scope project --project-root "$PWD" \
+  --id "PFB-NNN" --consumer order.spec
 ```
 
 If marking or consumption fails, report it; do not claim that evidence was

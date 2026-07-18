@@ -15,6 +15,8 @@ WHAT-contract.
 This gate is a **pure inspector**. It may overwrite only the resolved target's
 `spec-report.md`. It MUST NOT edit `spec.md`, other feature artifacts, runtime
 state, traceability state, project contracts, framework files, or source code.
+After report finalization it may invoke only the loaded blocking-feedback
+protocol's script-owned bookkeeping for a cross-owner route.
 Mechanical evidence comes only from framework scripts; semantic judgment stays
 bounded to the checks below. After context succeeds and a safe target exists, the
 gate writes a report for an artifact precondition failure. Validator failure

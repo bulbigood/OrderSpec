@@ -90,12 +90,8 @@ test -e "$SELF_REPORT" && echo "SELF_REPORT_PRESENT" || echo "SELF_REPORT_ABSENT
 
 If `SELF_REPORT_PRESENT`, read it before mode selection.
 
-Inspect persistent downstream feedback before mode selection:
-
-```bash
-python3 .orderspec/framework/scripts/workflow_feedback.py list \
-  --feature-dir "$FEATURE_DIR" --target order.plan
-```
+Use `feedback.open` returned by Step 1 before mode selection. Every feature- or
+project-scoped item targeting `order.plan` is mandatory Reconcile/Refine input.
 
 Determine mode before writing any file. State the mode in chat.
 
@@ -428,8 +424,14 @@ python3 .orderspec/framework/scripts/traceability.py mark-consumed \
 After successful plan validation, consume each addressed workflow feedback item:
 
 ```bash
+# Feature-scoped FB-NNN:
 python3 .orderspec/framework/scripts/workflow_feedback.py consume \
   --feature-dir "$FEATURE_DIR" --id "FB-NNN" --consumer order.plan
+
+# Project-scoped PFB-NNN:
+python3 .orderspec/framework/scripts/workflow_feedback.py consume \
+  --scope project --project-root "$PWD" \
+  --id "PFB-NNN" --consumer order.plan
 ```
 
 ---

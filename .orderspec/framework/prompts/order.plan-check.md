@@ -25,7 +25,11 @@ It runs after `/order.plan` and answers: Is `plan.md` a faithful, complete, phys
 
 This command acts as **semantic glue** between deterministic scripts. It does not perform mechanism counting, pathmanifest parsing, or ID validation manually. All such data is provided by `traceability.py`.
 
-This gate is a **pure inspector**. It writes only `plan-report.md`. It MUST NOT edit `spec.md`, `plan.md`, `tasks.md`, `.state/*.tsv`, or source code.
+This gate is a **pure inspector**. Its only inspection artifact is
+`plan-report.md`. It MUST NOT edit `spec.md`, `plan.md`, `tasks.md`,
+`.state/*.tsv`, or source code. After report finalization it may invoke only the
+loaded blocking-feedback protocol's script-owned bookkeeping for a cross-owner
+route.
 
 ## Severity Model
 

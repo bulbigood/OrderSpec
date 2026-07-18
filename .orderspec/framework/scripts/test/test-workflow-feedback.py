@@ -28,6 +28,15 @@ with tempfile.TemporaryDirectory(prefix="orderspec-feedback-") as temp:
         "--requested-change", "add prerequisite task before T003",
     )
     assert rc == 0 and created["feedback"]["id"] == "FB-001"
+    rc, duplicate = run(
+        "create", "--feature-dir", str(feature), "--source", "order.code",
+        "--target", "order.tasks", "--category", "task_decomposition",
+        "--location", "T003", "--summary", "missing prerequisite",
+        "--evidence", "worker requested src/dependency.py",
+        "--requested-change", "add prerequisite task before T003",
+    )
+    assert rc == 0 and duplicate["created"] is False
+    assert duplicate["feedback"]["id"] == "FB-001"
     rc, listed = run("list", "--feature-dir", str(feature), "--target", "order.tasks")
     assert rc == 0 and listed["count"] == 1
     rc, consumed = run(
@@ -68,5 +77,25 @@ with tempfile.TemporaryDirectory(prefix="orderspec-feedback-") as temp:
         stdin=json.dumps(stdin_payload),
     )
     assert rc == 0 and created["feedback"]["id"] == "FB-003", created
+
+    rc, project_created = run(
+        "create", "--scope", "project", "--project-root", temp,
+        "--source", "order.plan", "--target", "order.bootstrap",
+        "--category", "project_contract", "--summary", "stack contract incomplete",
+        "--evidence", "required runtime version is unresolved",
+        "--requested-change", "define the supported runtime version",
+    )
+    assert rc == 0 and project_created["feedback"]["id"] == "PFB-001"
+    assert project_created["feedback"]["scope"] == "project"
+    rc, project_list = run(
+        "list", "--scope", "project", "--project-root", temp,
+        "--target", "order.bootstrap",
+    )
+    assert rc == 0 and project_list["count"] == 1
+    rc, project_consumed = run(
+        "consume", "--scope", "project", "--project-root", temp,
+        "--id", "PFB-001", "--consumer", "order.bootstrap",
+    )
+    assert rc == 0 and project_consumed["feedback"]["status"] == "consumed"
 
 print("All workflow-feedback tests passed")

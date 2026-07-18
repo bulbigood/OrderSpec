@@ -49,6 +49,11 @@ enumerate additional framework context.
 Use only returned `input.controls` and `input.semantic_input`. Do not parse raw
 input again.
 
+Treat every item in returned `feedback.open` targeting `order.bootstrap` as
+mandatory Refine input. Project-scoped feedback is available even when no
+active feature can be resolved. Do not consume it until the repaired contracts
+and bootstrap state pass deterministic validation.
+
 Then run the deterministic mode/phase router:
 
 ```bash
@@ -69,6 +74,7 @@ Use its project-contract state as authoritative:
 
 - missing contracts: Init;
 - complete contracts plus empty user input: Refine;
+- complete contracts plus open `order.bootstrap` feedback: Refine;
 - complete contracts plus user-requested change: Amend;
 - explicit invocation envelope: Targeted Amend.
 
@@ -341,6 +347,21 @@ python3 .orderspec/framework/scripts/bootstrap_contracts.py complete --json
 Completion writes the framework/project/tooling evidence baseline atomically.
 It also initializes missing `.orderspec/state/active-feature.json` as inactive
 and preserves any valid existing selection.
+
+Only after that successful completion, consume every addressed
+`order.bootstrap` feedback item using its returned scope:
+
+```bash
+# Feature-scoped FB-NNN, when its feature remains safely resolved:
+python3 .orderspec/framework/scripts/workflow_feedback.py consume \
+  --feature-dir "$FEATURE_DIR" --id "FB-NNN" --consumer order.bootstrap
+
+# Project-scoped PFB-NNN:
+python3 .orderspec/framework/scripts/workflow_feedback.py consume \
+  --scope project --project-root "$PWD" \
+  --id "PFB-NNN" --consumer order.bootstrap
+```
+
 Report mode, contract changes, constitution decisions, agent sync, tooling,
 external-rule integration, unresolved decisions, and downstream impact.
 

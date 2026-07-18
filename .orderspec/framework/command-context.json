@@ -36,6 +36,13 @@
       "usage": "apply",
       "authority": "framework"
     },
+    "protocol.blocking_feedback": {
+      "path": ".orderspec/framework/protocols/blocking-feedback.md",
+      "kind": "protocol",
+      "reason": "persistent cross-command blocker routing and owner intake",
+      "usage": "apply",
+      "authority": "framework"
+    },
     "schema.frontmatter": {
       "path": ".orderspec/framework/schemas/frontmatter.yml",
       "kind": "schema",
@@ -214,6 +221,9 @@
     "required": [
       {
         "ref": "framework.rules"
+      },
+      {
+        "ref": "protocol.blocking_feedback"
       }
     ]
   },

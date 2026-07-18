@@ -39,6 +39,8 @@ first invalid upstream artifact; never name a command that is not registered.
 Direct writes are forbidden except resolved `code-report.md`. Deterministic
 gate scripts may refresh that report, write the machine ledger, and apply the
 validated active-feature status. Never hand-edit generated state.
+After report finalization the gate may invoke only the loaded
+blocking-feedback protocol's script-owned bookkeeping for a cross-owner route.
 
 ## Step 1 — Resolve Context and Feature
 

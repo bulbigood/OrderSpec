@@ -27,9 +27,17 @@ pathmanifest path. `/order.code --reset` is available only when capture
 succeeded; it previews and restores that bounded set, then clears checkboxes
 after rollback succeeds. Broad working-tree cleanup is never used.
 
-When code execution discovers an upstream defect, it persists a typed feedback
-report in the feature `.state/feedback/`. The owning author command loads it on
-the next run and consumes it only after the repaired artifact validates.
+When any command discovers an evidenced defect owned by an earlier author
+command, it persists an idempotent typed handoff before stopping. Feature
+handoffs live in the feature `.state/feedback/`; pre-feature and project-level
+handoffs live in `.orderspec/state/feedback/`. `command_context.py` loads both
+scopes into `feedback.open` for the owner. Open handoffs select Refine,
+Reconcile, or the equivalent repair mode and are consumed only after the
+repaired artifact validates.
+
+Canonical `*-report.md` files remain exclusive outputs of matching `*-check`
+commands. A gate's finalized routed finding is already a persistent handoff and
+is not duplicated. Informal or malformed Markdown reports are never generated.
 
 A spec is a contract about behavior. It should survive refactors, renames, and merges.
 
@@ -206,6 +214,7 @@ schema-validated semantic result per obligation before report finalization.
     │       ├── plan.md
     │       ├── tasks.md
     │       └── .state/                    ← mechanisms, work-order baseline, feedback
+    │           └── code-attempts/         ← ignored transient snapshots/results
     ├── config/
     │   └── tooling.json
     ├── state/
@@ -253,3 +262,8 @@ These files live in different directories on purpose:
 
 - `.orderspec/config/` contains durable configuration and policy.
 - `.orderspec/state/` contains generated runtime state that may depend on the current environment.
+
+Feature `.state/code-attempts/` is local transient runtime evidence. An active
+attempt needs its snapshot and result files through `attempt-finish`; successful
+pairs are deleted only after all owned tasks are marked `[X]`. Failed or rejected
+pairs remain ignored local evidence until diagnosis and may then be removed.

@@ -46,6 +46,8 @@ python3 .orderspec/framework/scripts/task_progress.py validate --tasks <feature>
 python3 .orderspec/framework/scripts/work_order.py rollback --feature-dir <feature>
 python3 .orderspec/framework/scripts/workflow_feedback.py list \
   --feature-dir <feature> --target order.tasks
+python3 .orderspec/framework/scripts/workflow_feedback.py list \
+  --scope project --project-root . --target order.bootstrap
 
 # Agent detection, synchronization, and state
 python3 .orderspec/framework/scripts/agents_sync.py detect --json

@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """Persistent typed handoffs between OrderSpec pipeline commands.
 
-Code execution records an owner-targeted defect before it stops. Authoring
-commands list their own open handoffs and consume them only after repair.
+Any pipeline command records an earlier-owner defect before a routed stop.
+Owner commands receive open feature and project handoffs through command
+context and consume them only after validated repair.
 """
 
 from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import os
 import sys
@@ -17,7 +19,10 @@ from pathlib import Path
 from typing import Any
 
 TARGETS = {"order.bootstrap", "order.spec", "order.plan", "order.tasks"}
-SOURCES = TARGETS | {"order.code", "order.code-check", "order.tasks-check", "order.plan-check", "order.spec-check"}
+SOURCES = TARGETS | {
+    "order.feature", "order.code-to-spec", "order.code", "order.code-check",
+    "order.tasks-check", "order.plan-check", "order.spec-check",
+}
 
 
 def now() -> str:
@@ -35,8 +40,29 @@ def safe_feature_dir(value: str) -> Path:
     return path
 
 
-def store_dir(feature_dir: Path) -> Path:
+def feature_store_dir(feature_dir: Path) -> Path:
     return feature_dir / ".state" / "feedback"
+
+
+def safe_project_root(value: str) -> Path:
+    root = Path(value).resolve()
+    if not (root / ".orderspec").is_dir():
+        raise ValueError("project root must contain .orderspec")
+    return root
+
+
+def project_store_dir(project_root: Path) -> Path:
+    return project_root / ".orderspec" / "state" / "feedback"
+
+
+def resolve_store(
+    *, feature_dir_value: str | None, project_root_value: str, scope: str
+) -> tuple[Path, str, str]:
+    if scope == "project":
+        return project_store_dir(safe_project_root(project_root_value)), "PFB", "project"
+    if not feature_dir_value:
+        raise ValueError("--feature-dir is required for feature-scoped feedback")
+    return feature_store_dir(safe_feature_dir(feature_dir_value)), "FB", "feature"
 
 
 def atomic_json(path: Path, payload: dict[str, Any]) -> None:
@@ -53,40 +79,78 @@ def atomic_json(path: Path, payload: dict[str, Any]) -> None:
         Path(temp_name).unlink(missing_ok=True)
 
 
-def read_all(feature_dir: Path) -> list[tuple[Path, dict[str, Any]]]:
-    result = []
-    for path in sorted(store_dir(feature_dir).glob("FB-*.json")):
-        try:
-            value = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            raise ValueError(f"invalid feedback report {path}: {exc}") from exc
-        if not isinstance(value, dict):
-            raise ValueError(f"invalid feedback report {path}: expected object")
-        if (
-            value.get("version") != 1
-            or value.get("id") != path.stem
-            or value.get("status") not in {"open", "consumed"}
-            or value.get("source") not in SOURCES
-            or value.get("target") not in TARGETS
-        ):
-            raise ValueError(f"invalid feedback report shape: {path}")
-        result.append((path, value))
-    return result
+def read_report(path: Path) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid feedback report {path}: {exc}") from exc
+    if not isinstance(value, dict):
+        raise ValueError(f"invalid feedback report {path}: expected object")
+    if (
+        value.get("version") != 1
+        or value.get("id") != path.stem
+        or value.get("status") not in {"open", "consumed"}
+        or value.get("source") not in SOURCES
+        or value.get("target") not in TARGETS
+    ):
+        raise ValueError(f"invalid feedback report shape: {path}")
+    return value
 
 
-def next_id(feature_dir: Path) -> str:
+def read_all(store: Path, prefix: str) -> list[tuple[Path, dict[str, Any]]]:
+    return [(path, read_report(path)) for path in sorted(store.glob(f"{prefix}-*.json"))]
+
+
+def next_id(store: Path, prefix: str) -> str:
     numbers = []
-    for path, _ in read_all(feature_dir):
+    for path, _ in read_all(store, prefix):
         try:
             numbers.append(int(path.stem.split("-")[1]))
         except (IndexError, ValueError):
             pass
-    return f"FB-{max(numbers, default=0) + 1:03d}"
+    return f"{prefix}-{max(numbers, default=0) + 1:03d}"
+
+
+def feedback_fingerprint(values: dict[str, Any]) -> str:
+    identity = {
+        key: str(values.get(key, "")).strip()
+        for key in ("source", "target", "category", "summary", "evidence", "location", "requested_change")
+    }
+    return hashlib.sha256(
+        json.dumps(identity, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()[:20]
+
+
+def load_open_for_command(
+    project_root: Path,
+    feature_dir: Path | None,
+    target: str,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Load project and feature handoffs without making malformed state fatal."""
+    stores = [(project_store_dir(project_root), "PFB")]
+    if feature_dir is not None:
+        stores.append((feature_store_dir(feature_dir), "FB"))
+    items: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for store, prefix in stores:
+        for path in sorted(store.glob(f"{prefix}-*.json")):
+            try:
+                item = read_report(path)
+            except ValueError as exc:
+                errors.append(str(exc))
+                continue
+            if item.get("status") == "open" and item.get("target") == target:
+                items.append({**item, "report": str(path)})
+    return items, errors
 
 
 def cmd_create(args: argparse.Namespace) -> int:
     try:
-        feature_dir = safe_feature_dir(args.feature_dir)
+        store, prefix, scope = resolve_store(
+            feature_dir_value=args.feature_dir,
+            project_root_value=args.project_root,
+            scope=args.scope,
+        )
     except ValueError as exc:
         emit({"ok": False, "error": str(exc)})
         return 2
@@ -120,13 +184,32 @@ def cmd_create(args: argparse.Namespace) -> int:
         emit({"ok": False, "error": "location must be a string"})
         return 2
     try:
-        feedback_id = next_id(feature_dir)
+        fingerprint = feedback_fingerprint({
+            "source": source,
+            "target": target,
+            "category": category,
+            "summary": summary,
+            "evidence": evidence,
+            "location": location,
+            "requested_change": requested_change,
+        })
+        for existing_path, existing in read_all(store, prefix):
+            if existing.get("status") == "open" and existing.get("fingerprint") == fingerprint:
+                emit({
+                    "ok": True,
+                    "created": False,
+                    "report": str(existing_path),
+                    "feedback": existing,
+                })
+                return 0
+        feedback_id = next_id(store, prefix)
     except ValueError as exc:
         emit({"ok": False, "error": str(exc)})
         return 2
     payload = {
         "version": 1,
         "id": feedback_id,
+        "scope": scope,
         "status": "open",
         "created_at": now(),
         "source": source,
@@ -136,23 +219,28 @@ def cmd_create(args: argparse.Namespace) -> int:
         "evidence": evidence.strip(),
         "location": location,
         "requested_change": requested_change.strip(),
+        "fingerprint": fingerprint,
         "recommended_command": f'/{target} "{requested_change.strip()}"',
     }
-    path = store_dir(feature_dir) / f"{feedback_id}.json"
+    path = store / f"{feedback_id}.json"
     atomic_json(path, payload)
-    emit({"ok": True, "report": str(path), "feedback": payload})
+    emit({"ok": True, "created": True, "report": str(path), "feedback": payload})
     return 0
 
 
 def cmd_list(args: argparse.Namespace) -> int:
     try:
-        feature_dir = safe_feature_dir(args.feature_dir)
+        store, prefix, _ = resolve_store(
+            feature_dir_value=args.feature_dir,
+            project_root_value=args.project_root,
+            scope=args.scope,
+        )
     except ValueError as exc:
         emit({"ok": False, "error": str(exc)})
         return 2
     items = []
     try:
-        reports = read_all(feature_dir)
+        reports = read_all(store, prefix)
     except ValueError as exc:
         emit({"ok": False, "error": str(exc)})
         return 2
@@ -168,11 +256,15 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 def cmd_consume(args: argparse.Namespace) -> int:
     try:
-        feature_dir = safe_feature_dir(args.feature_dir)
+        store, _, _ = resolve_store(
+            feature_dir_value=args.feature_dir,
+            project_root_value=args.project_root,
+            scope=args.scope,
+        )
     except ValueError as exc:
         emit({"ok": False, "error": str(exc)})
         return 2
-    path = store_dir(feature_dir) / f"{args.id}.json"
+    path = store / f"{args.id}.json"
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -194,7 +286,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="OrderSpec cross-stage feedback reports")
     sub = parser.add_subparsers(dest="command", required=True)
     create = sub.add_parser("create")
-    create.add_argument("--feature-dir", required=True)
+    create.add_argument("--feature-dir")
+    create.add_argument("--project-root", default=".")
+    create.add_argument("--scope", choices=["feature", "project"], default="feature")
     create.add_argument("--input-file", help="read report fields from a JSON object; use - for stdin")
     create.add_argument("--source", choices=sorted(SOURCES))
     create.add_argument("--target", choices=sorted(TARGETS))
@@ -205,12 +299,16 @@ def main() -> int:
     create.add_argument("--requested-change")
     create.set_defaults(handler=cmd_create)
     listing = sub.add_parser("list")
-    listing.add_argument("--feature-dir", required=True)
+    listing.add_argument("--feature-dir")
+    listing.add_argument("--project-root", default=".")
+    listing.add_argument("--scope", choices=["feature", "project"], default="feature")
     listing.add_argument("--target", choices=sorted(TARGETS))
     listing.add_argument("--all", action="store_true")
     listing.set_defaults(handler=cmd_list)
     consume = sub.add_parser("consume")
-    consume.add_argument("--feature-dir", required=True)
+    consume.add_argument("--feature-dir")
+    consume.add_argument("--project-root", default=".")
+    consume.add_argument("--scope", choices=["feature", "project"], default="feature")
     consume.add_argument("--id", required=True)
     consume.add_argument("--consumer", required=True, choices=sorted(TARGETS))
     consume.set_defaults(handler=cmd_consume)

@@ -37,7 +37,10 @@ It runs after `/order.tasks` and answers: Is `tasks.md` a faithful, well-ordered
 - **T7 — upstream reroute**: when the root defect lives in plan/spec, route up.
 - **T8 — prerequisite closure**: worker context and cross-path prerequisites are complete.
 
-This gate is a **pure inspector**. It writes only `tasks-report.md`. It MUST NOT edit `spec.md`, `plan.md`, `tasks.md`, or source code.
+This gate is a **pure inspector**. Its only inspection artifact is
+`tasks-report.md`. It MUST NOT edit `spec.md`, `plan.md`, `tasks.md`, or source
+code. After report finalization it may invoke only the loaded blocking-feedback
+protocol's script-owned bookkeeping for a cross-owner route.
 
 ## Severity Model
 
