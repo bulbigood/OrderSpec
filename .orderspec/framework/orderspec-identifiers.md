@@ -26,10 +26,11 @@ Agents MUST use these prefixes when creating artifacts. Scripts validate their p
 | `DEC` | Decision | A recorded architectural or implementation choice that affects IF response, status code, or INV wording. |
 | `IF` | Interface | Externally observable boundary or API contract (endpoint, operation, payload). |
 
-## Project Contract Identifiers (used in `stack.md`, `architecture.md`, `conventions.md`)
+## Project Contract Identifiers
 
 | Prefix | Full Name | Description |
 |--------|-----------|-------------|
+| `GOV` | Governance | Project-wide hard governance rule defined in `constitution.md`. |
 | `STACK` | Stack | A specific technology, library, runtime, or tool. |
 | `ARCH` | Architecture | Architectural pattern, component, or structural constraint. |
 | `CONV` | Convention | Coding standard, naming rule, methodology, or development practice. |

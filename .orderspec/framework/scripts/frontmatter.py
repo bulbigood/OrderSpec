@@ -40,8 +40,14 @@ GATE_REPORT_REQUIRED_FIELDS = [
 GATE_REPORT_VERDICT_VALUES = {"PASS", "BLOCK", "ROUTING_REQUIRED"}
 CODE_REPORT_ASSURANCE_VALUES = {"EXECUTED", "STATIC_STRONG", "STATIC_LIMITED"}
 
-PROJECT_CONTRACT_REQUIRED_FIELDS = ["artifact", "kind"]
+PROJECT_CONTRACT_REQUIRED_FIELDS = ["artifact", "kind", "scope", "owner_command", "id_prefix"]
 PROJECT_CONTRACT_KIND_VALUES = {"constitution", "stack", "architecture", "conventions"}
+PROJECT_CONTRACT_ID_PREFIXES = {
+    "constitution": "GOV",
+    "stack": "STACK",
+    "architecture": "ARCH",
+    "conventions": "CONV",
+}
 
 FRAMEWORK_RULES_REQUIRED_FIELDS = ["artifact", "authority", "customization"]
 
@@ -385,6 +391,19 @@ def validate_project_contract_frontmatter(text, expected_kind=None):
 
     if expected_kind and kind and kind != expected_kind:
         errors.append(("orderspec.kind", f"orderspec.kind must be '{expected_kind}', got '{kind}'"))
+
+    scope = orderspec.get("scope")
+    if scope and not looks_like_unresolved_placeholder(scope) and scope != "project":
+        errors.append(("orderspec.scope", f"orderspec.scope must be 'project', got '{scope}'"))
+
+    owner = orderspec.get("owner_command")
+    if owner and not looks_like_unresolved_placeholder(owner) and owner != "order.bootstrap":
+        errors.append(("orderspec.owner_command", f"orderspec.owner_command must be 'order.bootstrap', got '{owner}'"))
+
+    prefix = orderspec.get("id_prefix")
+    expected_prefix = PROJECT_CONTRACT_ID_PREFIXES.get(kind)
+    if expected_prefix and prefix and not looks_like_unresolved_placeholder(prefix) and prefix != expected_prefix:
+        errors.append(("orderspec.id_prefix", f"orderspec.id_prefix must be '{expected_prefix}' for kind '{kind}', got '{prefix}'"))
 
     return errors
 

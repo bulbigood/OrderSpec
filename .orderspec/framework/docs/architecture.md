@@ -221,6 +221,7 @@ schema-validated semantic result per obligation before report finalization.
         └── scripts/                       ← deterministic utilities and tests
             ├── command_context.py
             ├── bootstrap_contracts.py
+            ├── bootstrap_workflow.py
             ├── agents_sync.py
             ├── run_all_tests.py
             └── test/
@@ -230,7 +231,7 @@ schema-validated semantic result per obligation before report finalization.
 
 | File | Type | Meaning |
 |---|---|---|
-| `.orderspec/config/tooling.json` | Configuration | Project/operator policy for documentation lookup and skill usage. |
+| `.orderspec/config/tooling.json` | Configuration | Project/operator policy for documentation lookup and skills bound to `GOV`, `STACK`, `ARCH`, or `CONV` contract IDs. |
 | `.orderspec/state/tooling-detection.json` | Runtime state | Generated detection result for currently available tools such as Context7 or find-skills. |
 | `.orderspec/state/agents.json` | Runtime state | Multi-agent configuration: enabled agents, sync state, last sync timestamp. |
 | `.orderspec/state/bootstrap.json` | Runtime state | Initialization flag, last successful framework version, and Refine comparison fingerprints. |

@@ -456,6 +456,9 @@ p = write_file("pc_stack.md", (
     "orderspec:\n"
     "  artifact: project_contract\n"
     "  kind: stack\n"
+    "  scope: project\n"
+    "  owner_command: order.bootstrap\n"
+    "  id_prefix: STACK\n"
     "---\n"
     "# Project Stack\n"
 ))
@@ -471,6 +474,9 @@ p = write_file("pc_const.md", (
     "orderspec:\n"
     "  artifact: project_contract\n"
     "  kind: constitution\n"
+    "  scope: project\n"
+    "  owner_command: order.bootstrap\n"
+    "  id_prefix: GOV\n"
     "---\n"
     "# Constitution\n"
 ))

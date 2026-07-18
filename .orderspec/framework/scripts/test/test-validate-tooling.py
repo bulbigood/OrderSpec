@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""test-validate-tooling.py — regression for deterministic validate_tooling.py"""
+"""Regression tests for tooling v3 generic project-contract references."""
 
 import json
 import shutil
@@ -8,262 +8,134 @@ import sys
 import tempfile
 from pathlib import Path
 
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 PY = sys.executable
-VAL = SCRIPT_DIR.parent / "validate_tooling.py"
-
-if not VAL.exists():
-    print(f"FATAL: validate_tooling.py not found at {VAL}", file=sys.stderr)
-    sys.exit(2)
-
+VALIDATOR = SCRIPT_DIR.parent / "validate_tooling.py"
+MANAGER = SCRIPT_DIR.parent / "tooling_config.py"
 WORK = Path(tempfile.mkdtemp(prefix="orderspec-val-tooling-"))
-pass_count = 0
-fail_count = 0
+passed = failed = 0
+
 
 def ok(name):
-    global pass_count
-    pass_count += 1
-    print(f"PASS: {name}", flush=True)
+    global passed
+    passed += 1
+    print(f"PASS: {name}")
 
-def bad(name):
-    global fail_count
-    fail_count += 1
-    print(f"FAIL: {name}", flush=True)
 
-def reset_work():
-    if WORK.exists():
-        shutil.rmtree(WORK, ignore_errors=True)
-    WORK.mkdir(parents=True, exist_ok=True)
+def bad(name, detail=""):
+    global failed
+    failed += 1
+    print(f"FAIL: {name} :: {detail}")
 
-def write(path, content):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
 
-def setup_tooling_json(data):
-    write(WORK / ".orderspec" / "config" / "tooling.json", json.dumps(data, indent=2))
-
-def setup_skill_dir(name):
-    skill_path = WORK / ".orderspec" / "skills" / name
-    skill_path.mkdir(parents=True, exist_ok=True)
-    (skill_path / "SKILL.md").write_text("# Skill", encoding="utf-8")
-
-def run_val(*args, input_text=None):
-    cmd = [PY, str(VAL)] + list(args)
-    proc = subprocess.run(
-        cmd,
-        cwd=str(WORK),
-        capture_output=True,
-        text=True,
-        input=input_text,
-    )
-    return proc.returncode, proc.stdout, proc.stderr
-
-def run_val_json(*args):
-    rc, out, err = run_val(*args)
-    try:
-        data = json.loads(out)
-    except Exception as exc:
-        bad(f"invalid JSON output for {' '.join(args)} :: rc={rc} err={err!r} exc={exc} out={out!r}")
-        return rc, {}, err
-    return rc, data, err
-
-# --- Tests ---
-
-# 1. No tooling.json
-reset_work()
-rc, data, err = run_val_json("--json")
-if rc == 1 and "tooling.json not found or invalid" in data["errors"][0]:
-    ok("No tooling.json returns error")
-else:
-    bad(f"No tooling.json failed :: rc={rc} data={data} err={err!r}")
-
-# 2. Valid empty tooling.json
-reset_work()
-setup_tooling_json({
-    "version": 2,
-    "skills": {
-        "install_policy": "ask_user",
-        "install_location": ".orderspec/skills/",
-        "resolution_order": [".orderspec/skills/"],
-        "bindings": []
-    },
-    "docs_sources": {}
-})
-rc, data, err = run_val_json("--json")
-if rc == 0 and data["ok"] is True and data["total_bindings"] == 0:
-    ok("Valid empty tooling.json passes")
-else:
-    bad(f"Valid empty tooling.json failed :: rc={rc} data={data} err={err!r}")
-
-# 3. Invalid version
-reset_work()
-setup_tooling_json({
-    "version": 1,
-    "skills": {"bindings": []}
-})
-rc, data, err = run_val_json("--json")
-if rc == 1 and "version must be 2" in data["errors"]:
-    ok("Invalid version caught")
-else:
-    bad(f"Invalid version failed :: rc={rc} data={data} err={err!r}")
-
-# 4. Binding with status='installed' but no skills dir
-reset_work()
-setup_tooling_json({
-    "version": 2,
-    "skills": {
-        "install_policy": "ask_user",
-        "install_location": ".orderspec/skills/",
-        "bindings": [
-            {
-                "match": {"stack_id": "STACK-002", "technology": "Express"},
-                "required_skills": ["express-setup"],
-                "status": "installed"
-            }
-        ]
-    }
-})
-rc, data, err = run_val_json("--json")
-if rc == 1 and "status='installed' but .orderspec/skills/ does not exist" in data["errors"][0]:
-    ok("Missing skills dir with installed binding caught")
-else:
-    bad(f"Missing skills dir failed :: rc={rc} data={data} err={err!r}")
-
-# 5. Binding with status='installed' and skill exists
-reset_work()
-setup_skill_dir("express-setup")
-setup_tooling_json({
-    "version": 2,
-    "skills": {
-        "install_policy": "ask_user",
-        "install_location": ".orderspec/skills/",
-        "bindings": [
-            {
-                "match": {"stack_id": "STACK-002", "technology": "Express"},
-                "required_skills": ["express-setup"],
-                "status": "installed"
-            }
-        ]
-    }
-})
-rc, data, err = run_val_json("--json")
-if rc == 0 and data["installed_and_verified"] == 1 and data["installed_but_missing"] == 0:
-    ok("Installed binding with existing skill passes")
-else:
-    bad(f"Installed binding with skill failed :: rc={rc} data={data} err={err!r}")
-
-# 6. Binding with status='installed' but skill missing
-reset_work()
-setup_skill_dir("other-skill")
-setup_tooling_json({
-    "version": 2,
-    "skills": {
-        "install_policy": "ask_user",
-        "install_location": ".orderspec/skills/",
-        "bindings": [
-            {
-                "match": {"stack_id": "STACK-002", "technology": "Express"},
-                "required_skills": ["express-setup"],
-                "status": "installed"
-            }
-        ]
-    }
-})
-rc, data, err = run_val_json("--json")
-if rc == 1 and data["installed_and_verified"] == 0 and data["installed_but_missing"] == 1:
-    ok("Installed binding with missing skill caught")
-else:
-    bad(f"Installed binding missing skill failed :: rc={rc} data={data} err={err!r}")
-
-# 7. Binding with invalid status
-reset_work()
-setup_tooling_json({
-    "version": 2,
-    "skills": {
-        "install_policy": "ask_user",
-        "install_location": ".orderspec/skills/",
-        "bindings": [
-            {
-                "match": {"stack_id": "STACK-002", "technology": "Express"},
-                "required_skills": ["express-setup"],
-                "status": "unknown"
-            }
-        ]
-    }
-})
-rc, data, err = run_val_json("--json")
-if rc == 1 and "status must be 'installed', 'discovered_only', or 'pending'" in data["errors"][0]:
-    ok("Invalid binding status caught")
-else:
-    bad(f"Invalid binding status failed :: rc={rc} data={data} err={err!r}")
-
-# 8. Mixed statuses summarized correctly
-reset_work()
-setup_skill_dir("express-setup")
-setup_tooling_json({
-    "version": 2,
-    "skills": {
-        "install_policy": "ask_user",
-        "install_location": ".orderspec/skills/",
-        "bindings": [
-            {
-                "match": {"stack_id": "STACK-002", "technology": "Express"},
-                "required_skills": ["express-setup"],
-                "status": "installed"
-            },
-            {
-                "match": {"stack_id": "STACK-003", "technology": "Mongoose"},
-                "required_skills": ["mongoose-setup"],
-                "status": "discovered_only"
-            },
-            {
-                "match": {"stack_id": "STACK-004", "technology": "Redis"},
-                "required_skills": ["redis-setup"],
-                "status": "pending"
-            }
-        ]
-    }
-})
-rc, data, err = run_val_json("--json")
-if rc == 0 and data["installed_and_verified"] == 1 and data["discovered_only"] == 1 and data["pending"] == 1:
-    ok("Mixed statuses summarized correctly")
-else:
-    bad(f"Mixed statuses failed :: rc={rc} data={data} err={err!r}")
-
-# 9. Invalid JSON format
-reset_work()
-write(WORK / ".orderspec" / "config" / "tooling.json", "{ invalid json }")
-rc, out, err = run_val("--json")
-if rc == 1 and "tooling.json not found or invalid" in out:
-    ok("Malformed tooling.json caught")
-else:
-    bad(f"Malformed tooling.json failed :: rc={rc} out={out!r} err={err!r}")
-
-# 10. Missing required fields in binding
-reset_work()
-setup_tooling_json({
-    "version": 2,
-    "skills": {
-        "install_policy": "ask_user",
-        "install_location": ".orderspec/skills/",
-        "bindings": [
-            {
-                "match": {"technology": "Express"}, # missing stack_id
-                "required_skills": ["express-setup"],
-                "status": "installed"
-            }
-        ]
-    }
-})
-rc, data, err = run_val_json("--json")
-if rc == 1 and "missing stack_id" in data["errors"][0]:
-    ok("Missing stack_id caught")
-else:
-    bad(f"Missing stack_id failed :: rc={rc} data={data} err={err!r}")
-
-# Cleanup
-if WORK.exists():
+def reset():
     shutil.rmtree(WORK, ignore_errors=True)
+    WORK.mkdir(parents=True)
+    contracts = WORK / ".orderspec/contracts"
+    contracts.mkdir(parents=True)
+    (contracts / "constitution.md").write_text("| GOV-001 | Project MUST be safe | | |\n", encoding="utf-8")
+    (contracts / "stack.md").write_text("| STACK-001 | Python | 3.12 | Runtime | |\n", encoding="utf-8")
+    (contracts / "architecture.md").write_text("| ARCH-001 | Modules MUST be isolated |\n", encoding="utf-8")
+    (contracts / "conventions.md").write_text(
+        "| CONV-001 | Typed APIs | Public APIs MUST be typed | |\n"
+        "| CONV-002 | [removed — obsolete] | | |\n",
+        encoding="utf-8",
+    )
 
-print(f"\n{pass_count} passed, {fail_count} failed", flush=True)
-sys.exit(0 if fail_count == 0 else 1)
+
+def write_json(data):
+    path = WORK / ".orderspec/config/tooling.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def config(bindings=None, version=3):
+    return {
+        "version": version,
+        "skills": {
+            "install_policy": "ask_user",
+            "install_location": ".orderspec/skills/",
+            "resolution_order": [".orderspec/skills/"],
+            "bindings": bindings or [],
+        },
+        "docs_sources": {},
+    }
+
+
+def binding(refs, status="installed", skills=None):
+    return {
+        "contract_refs": refs,
+        "required_skills": skills or ["project-method"],
+        "commands": ["order.plan"],
+        "status": status,
+    }
+
+
+def skill(name="project-method"):
+    path = WORK / ".orderspec/skills" / name
+    path.mkdir(parents=True, exist_ok=True)
+    (path / "SKILL.md").write_text("# Skill\n", encoding="utf-8")
+
+
+def run(script, *args):
+    process = subprocess.run([PY, str(script), *args], cwd=WORK, text=True, capture_output=True)
+    try:
+        data = json.loads(process.stdout)
+    except json.JSONDecodeError:
+        data = {"raw": process.stdout, "stderr": process.stderr}
+    return process.returncode, data
+
+
+reset()
+rc, data = run(VALIDATOR, "--json")
+ok("missing tooling fails") if rc == 1 else bad("missing tooling fails", data)
+
+reset()
+write_json(config())
+rc, data = run(VALIDATOR, "--json")
+ok("empty v3 config passes") if rc == 0 else bad("empty v3 config passes", data)
+
+for ref in ["GOV-001", "STACK-001", "ARCH-001", "CONV-001"]:
+    reset(); skill(); write_json(config([binding([ref])]))
+    rc, data = run(VALIDATOR, "--json")
+    ok(f"generic binding accepts {ref}") if rc == 0 else bad(f"generic binding accepts {ref}", data)
+
+reset(); skill(); write_json(config([binding(["ARCH-999"])]))
+rc, data = run(VALIDATOR, "--json")
+ok("unknown contract ref rejected") if rc == 1 and "unknown ID" in " ".join(data["errors"]) else bad("unknown contract ref rejected", data)
+
+reset(); skill(); write_json(config([binding(["CONV-002"])]))
+rc, data = run(VALIDATOR, "--json")
+ok("tombstoned contract ref rejected") if rc == 1 and "tombstoned ID" in " ".join(data["errors"]) else bad("tombstoned contract ref rejected", data)
+
+reset(); write_json(config([binding(["STACK-001"])]))
+rc, data = run(VALIDATOR, "--json")
+ok("missing installed skill rejected") if rc == 1 and data["installed_but_missing"] == 1 else bad("missing installed skill rejected", data)
+
+reset(); write_json(config([binding(["STACK-001"], status="discovered_only")]))
+rc, data = run(VALIDATOR, "--json")
+ok("discovered-only binding valid") if rc == 0 and data["discovered_only"] == 1 else bad("discovered-only binding valid", data)
+
+reset()
+write_json({
+    "version": 2,
+    "skills": {
+        "install_policy": "ask_user",
+        "install_location": ".orderspec/skills/",
+        "bindings": [{"match": {"stack_id": "STACK-001", "technology": "Python"}, "required_skills": ["python"], "status": "pending"}],
+    },
+    "docs_sources": {},
+})
+rc, data = run(MANAGER, "migrate")
+migrated = json.loads((WORK / ".orderspec/config/tooling.json").read_text(encoding="utf-8"))
+ok("v2 migrates to contract_refs") if rc == 0 and migrated["version"] == 3 and migrated["skills"]["bindings"][0]["contract_refs"] == ["STACK-001"] else bad("v2 migrates to contract_refs", data)
+
+reset(); write_json(config())
+rc, data = run(MANAGER, "add-binding", "--contract-ref", "ARCH-001", "--contract-ref", "CONV-001", "--skills", "architecture-method", "--commands", "order.plan", "--status", "pending")
+managed = json.loads((WORK / ".orderspec/config/tooling.json").read_text(encoding="utf-8"))
+ok("manager writes multi-ref binding") if rc == 0 and managed["skills"]["bindings"][0]["contract_refs"] == ["ARCH-001", "CONV-001"] else bad("manager writes multi-ref binding", data)
+
+shutil.rmtree(WORK, ignore_errors=True)
+print(f"\n{passed} passed, {failed} failed")
+sys.exit(0 if failed == 0 else 1)

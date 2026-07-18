@@ -104,6 +104,9 @@ gate_report_field_constraints:
 project_contract_required_fields:
   - orderspec.artifact
   - orderspec.kind
+  - orderspec.scope
+  - orderspec.owner_command
+  - orderspec.id_prefix
 
 project_contract_field_constraints:
   orderspec.artifact:
@@ -114,8 +117,19 @@ project_contract_field_constraints:
       - stack
       - architecture
       - conventions
+  orderspec.scope:
+    const: project
+  orderspec.owner_command:
+    const: order.bootstrap
+
+project_contract_id_prefixes:
+  constitution: GOV
+  stack: STACK
+  architecture: ARCH
+  conventions: CONV
 
 project_contract_id_prefix_required_for:
+  - constitution
   - stack
   - architecture
   - conventions

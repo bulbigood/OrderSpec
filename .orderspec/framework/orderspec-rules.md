@@ -391,12 +391,16 @@ Agents MUST NOT manually inspect `.orderspec/skills/` to determine skill availab
 
 ### Skill Matching Procedure
 
-For each `STACK-NNN` referenced in a feature spec §6:
+For each relevant project-contract ID (`GOV-NNN`, `STACK-NNN`, `ARCH-NNN`, or
+`CONV-NNN`):
 
-1. Look up the technology name in `.orderspec/contracts/stack.md` using the `STACK-NNN` ID.
-2. Search `tooling.json` `skills.bindings` for a binding where `match.stack_id` equals that `STACK-NNN`.
-3. If a binding exists, use `validate_tooling.py` output to check whether the required skills are `installed_and_verified`.
-4. If no binding exists for a `STACK-NNN` that requires library-specific implementation, follow `tooling-protocol.md` rule 6: do not silently proceed.
+1. Resolve the ID in its owning project contract.
+2. Search `tooling.json` `skills.bindings` for a binding whose `contract_refs`
+   contains that ID.
+3. Use `validate_tooling.py` output to check whether required skills are
+   `installed_and_verified` and the referenced ID is valid and non-tombstoned.
+4. If required methodology, architecture, convention, or library-specific work
+   lacks its declared skill, follow `tooling-protocol.md`: do not silently proceed.
 
 ### Documentation Source Availability
 
@@ -562,8 +566,7 @@ The integration policy is defined in `constitution.md` under the "External Rules
 
 | Policy | Behavior |
 |---|---|
-| `constrain_on_bootstrap` (default) | Rule files are read only during `/order.bootstrap`. Content is offered for integration into `conventions.md`. After bootstrap, OrderSpec commands work only with their own contracts. |
-| `constrain_always` | Rule files are resolved by the command context resolver as `constrain` source for every command. May conflict with OrderSpec contracts. Use with caution. |
+| `constrain_on_bootstrap` (default) | Rule files are read only during `/order.bootstrap`. Content is classified and offered to the operator for integration into its owning project contract. After bootstrap, other commands use only OrderSpec contracts. |
 | `ignore` | Rule files are not read by OrderSpec at all. Operator manually transfers needed content to `conventions.md`. |
 
 ### Rule File Sources
@@ -582,7 +585,7 @@ External rules are **detected and routed** — never silently applied:
 1. Bootstrap reads rule files via `agents_sync.py read-rules`
 2. Bootstrap compares content against existing project contracts
 3. Uncovered statements are **offered** to the operator for integration
-4. Approved statements are added to `conventions.md` with new `CONV-NNN` IDs
+4. Approved statements are routed by meaning to `GOV`, `STACK`, `ARCH`, or `CONV` IDs in their owning contract
 5. Original rule files are NOT modified or deleted
 
 This follows the core OrderSpec principle: "Gates detect and route. Owners fix."
@@ -596,6 +599,7 @@ Feature specs MUST reference project contract IDs instead of inlining technology
 
 Valid project contract ID prefixes:
 
+- `GOV-NNN` from `.orderspec/contracts/constitution.md`
 - `STACK-NNN` from `.orderspec/contracts/stack.md`
 - `ARCH-NNN` from `.orderspec/contracts/architecture.md`
 - `CONV-NNN` from `.orderspec/contracts/conventions.md`
@@ -604,7 +608,7 @@ Valid project contract ID prefixes:
 
 Stable normative IDs are append-only.
 
-Project contract IDs with prefixes `STACK`, `ARCH`, and `CONV` are defined in their owning project contract tables.
+Project contract IDs with prefixes `GOV`, `STACK`, `ARCH`, and `CONV` are defined in their owning project contract tables.
 
 The strict anchor-line definition rule below applies to feature artifact IDs, not to project contract table IDs.
 

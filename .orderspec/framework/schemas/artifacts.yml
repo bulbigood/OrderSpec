@@ -5,6 +5,7 @@ project_contract_kinds:
   - conventions
 
 project_contract_id_prefixes:
+  constitution: GOV
   stack: STACK
   architecture: ARCH
   conventions: CONV

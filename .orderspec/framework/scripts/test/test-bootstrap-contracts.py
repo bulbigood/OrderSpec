@@ -307,7 +307,7 @@ for rel in [
 assert_exists(".orderspec/config/tooling.json", "tooling.json created by init")
 tooling = read_json(WORK / ".orderspec/config/tooling.json")
 if (
-    tooling.get("version") == 2
+    tooling.get("version") == 3
     and tooling.get("skills", {}).get("install_policy") == "ask_user"
     and ".orderspec/skills/" in tooling.get("skills", {}).get("resolution_order", [])
     and tooling.get("skills", {}).get("bindings") == []
@@ -316,6 +316,19 @@ if (
     ok("tooling.json has correct shape with explicit defaults")
 else:
     bad(f"tooling.json shape wrong :: {tooling}")
+
+for kind, prefix in [("stack", "STACK"), ("architecture", "ARCH"), ("conventions", "CONV"), ("constitution", "GOV")]:
+    contract = read(WORK / ".orderspec/contracts" / f"{kind}.md")
+    if f"kind: {kind}" in contract and "scope: project" in contract and f"id_prefix: {prefix}" in contract:
+        ok(f"{kind} has canonical project-contract frontmatter")
+    else:
+        bad(f"{kind} frontmatter wrong :: {contract[:300]!r}")
+
+constitution = read(WORK / ".orderspec/contracts/constitution.md")
+if all(value in constitution for value in ["GOV-001", "Project Intent (Non-Normative)", "## Governance Rules"]):
+    ok("constitution separates non-normative intent from GOV rules")
+else:
+    bad(f"constitution governance structure wrong :: {constitution[:1200]!r}")
 
 
 # 5. validate passes after init
@@ -471,10 +484,63 @@ else:
     bad(f"bootstrap state persistence wrong :: complete={completed} inspect={inspected} err={err!r} {err2!r}")
 
 rc, audit, err = run_boot_json("audit", "--json")
-if rc == 0 and audit.get("mode") == "refine" and audit.get("required_semantic_checks"):
+if (
+    rc == 0
+    and audit.get("mode") == "refine"
+    and audit.get("items") == []
+    and "feature specification drift" in audit.get("scope", {}).get("excludes", [])
+    and "code-to-spec drift" in audit.get("scope", {}).get("excludes", [])
+):
     ok("audit emits deterministic Refine evidence")
 else:
     bad(f"bootstrap audit wrong :: rc={rc} data={audit} err={err!r}")
+
+# Legacy contract metadata has a dedicated safe migration path.
+stack_path = WORK / ".orderspec/contracts/stack.md"
+stack_with_frontmatter = read(stack_path)
+write(stack_path, stack_with_frontmatter.split("---\n", 2)[2].lstrip("\n"))
+rc, legacy_audit, err = run_boot_json("audit", "--json")
+safe_items = [item for item in legacy_audit.get("items", []) if item.get("classification") == "safe_mechanical_migration"]
+rc2, migration, err2 = run_boot_json("migrate-frontmatter", "--json")
+rc3, validated, err3 = run_boot_json("validate", "--json")
+if rc == 1 and safe_items and rc2 == 0 and migration.get("contracts_valid") is True and rc3 == 0:
+    ok("Refine routes legacy frontmatter through safe deterministic migration")
+else:
+    bad(f"legacy frontmatter migration wrong :: audit={legacy_audit} migration={migration} validate={validated} err={err!r} {err2!r} {err3!r}")
+run_boot_json("complete", "--json")
+
+# Refine deliberately ignores feature/code drift.
+write(WORK / ".orderspec/features/001-demo/spec.md", "changed feature specification\n")
+write(WORK / "src/application.py", "print('changed implementation')\n")
+rc, audit, err = run_boot_json("audit", "--json")
+if rc == 0 and audit.get("items") == []:
+    ok("audit ignores feature and implementation drift")
+else:
+    bad(f"audit inspected out-of-scope feature/code drift :: rc={rc} data={audit} err={err!r}")
+
+# Manifest state change produces structured project-rule review items.
+package = read_json(WORK / "package.json")
+package["dependencies"]["express"] = "^5.0.0"
+write(WORK / "package.json", json.dumps(package, indent=2) + "\n")
+rc, audit, err = run_boot_json("audit", "--json")
+kinds = {item.get("kind") for item in audit.get("items", [])}
+if rc == 0 and "project_state_manifest_changed" in kinds:
+    ok("audit reports manifest state drift as structured project-rule evidence")
+else:
+    bad(f"manifest drift not reported :: rc={rc} data={audit} err={err!r}")
+
+# Constitution synthesis collects bounded candidates but grants no authority.
+write(WORK / "docs/governance.md", "# Mission\nBuild reliable systems.\n\n# Constraints\nPublic APIs MUST be versioned.\n")
+rc, evidence, err = run_boot_json("constitution-evidence", "--json")
+if (
+    rc == 0
+    and evidence.get("requires_operator_approval") is True
+    and any(item.get("authority") == "candidate_only" for item in evidence.get("candidates", []))
+    and any("Public APIs MUST be versioned" in item.get("statement", "") for item in evidence.get("candidates", []))
+):
+    ok("constitution synthesis emits bounded non-authoritative candidates")
+else:
+    bad(f"constitution evidence wrong :: rc={rc} data={evidence} err={err!r}")
 
 
 # 18. malformed package.json fails cleanly

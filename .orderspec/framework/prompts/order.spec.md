@@ -294,6 +294,7 @@ Project contracts are loaded through Command Context Bootstrap with `usage: "con
 
 Build an internal index of all valid project contract IDs:
 
+- `GOV-NNN`
 - `STACK-NNN`
 - `ARCH-NNN`
 - `CONV-NNN`
@@ -304,6 +305,7 @@ Allowed:
 
 ```markdown
 - `STACK-001` — runtime constraint
+- `GOV-001` — project governance constraint
 - `STACK-003` — persistence constraint
 - `ARCH-001` — architecture constraint
 - `CONV-001` — error-handling convention
@@ -326,10 +328,11 @@ Downstream commands read project contract documents to resolve the meaning of ID
 
 If the feature requires a technology, architecture rule, or convention that is not present in project contracts:
 
-1. Do not invent `STACK-NNN`, `ARCH-NNN`, or `CONV-NNN`.
+1. Do not invent `GOV-NNN`, `STACK-NNN`, `ARCH-NNN`, or `CONV-NNN`.
 2. Do not silently amend project contracts.
 3. Ask for explicit confirmation to route a targeted `/order.bootstrap` amend.
-4. If confirmed, invoke bootstrap as the owning command/subagent with a narrow request.
+4. If confirmed, invoke bootstrap with an explicit envelope containing
+   `mode=targeted-amend`, `caller=order.spec`, target contract, and narrow request.
 5. Use only the returned ID.
 6. If not confirmed, STOP and tell the user to run `/order.bootstrap`.
 
@@ -490,7 +493,7 @@ Do not create directories, write `spec.md`, update active feature state, or init
    - Every HTTP status code mentioned in an `AC-NNN` (e.g., "returns 200") MUST explicitly appear in the `Success` or `Failure` field of the corresponding `IF-NNN` record in §9.
    - Conversely, every HTTP status code in an `IF-NNN` `Success` field MUST be covered by at least one `AC-NNN` (M29, HIGH severity).
    - Every HTTP status code in an `IF-NNN` `Failure` field SHOULD be covered by at least one `AC-NNN` (M29, MEDIUM severity).
-   - Only use `STACK-NNN`, `ARCH-NNN`, `CONV-NNN` IDs that exist in the loaded project contracts.
+   - Only use `GOV-NNN`, `STACK-NNN`, `ARCH-NNN`, `CONV-NNN` IDs that exist in loaded project contracts.
   - Every `EDGE-NNN` must either reference `→ covered by AC-NNN` or be explicitly marked `→ deferred (reason)`.
 8. Author the full `spec.md` content.
 9. Write `spec.md` in one complete mutation. Do not leave placeholder partial specs.
@@ -861,7 +864,7 @@ Before completion, reason through these checks. Do not write a checklist file.
 
 - No file paths, library names, class names, plugin names, framework-specific query syntax, or technology versions appear in `spec.md`.
 - IF `Failure` field must not contain template residue: `semicolon-separated`, `[Failure outcomes]`, or `None` as a literal value.
-- §6 references only valid `STACK-NNN`, `ARCH-NNN`, `CONV-NNN` IDs with neutral labels.
+- §6 references only valid `GOV-NNN`, `STACK-NNN`, `ARCH-NNN`, `CONV-NNN` IDs with neutral labels.
 - No unresolved blocking clarification remains.
 - No REQ contradicts another REQ, INV, or project contract constraint; no AC contradicts its covered REQ or IF; every `[narrowing REQ-NNN]` ASM preserves all cases required by that REQ.
 - NFRs do not mandate behaviour listed in §2 Out of Scope; quantitative thresholds have a source; every NFR has a sourced threshold, named standard, or qualitative SHOULD oracle.

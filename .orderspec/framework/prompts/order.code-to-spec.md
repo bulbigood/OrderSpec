@@ -309,7 +309,7 @@ During code scanning, the model will encounter technologies, libraries, and fram
 
 For each technology not present in project contracts:
 
-1. Do not invent `STACK-NNN`, `ARCH-NNN`, or `CONV-NNN`.
+1. Do not invent `GOV-NNN`, `STACK-NNN`, `ARCH-NNN`, or `CONV-NNN`.
 2. Do not silently amend project contracts.
 3. Collect all discovered technologies into a batch.
 4. Present the batch to the user:
@@ -783,7 +783,7 @@ Before completion, reason through these checks:
 
 - No file paths, library names, class names, plugin names, framework-specific query syntax, or technology versions appear in `spec.md`.
 - IF `Failure` field must not contain template residue.
-- §6 references only valid `STACK-NNN`, `ARCH-NNN`, `CONV-NNN` IDs with neutral labels.
+- §6 references only valid `GOV-NNN`, `STACK-NNN`, `ARCH-NNN`, `CONV-NNN` IDs with neutral labels.
 - Every REQ has acceptance coverage.
 - Every AC has inline `[Covers: ...]`.
 - IF `Covers` references defined IDs.

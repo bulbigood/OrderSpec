@@ -7,7 +7,7 @@
   "required": ["version", "initialized", "completed_at", "framework_version", "manifest", "fingerprints"],
   "additionalProperties": false,
   "properties": {
-    "version": {"const": 1},
+    "version": {"enum": [1, 2]},
     "initialized": {"const": true},
     "completed_at": {"type": "string", "minLength": 1},
     "framework_version": {"type": "string", "minLength": 1},
@@ -22,6 +22,18 @@
         "conventions": {"type": ["string", "null"]},
         "constitution": {"type": ["string", "null"]},
         "tooling": {"type": ["string", "null"]}
+      }
+    },
+    "evidence_fingerprints": {
+      "type": "object",
+      "required": ["framework_rules", "manifests", "source_directories", "skills", "project_documents"],
+      "additionalProperties": false,
+      "properties": {
+        "framework_rules": {"type": "string"},
+        "manifests": {"type": "string"},
+        "source_directories": {"type": "string"},
+        "skills": {"type": "string"},
+        "project_documents": {"type": "string"}
       }
     }
   }

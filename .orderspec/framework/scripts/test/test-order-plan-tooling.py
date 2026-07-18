@@ -52,9 +52,11 @@ class TestOrderPlanTooling(unittest.TestCase):
         )
 
     def test_global_rules_contain_matching_procedure(self):
-        """Global rules must contain the STACK-NNN matching procedure."""
+        """Global rules must contain generic project-contract matching."""
         self.assertIn("STACK-NNN", self.rules)
-        self.assertIn("match.stack_id", self.rules)
+        self.assertIn("ARCH-NNN", self.rules)
+        self.assertIn("CONV-NNN", self.rules)
+        self.assertIn("contract_refs", self.rules)
         self.assertIn("skills.bindings", self.rules)
 
     def test_global_rules_forbid_hardcoded_tools(self):

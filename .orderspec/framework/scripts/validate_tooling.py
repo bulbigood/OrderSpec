@@ -1,167 +1,137 @@
 #!/usr/bin/env python3
-"""validate_tooling.py — verify tooling.json bindings match installed skills.
-
-Checks that every binding with status="installed" has corresponding files
-in .orderspec/skills/. Also validates tooling.json structure.
-"""
+"""Validate tooling.json v3 bindings against project contracts and local skills."""
 
 from __future__ import annotations
+
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
 
+REF_RE = re.compile(r"^(GOV|STACK|ARCH|CONV)-\d{3}$")
+CONTRACT_FILES = {
+    "GOV": "constitution.md",
+    "STACK": "stack.md",
+    "ARCH": "architecture.md",
+    "CONV": "conventions.md",
+}
+VALID_STATUSES = {"installed", "discovered_only", "pending"}
+
+
 def load_tooling(path: Path) -> dict | None:
-    if not path.exists():
-        return None
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
         return None
+    return value if isinstance(value, dict) else None
 
 
-def validate_structure(data: dict) -> list[str]:
-    errors = []
-    
-    if data.get("version") != 2:
-        errors.append("version must be 2")
-    
-    skills = data.get("skills", {})
+def contract_index(root: Path) -> tuple[set[str], set[str]]:
+    known: set[str] = set()
+    tombstoned: set[str] = set()
+    for prefix, filename in CONTRACT_FILES.items():
+        path = root / ".orderspec" / "contracts" / filename
+        if not path.is_file():
+            continue
+        for line in path.read_text(encoding="utf-8").splitlines():
+            match = re.match(rf"^\|\s*({prefix}-\d{{3}})\s*\|(.*)$", line)
+            if not match:
+                continue
+            ref = match.group(1)
+            known.add(ref)
+            if re.search(r"\[(?:removed|tombstone)\b", match.group(2), flags=re.I):
+                tombstoned.add(ref)
+    return known, tombstoned
+
+
+def validate_structure(data: dict, root: Path) -> list[str]:
+    errors: list[str] = []
+    if data.get("version") != 3:
+        errors.append("version must be 3; run tooling_config.py migrate")
+
+    skills = data.get("skills")
     if not isinstance(skills, dict):
-        errors.append("skills must be an object")
-        return errors
-    
+        return errors + ["skills must be an object"]
     if skills.get("install_policy") != "ask_user":
         errors.append("skills.install_policy must be 'ask_user'")
-    
-    install_loc = skills.get("install_location")
-    if install_loc != ".orderspec/skills/":
-        errors.append(f"skills.install_location must be '.orderspec/skills/', got '{install_loc}'")
-    
-    bindings = skills.get("bindings", [])
+    if skills.get("install_location") != ".orderspec/skills/":
+        errors.append("skills.install_location must be '.orderspec/skills/'")
+    bindings = skills.get("bindings")
     if not isinstance(bindings, list):
-        errors.append("skills.bindings must be an array")
-        return errors
-    
-    for i, b in enumerate(bindings):
-        if not isinstance(b, dict):
-            errors.append(f"bindings[{i}] must be an object")
+        return errors + ["skills.bindings must be an array"]
+
+    known, tombstoned = contract_index(root)
+    seen_bindings: set[tuple[str, ...]] = set()
+    for index, binding in enumerate(bindings):
+        label = f"bindings[{index}]"
+        if not isinstance(binding, dict):
+            errors.append(f"{label} must be an object")
             continue
-        
-        match = b.get("match", {})
-        if not isinstance(match, dict):
-            errors.append(f"bindings[{i}].match must be an object")
-            continue
-        
-        if "stack_id" not in match:
-            errors.append(f"bindings[{i}].match missing stack_id")
-        
-        if "technology" not in match:
-            errors.append(f"bindings[{i}].match missing technology")
-        
-        req = b.get("required_skills")
-        if not isinstance(req, list) or not req:
-            errors.append(f"bindings[{i}].required_skills must be a non-empty array")
-        
-        status = b.get("status")
-        if status not in ("installed", "discovered_only", "pending"):
-            errors.append(f"bindings[{i}].status must be 'installed', 'discovered_only', or 'pending', got '{status}'")
-    
-    docs = data.get("docs_sources", {})
-    if not isinstance(docs, dict):
+        refs = binding.get("contract_refs")
+        if not isinstance(refs, list) or not refs or not all(isinstance(ref, str) for ref in refs):
+            errors.append(f"{label}.contract_refs must be a non-empty string array")
+            refs = []
+        elif len(refs) != len(set(refs)):
+            errors.append(f"{label}.contract_refs contains duplicates")
+        signature = tuple(sorted(refs))
+        if signature and signature in seen_bindings:
+            errors.append(f"{label} duplicates another contract_refs binding")
+        seen_bindings.add(signature)
+        for ref in refs:
+            if not REF_RE.fullmatch(ref):
+                errors.append(f"{label}.contract_refs contains invalid project contract ID '{ref}'")
+            elif ref not in known:
+                errors.append(f"{label}.contract_refs references unknown ID '{ref}'")
+            elif ref in tombstoned:
+                errors.append(f"{label}.contract_refs references tombstoned ID '{ref}'")
+        required = binding.get("required_skills")
+        if not isinstance(required, list) or not required or not all(isinstance(name, str) and name for name in required):
+            errors.append(f"{label}.required_skills must be a non-empty string array")
+        commands = binding.get("commands", [])
+        if not isinstance(commands, list) or not all(isinstance(command, str) and command.startswith("order.") for command in commands):
+            errors.append(f"{label}.commands must be an array of order.* command names")
+        status = binding.get("status")
+        if status not in VALID_STATUSES:
+            errors.append(f"{label}.status must be 'installed', 'discovered_only', or 'pending', got '{status}'")
+
+    if not isinstance(data.get("docs_sources"), dict):
         errors.append("docs_sources must be an object")
-    
     return errors
 
 
 def check_installed_skills(data: dict, skills_dir: Path) -> tuple[list[str], dict]:
-    """Verify that 'installed' bindings have actual files.
-    
-    Returns (errors, summary) where summary contains:
-    - installed_and_verified: bindings where files exist
-    - installed_but_missing: bindings where files don't exist
-    - discovered_only: bindings with discovered_only status
-    - pending: bindings with pending status
-    """
-    errors = []
-    bindings = data.get("skills", {}).get("bindings", [])
-    summary = {
-        "installed_and_verified": [],
-        "installed_but_missing": [],
-        "discovered_only": [],
-        "pending": [],
-    }
-    
-    if not skills_dir.exists():
-        for i, b in enumerate(bindings):
-            if b.get("status") == "installed":
-                req = b.get("required_skills", [])
-                tech = b.get("match", {}).get("technology", "?")
-                errors.append(
-                    f"bindings[{i}] ({tech}): status='installed' but .orderspec/skills/ does not exist; "
-                    f"expected skills: {req}"
-                )
-                summary["installed_but_missing"].append({
-                    "technology": tech,
-                    "skills": req,
-                })
-            elif b.get("status") == "discovered_only":
-                summary["discovered_only"].append(b.get("match", {}).get("technology", "?"))
-            elif b.get("status") == "pending":
-                summary["pending"].append(b.get("match", {}).get("technology", "?"))
-        return errors, summary
-    
-    existing_skills = set()
-    if skills_dir.exists():
-        for entry in skills_dir.iterdir():
-            # A skill is only valid if it contains a SKILL.md file
-            if entry.is_dir() and (entry / 'SKILL.md').is_file():
-                existing_skills.add(entry.name.lower())
-    
-    for i, b in enumerate(bindings):
-        status = b.get("status")
-        tech = b.get("match", {}).get("technology", "?")
-        req_skills = b.get("required_skills", [])
-        
+    errors: list[str] = []
+    summary = {"installed_and_verified": [], "installed_but_missing": [], "discovered_only": [], "pending": []}
+    existing = {
+        entry.name.lower()
+        for entry in skills_dir.iterdir()
+        if entry.is_dir() and (entry / "SKILL.md").is_file()
+    } if skills_dir.is_dir() else set()
+
+    for index, binding in enumerate(data.get("skills", {}).get("bindings", [])):
+        if not isinstance(binding, dict):
+            continue
+        status = binding.get("status")
+        refs = binding.get("contract_refs", [])
+        required = binding.get("required_skills", [])
         if status == "installed":
-            missing_skills = []
-            verified_skills = []
-            
-            for skill_name in req_skills:
-                simple_name = skill_name.split("@")[-1] if "@" in skill_name else skill_name
-                simple_name = simple_name.replace("/", "-").lower()
-                
-                found = any(
-                    simple_name in existing or existing in simple_name
-                    for existing in existing_skills
-                )
-                
-                if found:
-                    verified_skills.append(skill_name)
+            missing = []
+            verified = []
+            for skill_name in required if isinstance(required, list) else []:
+                simple = str(skill_name).split("@")[-1].replace("/", "-").lower()
+                if any(simple == name or simple in name or name in simple for name in existing):
+                    verified.append(skill_name)
                 else:
-                    missing_skills.append(skill_name)
-            
-            if missing_skills:
-                errors.append(
-                    f"bindings[{i}] ({tech}): status='installed' but skills {missing_skills} "
-                    f"not found in {skills_dir} (existing: {sorted(existing_skills)})"
-                )
-                summary["installed_but_missing"].append({
-                    "technology": tech,
-                    "missing": missing_skills,
-                    "verified": verified_skills,
-                })
+                    missing.append(skill_name)
+            if missing:
+                errors.append(f"bindings[{index}] ({', '.join(refs)}): status='installed' but skills {missing} not found in {skills_dir}")
+                summary["installed_but_missing"].append({"contract_refs": refs, "missing": missing, "verified": verified})
             else:
-                summary["installed_and_verified"].append({
-                    "technology": tech,
-                    "skills": verified_skills,
-                })
-        elif status == "discovered_only":
-            summary["discovered_only"].append(tech)
-        elif status == "pending":
-            summary["pending"].append(tech)
-    
+                summary["installed_and_verified"].append({"contract_refs": refs, "skills": verified})
+        elif status in {"discovered_only", "pending"}:
+            summary[status].append({"contract_refs": refs, "skills": required})
     return errors, summary
 
 
@@ -170,62 +140,39 @@ def main() -> int:
     parser.add_argument("-C", "--directory", default=".")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
-    
     root = Path(args.directory).resolve()
     tooling_path = root / ".orderspec" / "config" / "tooling.json"
     skills_dir = root / ".orderspec" / "skills"
-    
     data = load_tooling(tooling_path)
-    
     if data is None:
-        result = {
-            "ok": False,
-            "errors": [f"tooling.json not found or invalid: {tooling_path}"],
-            "installed_count": 0,
-            "discovered_count": 0,
-            "pending_count": 0,
-        }
-        print(json.dumps(result, indent=2) if args.json else "FAIL: tooling.json not found")
+        result = {"ok": False, "errors": [f"tooling.json not found or invalid: {tooling_path}"]}
+        print(json.dumps(result, indent=2) if args.json else result["errors"][0])
         return 1
-    
-    struct_errors = validate_structure(data)
+    errors = validate_structure(data, root)
     install_errors, summary = check_installed_skills(data, skills_dir)
-    all_errors = struct_errors + install_errors
-    
+    errors.extend(install_errors)
     bindings = data.get("skills", {}).get("bindings", [])
-    
     result = {
-        "ok": len(all_errors) == 0,
-        "errors": all_errors,
-        "total_bindings": len(bindings),
+        "ok": not errors,
+        "errors": errors,
+        "total_bindings": len(bindings) if isinstance(bindings, list) else 0,
         "installed_and_verified": len(summary["installed_and_verified"]),
         "installed_but_missing": len(summary["installed_but_missing"]),
         "discovered_only": len(summary["discovered_only"]),
         "pending": len(summary["pending"]),
-        "skills_dir_exists": skills_dir.exists(),
-        "existing_skills": sorted([e.name for e in skills_dir.iterdir() if e.is_dir()]) if skills_dir.exists() else [],
+        "skills_dir_exists": skills_dir.is_dir(),
+        "existing_skills": sorted(entry.name for entry in skills_dir.iterdir() if entry.is_dir()) if skills_dir.is_dir() else [],
         "summary": summary,
     }
-    
     if args.json:
         print(json.dumps(result, indent=2))
+    elif errors:
+        print("FAIL: tooling.json validation errors:")
+        for error in errors:
+            print(f"  - {error}")
     else:
-        if all_errors:
-            print("FAIL: tooling.json validation errors:")
-            for e in all_errors:
-                print(f"  - {e}")
-            print()
-            print(f"Skills directory: {skills_dir}")
-            print(f"Existing skills: {result['existing_skills']}")
-        else:
-            print(f"OK: {len(bindings)} bindings")
-            print(f"  Installed & verified: {result['installed_and_verified']}")
-            print(f"  Discovered only: {result['discovered_only']}")
-            print(f"  Pending: {result['pending']}")
-            print(f"  Skills directory: {skills_dir}")
-            print(f"  Existing skills: {result['existing_skills']}")
-    
-    return 0 if not all_errors else 1
+        print(f"OK: {result['total_bindings']} bindings")
+    return 0 if not errors else 1
 
 
 if __name__ == "__main__":

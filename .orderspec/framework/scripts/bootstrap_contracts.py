@@ -26,6 +26,12 @@ except ImportError:
 ROOT = Path(".")
 
 from common import CONTRACTS_DIR, CONTRACT_FILES
+from frontmatter import validate_project_contract_frontmatter
+from validate_tooling import (
+    check_installed_skills as check_tooling_skills,
+    load_tooling,
+    validate_structure as validate_tooling_structure,
+)
 
 PROJECT_DOCS = {
     "stack": CONTRACT_FILES["stack"],
@@ -37,6 +43,15 @@ PROJECT_DOCS = {
 TOOLING_CONFIG_PATH = Path(".orderspec/config/tooling.json")
 BOOTSTRAP_STATE_PATH = Path(".orderspec/state/bootstrap.json")
 ORDERSPEC_META_PATH = Path(".orderspec/orderspec.json")
+FRAMEWORK_RULES_PATH = Path(".orderspec/framework/orderspec-rules.md")
+TEMPLATE_DIR = Path(__file__).resolve().parents[1] / "templates" / "contracts"
+CONTRACT_PREFIXES = {
+    "constitution": "GOV",
+    "stack": "STACK",
+    "architecture": "ARCH",
+    "conventions": "CONV",
+}
+SUPPORTED_MANIFESTS = ["package.json", "go.mod", "pyproject.toml", "Cargo.toml", "pom.xml"]
 
 KEY_NODE_PACKAGES = {
     "express": ("Express", "Web framework", "HTTP API framework"),
@@ -127,6 +142,11 @@ def file_sha256(path: Path) -> str | None:
     return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
 
 
+def value_sha256(value: Any) -> str:
+    encoded = json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def framework_version() -> str:
     try:
         value = json.loads(ORDERSPEC_META_PATH.read_text(encoding="utf-8"))
@@ -150,14 +170,55 @@ def current_fingerprints() -> dict[str, str | None]:
     }
 
 
+def skills_inventory() -> list[dict[str, str]]:
+    skills_dir = Path(".orderspec/skills")
+    if not skills_dir.is_dir():
+        return []
+    return [
+        {"name": entry.name, "skill_md": file_sha256(entry / "SKILL.md") or "missing"}
+        for entry in sorted(skills_dir.iterdir(), key=lambda item: item.name.lower())
+        if entry.is_dir()
+    ]
+
+
+def project_evidence() -> dict[str, Any]:
+    manifests = {
+        name: file_sha256(Path(name))
+        for name in SUPPORTED_MANIFESTS
+        if Path(name).is_file()
+    }
+    project_documents = {}
+    for name in ("README.md", "PROJECT.md", "CONTRIBUTING.md"):
+        path = Path(name)
+        if path.is_file():
+            project_documents[name] = file_sha256(path)
+    docs = Path("docs")
+    if docs.is_dir():
+        for path in sorted(docs.glob("*.md"))[:20]:
+            project_documents[path.as_posix()] = file_sha256(path)
+    return {
+        "framework_rules": file_sha256(FRAMEWORK_RULES_PATH),
+        "manifests": manifests,
+        "source_directories": sorted(detect_dirs()),
+        "skills": skills_inventory(),
+        "project_documents": project_documents,
+    }
+
+
+def evidence_fingerprints() -> dict[str, str]:
+    evidence = project_evidence()
+    return {key: value_sha256(value) for key, value in evidence.items()}
+
+
 def write_bootstrap_state() -> dict[str, Any]:
     payload = {
-        "version": 1,
+        "version": 2,
         "initialized": True,
         "completed_at": now_iso(),
         "framework_version": framework_version(),
         "manifest": detect_manifest(),
         "fingerprints": current_fingerprints(),
+        "evidence_fingerprints": evidence_fingerprints(),
     }
     BOOTSTRAP_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     fd, temp_name = tempfile.mkstemp(
@@ -191,6 +252,36 @@ def write_text_no_overwrite(path: Path, content: str, created: list[str]) -> Non
     created.append(str(path))
 
 
+def contract_frontmatter(kind: str) -> str:
+    return (
+        "---\n"
+        "orderspec:\n"
+        "  artifact: project_contract\n"
+        f"  kind: {kind}\n"
+        "  scope: project\n"
+        "  owner_command: order.bootstrap\n"
+        f"  id_prefix: {CONTRACT_PREFIXES[kind]}\n"
+        "---\n\n"
+    )
+
+
+def migrate_legacy_frontmatter(path: Path, kind: str, migrated: list[str]) -> None:
+    if not path.is_file():
+        return
+    text = path.read_text(encoding="utf-8")
+    if text.startswith("---\n"):
+        return
+    path.write_text(contract_frontmatter(kind) + text, encoding="utf-8")
+    migrated.append(str(path))
+
+
+def render_contract(kind: str, **values: str) -> str:
+    template_path = TEMPLATE_DIR / f"{kind}.md"
+    if not template_path.is_file():
+        raise RuntimeError(f"contract template missing: {template_path}")
+    return template_path.read_text(encoding="utf-8").format(**values).rstrip() + "\n"
+
+
 def detect_project_name() -> str:
     return ROOT.resolve().name
 
@@ -200,7 +291,7 @@ def missing_project_docs() -> list[str]:
 
 
 def detect_manifest() -> str | None:
-    for name in ["package.json", "go.mod", "pyproject.toml", "Cargo.toml", "pom.xml"]:
+    for name in SUPPORTED_MANIFESTS:
         if Path(name).exists():
             return name
     return None
@@ -531,23 +622,12 @@ def renumber_stack(rows: list[dict[str, str]]) -> None:
 
 
 def stack_markdown(rows: list[dict[str, str]]) -> str:
-    lines = [
-        "# Project Stack",
-        "",
-        "Technologies used in this project.",
-        "Referenced by spec.md and plan.md as STACK-NNN.",
-        "Maintained via /order.bootstrap. IDs are append-only.",
-        "",
-        "| ID | Technology | Version | Purpose | Notes |",
-        "|----|------------|---------|---------|-------|",
-    ]
-
+    lines = []
     for row in rows:
         lines.append(
             f"| {row['id']} | {row['technology']} | {row['version']} | {row['purpose']} | {row['notes']} |"
         )
-
-    return "\n".join(lines) + "\n"
+    return render_contract("stack", rows="\n".join(lines))
 
 
 def detect_dirs() -> set[str]:
@@ -576,7 +656,7 @@ Application follows a layered HTTP API architecture.
 
 | Layer | Directory | Responsibility |
 |-------|-----------|----------------|
-| Entry | `src/index.js`, `src/app.js` | Server bootstrap and app setup |
+| Entry | [UNRESOLVED: detect project entry files] | Process/bootstrap and application assembly |
 | Config | `src/config/` | Environment variables and app configuration |
 | Routes | `src/routes/` | HTTP route definitions and middleware chaining |
 | Controllers | `src/controllers/` | Request handling and response formatting |
@@ -617,7 +697,6 @@ Maintained via /order.bootstrap. IDs are append-only.
 Project appears to use modular/domain-oriented organization.
 
 | Layer | Directory | Responsibility |
-|-------|-----------|----------------|
 | Modules/Domains | `src/modules/`, `src/features/`, or `src/domains/` | Feature/domain boundaries |
 
 ## Dependency Rules
@@ -648,18 +727,15 @@ Maintained via /order.bootstrap. IDs are append-only.
 | ARCH-001 | [UNRESOLVED: define intended architecture and dependency direction] |
 """
 
+
+def rendered_architecture_markdown() -> str:
+    legacy = architecture_markdown()
+    marker = "## Layers"
+    body = legacy[legacy.index(marker):] if marker in legacy else legacy
+    return render_contract("architecture", body=body.rstrip())
+
 def conventions_markdown() -> str:
-    return """# Project Conventions
-
-Implementation conventions: error handling, serialization,
-validation patterns, shared plugins, etc.
-Referenced by spec.md and plan.md as CONV-NNN.
-Maintained via /order.bootstrap. IDs are append-only.
-This file starts empty and grows as patterns are discovered.
-
-| ID | Convention | Description | Notes |
-|----|------------|-------------|-------|
-"""
+    return render_contract("conventions", rows="")
 
 
 
@@ -672,13 +748,12 @@ def tooling_json_content(stack_rows: list[dict[str, str]] | None = None) -> str:
     """
     return json.dumps(
         {
-            "version": 2,
+            "version": 3,
             "skills": {
                 "install_policy": "ask_user",
                 "install_location": ".orderspec/skills/",
                 "resolution_order": [
-                    ".orderspec/skills/",
-                    "~/.agents/skills/"
+                    ".orderspec/skills/"
                 ],
                 "bindings": [],
             },
@@ -696,100 +771,34 @@ def tooling_json_content(stack_rows: list[dict[str, str]] | None = None) -> str:
 
 def constitution_markdown(project_name: str, gate_profile: str, test_command: str | None, lint_command: str | None, external_rules_policy: str = "constrain_on_bootstrap") -> str:
     profile = gate_profile.upper()
-
     if profile == "A":
-        test = "DENIED. Gates MUST NOT run tests; rely on static inspection."
-        lint = "DENIED. Gates MUST NOT invoke a compiler or linter; rely on static inspection."
+        test = "DENIED. Gates MUST NOT run tests."
+        lint = "DENIED. Gates MUST NOT run build, compile, or lint commands."
         network = "DENIED."
-    elif profile == "B":
+    elif profile in {"B", "C"}:
         test = f"ALLOWED. run: {test_command or '[UNRESOLVED: TEST_COMMAND]'}"
         lint = f"ALLOWED. run: {lint_command or '[UNRESOLVED: LINT_COMMAND]'}"
-        network = "DENIED."
-    elif profile == "C":
-        test = f"ALLOWED. run: {test_command or '[UNRESOLVED: TEST_COMMAND]'}"
-        lint = f"ALLOWED. run: {lint_command or '[UNRESOLVED: LINT_COMMAND]'}"
-        network = "ALLOWED for package registries and configured documentation MCP servers only."
+        network = "DENIED." if profile == "B" else "ALLOWED only for configured documentation sources and package registries."
     else:
         raise SystemExit("gate profile must be A, B, or C")
 
-    return f"""# {project_name} Constitution
-
-Supreme governance document.
-- Core Principles: rules the project must uphold (MUST/SHOULD, testable).
-- Capability Grants: machine-readable permissions that gates execute literally.
-LAW: any capability not explicitly granted is DENIED. Silence is never permission.
-Maintained via /order.bootstrap.
-
-## Core Principles
-
-### I. Contract Stability
-spec.md MUST remain the source of truth for behavior. Behavior changes start in spec.md, not in code.
-
-### II. Spec-Code Separation
-spec.md MUST NOT contain physical implementation details (file paths, library names, ORM annotations). These belong to plan.md or project contract documents (stack.md, architecture.md, conventions.md).
-
-### III. Default-Deny
-Any capability not explicitly granted in the Capability Grants section below is DENIED. Gates MUST degrade to static inspection on anything unstated. This is non-negotiable.
-
-## Capability Grants
-
-THIS SECTION IS READ BY GATES LITERALLY.
-Write flat, unambiguous ALLOWED/DENIED statements with explicit commands.
-A gate must answer "am I allowed to do X?" with a literal yes/no by scanning this section.
-Anything omitted is DENIED.
-
-### Test execution
-{test}
-
-### Build / compile / lint as evidence
-{lint}
-
-### Network access during a gate
-{network}
-
-### Skill discovery
-DENIED unless the current chat contains explicit user approval for the exact discovery action.
-
-### Skill installation or registration
-DENIED unless the current chat contains explicit user approval for the exact skill name and source.
-
-### Documentation lookup during authoring
-ALLOWED for read-only documentation lookup required by `.orderspec/framework/protocols/tooling-protocol.md` or `.orderspec/config/tooling.json` during authoring commands. This does not allow package installation, skill installation, project command execution, arbitrary network access, or gate-time network access.
-
-### Environment diagnosis during authoring
-ALLOWED for read-only readiness checks declared in `plan.md` and permitted by the current command's workflow.
-
-### Environment recovery during authoring
-ALLOWED only after explicit current-chat user approval for the exact action, and only for a recovery option declared in `plan.md` or explicitly approved as a bounded equivalent. The approval does not authorize a different command, scope, or environment.
-
-### Package installation, data reset, and production/shared-environment changes
-DENIED. These actions require a separate explicit project-contract amendment and must not be inferred from a runtime failure.
-
-### MCP documentation lookup during gates
-DENIED unless explicitly allowed above. Gates follow this constitution literally.
-
-## External Rules Integration
-
-Policy: `{external_rules_policy}`
-
-This section controls how OrderSpec interacts with external rule files owned by AI agents (AGENTS.md, .cursorrules, CLAUDE.md, etc.).
-
-| Policy | Behavior |
-|--------|----------|
-| `constrain_on_bootstrap` (default) | Rule files are read only during `/order.bootstrap`. Content is offered for integration into `conventions.md`. After bootstrap, OrderSpec commands work only with their own contracts. |
-| `constrain_always` | Rule files are resolved by the command context resolver as `constrain` source for every command. May conflict with OrderSpec contracts. Use with caution. |
-| `ignore` | Rule files are not read by OrderSpec at all. Operator manually transfers needed content to `conventions.md`. |
-
-To change this policy, amend this section via `/order.bootstrap` and set the policy to one of the three values above.
-
-## Governance
-
-- This constitution supersedes lower-level project practices and feature artifacts within the limits of `.orderspec/framework/orderspec-rules.md`.\n- On conflict with framework rules, `.orderspec/framework/orderspec-rules.md` wins.
-- Amendments are made only via `/order.bootstrap`, which routes conflicting artifacts to their owning commands.
-- Default-deny on capabilities is non-negotiable: unstated => denied.
-
-**Last Amended**: {today()}
-"""
+    governance_rows = "\n".join([
+        "| GOV-001 | Feature behavior changes MUST begin in the owning specification. | Preserve contract-first development. | OrderSpec bootstrap default |",
+        "| GOV-002 | Logical specifications MUST NOT contain physical implementation details. | Keep stable truth independent of repository layout. | OrderSpec bootstrap default |",
+        "| GOV-003 | Unstated capabilities MUST be treated as denied. | Prevent implicit side effects. | OrderSpec bootstrap default |",
+    ])
+    return render_contract(
+        "constitution",
+        project_name=project_name,
+        mission="[UNRESOLVED: confirm project mission from operator-approved project evidence]",
+        values="[UNRESOLVED: confirm project values from operator-approved project evidence]",
+        governance_rows=governance_rows,
+        test=test,
+        lint=lint,
+        network=network,
+        external_rules_policy=external_rules_policy,
+        date=today(),
+    )
 
 def validate_stack(path: Path) -> list[str]:
     errors = []
@@ -807,6 +816,19 @@ def validate_stack(path: Path) -> list[str]:
             errors.append(f"invalid stack ID: {id_}")
 
     return errors
+
+
+def table_ids(text: str, prefix: str) -> list[str]:
+    return re.findall(rf"^\|\s*({prefix}-\d{{3}})\s*\|", text, flags=re.M)
+
+
+def validate_frontmatter(path: Path, kind: str) -> list[str]:
+    return [
+        f"{path.name}: {field}: {message}"
+        for field, message in validate_project_contract_frontmatter(
+            path.read_text(encoding="utf-8"), expected_kind=kind
+        )
+    ]
 
 
 def validate_architecture(path: Path) -> list[str]:
@@ -827,30 +849,79 @@ def validate_architecture(path: Path) -> list[str]:
     return errors
 
 
+def validate_conventions(path: Path) -> list[str]:
+    text = path.read_text(encoding="utf-8")
+    ids = table_ids(text, "CONV")
+    errors = []
+    if len(ids) != len(set(ids)):
+        errors.append("conventions.md has duplicate CONV-NNN IDs")
+    if "| ID | Convention | Description | Notes |" not in text:
+        errors.append("conventions.md missing conventions table")
+    return errors
+
+
+def validate_constitution(path: Path) -> list[str]:
+    text = path.read_text(encoding="utf-8")
+    ids = table_ids(text, "GOV")
+    errors = []
+    if not ids:
+        errors.append("constitution.md has no GOV-NNN governance rules")
+    if len(ids) != len(set(ids)):
+        errors.append("constitution.md has duplicate GOV-NNN IDs")
+    for line in text.splitlines():
+        if re.match(r"^\|\s*GOV-\d{3}\s*\|", line) and not re.search(r"\b(?:MUST|SHOULD)\b", line):
+            errors.append(f"constitution.md governance rule must use MUST or SHOULD: {line}")
+    required_sections = [
+        "## Project Intent (Non-Normative)",
+        "## Governance Rules",
+        "## Capability Grants",
+        "## External Rules Integration",
+    ]
+    for section in required_sections:
+        if section not in text:
+            errors.append(f"constitution.md missing {section}")
+    for capability in [
+        "### Test execution",
+        "### Build / compile / lint as evidence",
+        "### Network access during a gate",
+        "### Skill discovery",
+        "### Skill installation or registration",
+    ]:
+        match = re.search(rf"^{re.escape(capability)}\s*$\n([^#\n].*)", text, flags=re.M)
+        if not match or not re.search(r"\b(?:ALLOWED|DENIED)\b", match.group(1)):
+            errors.append(f"constitution.md capability is not explicit: {capability}")
+    policy = re.search(r"^Policy:\s*`([^`]+)`\s*$", text, flags=re.M)
+    if not policy or policy.group(1) not in {"constrain_on_bootstrap", "ignore"}:
+        errors.append("constitution.md external rules policy must be constrain_on_bootstrap or ignore")
+    return errors
+
+
 def validate_created_files() -> list[str]:
     errors = []
 
     if PROJECT_DOCS["stack"].exists():
+        errors.extend(validate_frontmatter(PROJECT_DOCS["stack"], "stack"))
         errors.extend(validate_stack(PROJECT_DOCS["stack"]))
     else:
         errors.append("stack.md missing")
 
     if PROJECT_DOCS["architecture"].exists():
+        errors.extend(validate_frontmatter(PROJECT_DOCS["architecture"], "architecture"))
         errors.extend(validate_architecture(PROJECT_DOCS["architecture"]))
     else:
         errors.append("architecture.md missing")
 
     if not PROJECT_DOCS["conventions"].exists():
         errors.append("conventions.md missing")
+    else:
+        errors.extend(validate_frontmatter(PROJECT_DOCS["conventions"], "conventions"))
+        errors.extend(validate_conventions(PROJECT_DOCS["conventions"]))
 
     if not PROJECT_DOCS["constitution"].exists():
         errors.append("constitution.md missing")
     else:
-        constitution = PROJECT_DOCS["constitution"].read_text(encoding="utf-8")
-        if "[BRACKET]" in constitution or "__PLACEHOLDER__" in constitution:
-            errors.append("constitution.md contains unresolved placeholder token")
-        if "DENIED" not in constitution and "ALLOWED" not in constitution:
-            errors.append("constitution.md contains no capability grants")
+        errors.extend(validate_frontmatter(PROJECT_DOCS["constitution"], "constitution"))
+        errors.extend(validate_constitution(PROJECT_DOCS["constitution"]))
 
     return errors
 
@@ -901,6 +972,51 @@ def inferred_stack_rows() -> list[dict[str, str]]:
     return []
 
 
+def constitution_evidence_command(args: argparse.Namespace) -> int:
+    """Collect bounded project text as candidates; never author governance."""
+    paths: list[Path] = []
+    for name in ("README.md", "PROJECT.md", "CONTRIBUTING.md"):
+        path = Path(name)
+        if path.is_file():
+            paths.append(path)
+    docs = Path("docs")
+    if docs.is_dir():
+        paths.extend(sorted(docs.glob("*.md"))[:20])
+
+    candidates: list[dict[str, str]] = []
+    normative = re.compile(r"\b(?:MUST|MUST NOT|SHOULD|SHOULD NOT|required|forbidden)\b", re.I)
+    intent_heading = re.compile(r"^#{1,4}\s+.*\b(?:mission|values?|principles?|constraints?|goals?)\b", re.I)
+    for path in paths:
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        active_intent = False
+        for number, line in enumerate(lines, start=1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                active_intent = bool(intent_heading.match(stripped))
+                continue
+            if not stripped or len(stripped) > 500:
+                continue
+            match = normative.search(stripped)
+            if match or (active_intent and not stripped.startswith("|")):
+                candidates.append({
+                    "kind": "hard_constraint_candidate" if match else "project_intent_candidate",
+                    "statement": stripped.lstrip("-* "),
+                    "source": f"{path.as_posix()}:{number}",
+                    "authority": "candidate_only",
+                })
+    print(json.dumps({
+        "ok": True,
+        "sources": [path.as_posix() for path in paths],
+        "candidates": candidates[:100],
+        "requires_operator_approval": True,
+        "warning": "Candidates are evidence, not governance. Do not write GOV-NNN without operator approval.",
+    }, indent=2, ensure_ascii=False))
+    return 0
+
+
 def audit_command(args: argparse.Namespace) -> int:
     """Emit deterministic evidence for semantic bootstrap Refine mode."""
     missing = missing_project_docs()
@@ -923,9 +1039,107 @@ def audit_command(args: argparse.Namespace) -> int:
     missing_stack_candidates = [
         row for row in inferred if str(row.get("technology", "")).lower() not in stack_text.lower()
     ]
+    inferred_technologies = {str(row.get("technology", "")).strip().lower() for row in inferred}
+    existing_stack_rows = re.findall(
+        r"^\|\s*(STACK-\d{3})\s*\|\s*([^|]+?)\s*\|",
+        stack_text,
+        flags=re.M,
+    )
+    unverified_stack_rows = [
+        {"id": ref, "technology": technology.strip()}
+        for ref, technology in existing_stack_rows
+        if inferred_technologies
+        and technology.strip().lower() not in inferred_technologies
+        and "[removed" not in technology.lower()
+    ]
     previous = state.get("fingerprints", {}) if isinstance(state.get("fingerprints"), dict) else {}
     current = current_fingerprints()
     changed_contracts = [name for name in PROJECT_DOCS if previous.get(name) not in (None, current.get(name))]
+    previous_evidence = state.get("evidence_fingerprints", {}) if isinstance(state.get("evidence_fingerprints"), dict) else {}
+    current_evidence = evidence_fingerprints()
+    validation_errors = validate_created_files()
+    items: list[dict[str, Any]] = []
+
+    def add_item(kind: str, classification: str, evidence: list[str], **extra: Any) -> None:
+        items.append({
+            "id": f"DRIFT-{len(items) + 1:03d}",
+            "kind": kind,
+            "classification": classification,
+            "evidence": evidence,
+            **extra,
+        })
+
+    if state.get("framework_version") not in (None, framework_version()) or (
+        previous_evidence.get("framework_rules") not in (None, current_evidence.get("framework_rules"))
+    ):
+        add_item(
+            "framework_compatibility",
+            "operator_decision",
+            [".orderspec/framework/orderspec-rules.md", ".orderspec/orderspec.json"],
+            proposed_action="review_project_contracts_against_current_framework_rules",
+        )
+    for error in validation_errors:
+        mechanical = "No YAML frontmatter" in error
+        add_item(
+            "contract_schema_incompatibility",
+            "safe_mechanical_migration" if mechanical else "operator_decision",
+            [error],
+            proposed_action="migrate_frontmatter" if mechanical else "amend",
+        )
+    for name in changed_contracts:
+        add_item(
+            "project_contract_changed_since_baseline",
+            "operator_decision",
+            [str(PROJECT_DOCS[name])],
+            contract=name,
+            proposed_action="confirm_or_revert_out_of_band_contract_change",
+        )
+    if previous_evidence.get("manifests") not in (None, current_evidence.get("manifests")):
+        add_item(
+            "project_state_manifest_changed",
+            "operator_decision",
+            list(project_evidence()["manifests"].keys()) or ["supported manifest removed"],
+            proposed_action="review_stack_contract",
+        )
+    for row in missing_stack_candidates:
+        add_item(
+            "project_state_stack_candidate",
+            "operator_decision",
+            [detect_manifest() or "no supported manifest"],
+            candidate=row,
+            proposed_action="confirm_stack_amendment",
+        )
+    for row in unverified_stack_rows:
+        add_item(
+            "project_state_stack_row_unverified",
+            "operator_decision",
+            [detect_manifest() or "no supported manifest"],
+            contract_ref=row["id"],
+            technology=row["technology"],
+            proposed_action="confirm_keep_or_tombstone",
+        )
+    if previous_evidence.get("source_directories") not in (None, current_evidence.get("source_directories")):
+        add_item(
+            "project_state_architecture_changed",
+            "operator_decision",
+            ["repository source directory topology"],
+            proposed_action="review_architecture_contract",
+        )
+    if previous_evidence.get("skills") not in (None, current_evidence.get("skills")) or previous.get("tooling") not in (None, current.get("tooling")):
+        add_item(
+            "tooling_drift",
+            "tooling_drift",
+            [".orderspec/config/tooling.json", ".orderspec/skills/"],
+            proposed_action="run_validate_tooling",
+        )
+    if previous_evidence.get("project_documents") not in (None, current_evidence.get("project_documents")):
+        add_item(
+            "project_intent_evidence_changed",
+            "operator_decision",
+            list(project_evidence()["project_documents"].keys()),
+            proposed_action="run_constitution_evidence",
+        )
+
     result = {
         "ok": True,
         "mode": "refine",
@@ -941,7 +1155,7 @@ def audit_command(args: argparse.Namespace) -> int:
             "missing_stack_candidates": missing_stack_candidates,
         },
         "contracts": {
-            "validation_errors": validate_created_files(),
+            "validation_errors": validation_errors,
             "changed_since_last_bootstrap": changed_contracts,
             "fingerprints": current,
         },
@@ -949,6 +1163,11 @@ def audit_command(args: argparse.Namespace) -> int:
             "config_exists": TOOLING_CONFIG_PATH.is_file(),
             "requires_validate_tooling": True,
         },
+        "scope": {
+            "compares": ["framework rules", "project contracts", "bounded current project evidence", "project tooling"],
+            "excludes": ["feature specification drift", "plan drift", "task drift", "code-to-spec drift"],
+        },
+        "items": items,
         "required_semantic_checks": [
             "project contracts against current framework rules",
             "stack and architecture against current repository evidence",
@@ -961,6 +1180,13 @@ def audit_command(args: argparse.Namespace) -> int:
 
 def complete_command(args: argparse.Namespace) -> int:
     errors = validate_created_files()
+    tooling = load_tooling(TOOLING_CONFIG_PATH)
+    if tooling is None:
+        errors.append("tooling.json missing or invalid")
+    else:
+        errors.extend(validate_tooling_structure(tooling, ROOT.resolve()))
+        install_errors, _ = check_tooling_skills(tooling, Path(".orderspec/skills"))
+        errors.extend(install_errors)
     if errors:
         print(json.dumps({"ok": False, "validation_errors": errors}, indent=2, ensure_ascii=False))
         return 1
@@ -969,8 +1195,23 @@ def complete_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def migrate_frontmatter_command(args: argparse.Namespace) -> int:
+    migrated: list[str] = []
+    for kind, path in PROJECT_DOCS.items():
+        migrate_legacy_frontmatter(path, kind, migrated)
+    errors = validate_created_files()
+    print(json.dumps({
+        "ok": True,
+        "migrated_frontmatter": migrated,
+        "contracts_valid": not errors,
+        "remaining_validation_errors": errors,
+    }, indent=2, ensure_ascii=False))
+    return 0
+
+
 def init_command(args: argparse.Namespace) -> int:
     created: list[str] = []
+    migrated: list[str] = []
     manifest = detect_manifest()
 
     if manifest == "package.json":
@@ -996,7 +1237,7 @@ def init_command(args: argparse.Namespace) -> int:
 
     # Generate content from templates
     stack_content = stack_markdown(stack_rows)
-    architecture_content = architecture_markdown()
+    architecture_content = rendered_architecture_markdown()
     conventions_content = conventions_markdown()
     constitution_content = constitution_markdown(
         project_name=args.project_name or detect_project_name(),
@@ -1012,12 +1253,16 @@ def init_command(args: argparse.Namespace) -> int:
     write_text_no_overwrite(PROJECT_DOCS["constitution"], constitution_content, created)
     write_text_no_overwrite(TOOLING_CONFIG_PATH, tooling_json_content(stack_rows), created)
 
+    for kind, path in PROJECT_DOCS.items():
+        migrate_legacy_frontmatter(path, kind, migrated)
+
     errors = validate_created_files()
 
     result = {
         "ok": not errors,
         "mode": "init",
         "created": created,
+        "migrated_frontmatter": migrated,
         "preserved_existing": [
             str(path)
             for path in PROJECT_DOCS.values()
@@ -1067,7 +1312,7 @@ def main() -> int:
     init_parser.add_argument("--lint-command")
     init_parser.add_argument(
         "--external-rules-policy",
-        choices=["constrain_on_bootstrap", "constrain_always", "ignore"],
+        choices=["constrain_on_bootstrap", "ignore"],
         default="constrain_on_bootstrap",
         help="Policy for external AI agent rule files (default: constrain_on_bootstrap)",
     )
@@ -1081,6 +1326,12 @@ def main() -> int:
     complete_parser = sub.add_parser("complete")
     complete_parser.add_argument("--json", action="store_true")
 
+    evidence_parser = sub.add_parser("constitution-evidence")
+    evidence_parser.add_argument("--json", action="store_true")
+
+    migration_parser = sub.add_parser("migrate-frontmatter")
+    migration_parser.add_argument("--json", action="store_true")
+
     args = parser.parse_args()
 
     if args.command == "inspect":
@@ -1093,6 +1344,10 @@ def main() -> int:
         return audit_command(args)
     if args.command == "complete":
         return complete_command(args)
+    if args.command == "constitution-evidence":
+        return constitution_evidence_command(args)
+    if args.command == "migrate-frontmatter":
+        return migrate_frontmatter_command(args)
 
     raise SystemExit(f"unknown command: {args.command}")
 

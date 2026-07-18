@@ -16,7 +16,7 @@ OrderSpec is not tied to a specific AI agent. It uses a deterministic **adapter 
 2. **Prompt sync**: OrderSpec prompts live in `.orderspec/framework/prompts/` as a single source of truth. Each adapter delivers them to the agent's command surface. SHA-256 hashing avoids unnecessary copies; Codex renders each prompt as a `SKILL.md`.
 3. **Skills registration**: instead of copying project skills, each adapter registers `.orderspec/skills/` in the agent's config or native discovery path — one source of truth.
 4. **Worker inspection**: before delegation, the command asks the current runtime adapter to validate its selected worker. Sync never creates one silently.
-5. **External rules**: each adapter reads agent-specific rule files (AGENTS.md, CLAUDE.md, etc.) for optional integration into `conventions.md` during bootstrap.
+5. **External rules**: each adapter reads agent-specific rule files for optional, operator-approved integration into the owning governance, stack, architecture, or conventions contract during bootstrap.
 
 ## Adapter architecture
 
@@ -118,8 +118,7 @@ The policy is defined in `constitution.md`:
 
 | Policy | Behavior |
 |---|---|
-| `constrain_on_bootstrap` (default) | Rule files are read only during `/order.bootstrap`. Content is offered for integration into `conventions.md`. After bootstrap, OrderSpec commands work only with their own contracts. |
-| `constrain_always` | Rule files are loaded as constrain source for every command. May conflict with OrderSpec contracts. Use with caution. |
+| `constrain_on_bootstrap` (default) | Rule files are read only during `/order.bootstrap`. Content is classified and offered for integration into its owning project contract. After bootstrap, OrderSpec commands work only with their own contracts. |
 | `ignore` | Rule files are not read by OrderSpec at all. |
 
 The principle is: **external rules are detected and routed, never silently applied.**
