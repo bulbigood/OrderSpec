@@ -9,10 +9,10 @@
 
 **Format (STRICT — pipe-delimited, machine-parsed)**: `- [ ] T### [P?] [US?] | path | refs? | gloss`
 
-- `extract-trace` splits each task line on ` | ` (space-pipe-space). Every task has exactly four fields and three separators. Field 2 is the file path; field 3 is the spec IDs.
-- **Path field is a RAW plan.md path — NO backticks, NO markdown.** The tool matches the literal path; backticks make it not match and silently drop coverage.
+- `extract-trace` splits each task line on ` | ` (space-pipe-space). Every task has exactly four fields and three separators. Field 2 is a plan path or the reserved read-only target `@verify`; field 3 is the spec IDs.
+- **Write-task path is a RAW plan.md path — NO backticks, NO markdown.** `GATE:` and command-only `VERIFY:` tasks use `@verify`, which produces no write path.
 - **refs is optional in meaning, but its field is mandatory.** An infrastructure task (barrel/index registration, route wiring, test fixtures, GATE/verification) uses `... | path |  | gloss`. NEVER invent a ref to give a task a home.
-- **A declared ref MUST be a DIRECT mechanism whose `primary_files` CONTAINS this task's path.** The tool REJECTS (rc=3) any ref attached to a path that does not realize/exercise it (filler / mis-attribution / ID-parking). `documented` IDs and `delegated` (AC) IDs MUST NOT appear as refs (rc=3) — task a delegate's `<ID>` instead.
+- **A declared ref MUST be a DIRECT mechanism whose single `primary_files` value EQUALS this task's path.** The tool rejects filler/mis-attribution. `documented` and `delegated` IDs must not appear as refs.
 - **refs** when present: comma-separated, NO SPACES (`REQ-001,AC-002`), at most **3** per line, no duplicates.
 - **gloss** = ≤15-word paraphrase of the asserted criteria. Free text (never grepped). Name asserted AC/INV here on verification/GATE tasks (not in refs).
 - The `[P]` marker is absent by default. Add it only when plan evidence establishes that adjacent marked tasks are both file-disjoint and dependency-independent. Sequential top-to-bottom order is always correct on its own.
@@ -43,7 +43,7 @@ Each `read` item is one existing repo-relative file that the task worker must
 inspect before editing. `target_state` is `new`, `mod`, or `del`, copied from
 the task path's `[NEW]`/`[MOD]`/`[DEL]` status in `plan.md`. Include a `mod` or
 `del` write target and only the exact source/config/test files required by that
-task. New write targets are not readable until created. Paths must be literal
+task. `@verify` uses `target_state: "none"`. New write targets are not readable until created. Paths must be literal
 files, not directories or globs. The resolver validates existence, path safety,
 task coverage, and output order. Optional `contract_refs` carries exact spec IDs
 needed by support paths without claiming traceability ownership on the task
@@ -57,9 +57,9 @@ line.
 
   FORMAT RULE: every task line is pipe-delimited — `T### [markers] | path | refs? | gloss`.
   The path is a RAW plan.md path with NO backticks. refs is OPTIONAL — infra tasks (barrel/wiring/fixture/GATE) carry EMPTY refs. A declared ref MUST be a direct
-  mechanism whose primary_files contains that task's path (else rc=3). Never invent a ref to home a task. Coverage is proven by `traceability.py extract-trace`, NOT by any hand-written table.
-  Every test-writing task's OWN gloss MUST say it is expected to fail before
-  implementation; the section heading is not enough. Every command-only lint
+  mechanism whose primary_files equals that task's path (else rc=3). Never invent a ref to home a task. Coverage is proven by `traceability.py extract-trace`, NOT by any hand-written table.
+  Every test-writing task's OWN gloss states the result required by plan
+  Evidence Sequencing; the section heading is not enough. Every command-only lint
   or typecheck task MUST start with VERIFY:, forbid autofix/writes, and stop on
   failure.
 
@@ -78,7 +78,7 @@ line.
 [Render the plan-derived order. End with Contract only for a migration work order; otherwise end with Final Verification.]
 
 - Phases are hard sequential barriers; within a phase, execute tasks top-to-bottom.
-- Test tasks within a story phase are written first and MUST fail before their implementation tasks.
+- Test ordering and expected results follow plan Evidence Sequencing.
 
 ---
 
@@ -92,14 +92,14 @@ line.
 
 ---
 
-## Phase 2: Migrate & Implement — User Story 1 (Priority: P1) 🎯 MVP
+## Phase 2: Migrate & Implement — User Story 1 ([priority from UJ-001])
 
 **Goal**: [Brief description from Spec § Acceptance Criteria]
 **Verification**: Run [test command from plan.md]; assert AC-NNN.. pass and INV-NNN.. hold.
 
-### Tests (Write First, Verify Failure)
+### Tests ([ordering/result from plan Evidence Sequencing])
 
-- [ ] T004 [US1] | tests/[file].ext | AC-001,AC-002 | expect failure before implementation: test US1 happy-path endpoints
+- [ ] T004 [US1] | tests/[file].ext | AC-001,AC-002 | [expected red/baseline/post-implementation result]: test US1 behavior
 
 ### Implementation
 
@@ -108,7 +108,7 @@ line.
 - [ ] T007 [US1] | src/routes/[entity].ext | REQ-003 | routes with auth and validate middleware
 - [ ] T008 [US1] | src/services/[entity].ext | EDGE-001 | handle US1 edge case in service
 
-**Checkpoint**: User Story 1 (MVP) is fully functional, backwards-compatible, and independently testable.
+**Checkpoint**: User Story 1 is functional and independently testable; MVP includes every P1 journey and declared dependency.
 
 ---
 
@@ -117,9 +117,9 @@ line.
 **Goal**: [Brief description from Spec § Acceptance Criteria]
 **Verification**: Run [test command]; assert AC-NNN.. pass with no regressions on US1.
 
-### Tests (Write First, Verify Failure)
+### Tests ([ordering/result from plan Evidence Sequencing])
 
-- [ ] T010 [US2] | tests/[file].ext | AC-003 | expect failure before implementation: test US2 behavior
+- [ ] T010 [US2] | tests/[file].ext | AC-003 | [expected result from plan]: test US2 behavior
 
 ### Implementation
 
@@ -138,9 +138,9 @@ line.
 
 **Purpose**: Verify everything. Perform irreversible cleanup only when `plan.md` declares it; otherwise this is a read-only Final Verification phase.
 
-- [ ] T0XX | [test file path from plan.md pathmanifest] |  | GATE: run [test command from plan.md] — verify all AC-* pass, INV-* hold, NFR-* met; STOP on failure (contraction is irreversible). Empty refs — verification asserts, does not realize. Path MUST be a real test file from pathmanifest (not a command) so M8 passes.
+- [ ] T0XX | @verify |  | GATE: run [test command from plan.md]; STOP on failure
 - [ ] T0XX | [cleanup path from plan.md] |  | remove only plan-declared deprecated mechanism after GATE
-- [ ] T0XX | [relevant path from plan.md pathmanifest] |  | VERIFY: run [lint/typecheck command] without autofix; STOP on failure
+- [ ] T0XX | @verify |  | VERIFY: run [lint/typecheck command] without autofix; STOP on failure
 - [ ] T0XX | [documentation path from plan.md] |  | update plan-declared technical documentation
 
 ---
@@ -151,8 +151,9 @@ line.
 - `[P]` requires explicit plan evidence of file-disjointness and dependency independence. Absence means sequential execution.
 - The `[USn]` marker traces a task to its user story.
 - Each task is self-contained: raw path + spec IDs + ≤15-word gloss, so the implementer need not re-open spec.md.
-- Every test task's own gloss states expected failure before implementation; earlier phases do not pre-implement tested behavior.
-- `GATE:` and `VERIFY:` tasks are read-only and report `changed_files: []`.
+- Every test task's own gloss states the result selected by plan Evidence Sequencing.
+- `GATE:` and `VERIFY:` tasks use `@verify`, are read-only, and report `changed_files: []`.
 - Stop at checkpoints to validate stories independently.
-- A direct ref belongs on the task whose path equals its `primary_files` (the task that realizes/exercises it), never parked on a barrel/verify/GATE task. This is machine-enforced: extract-trace rejects (rc=3) a ref whose primary_files does not contain that task's path. Infra tasks carry EMPTY refs.
+- A direct ref belongs on the task whose path equals its single `primary_files`
+  value, never on barrel/verify/GATE tasks. Infra tasks carry empty refs.
 - Avoid: vague tasks, same-file `[P]` conflicts, cross-story dependencies that break independence, retrofitting a mechanism into already-written code, splitting many unrelated REQ/AC into one oversized task just to satisfy coverage.

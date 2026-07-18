@@ -22,6 +22,8 @@ from task_progress import parse_tasks  # noqa: E402
 from trace_constants import _SPEC_ID_RE  # noqa: E402
 from trace_parse import _parse_pathmanifest  # noqa: E402
 
+READ_ONLY_TASK_TARGET = "@verify"
+
 
 CONTEXT_OPEN = "```task-context"
 CONTEXT_CLOSE = "```"
@@ -173,8 +175,8 @@ def validate_payload(
             )
             continue
         target_state = entry.get("target_state")
-        if target_state not in {"new", "mod", "del"}:
-            errors.append(f"task {task_id} target_state must be new, mod, or del")
+        if target_state not in {"new", "mod", "del", "none"}:
+            errors.append(f"task {task_id} target_state must be new, mod, del, or none")
             continue
         read_paths = entry.get("read")
         if not isinstance(read_paths, list) or not all(isinstance(path, str) for path in read_paths):
@@ -199,14 +201,20 @@ def validate_payload(
 
         record = next(record for record in records if record["task_id"] == task_id)
         task_path = record["path"]
-        manifest_tag = pathmanifest.get(task_path)
-        expected_state = {"[NEW]": "new", "[MOD]": "mod", "[DEL]": "del"}.get(manifest_tag)
-        if expected_state is None:
-            errors.append(f"task {task_id} path is absent from plan.md pathmanifest: {task_path}")
-        elif target_state != expected_state:
-            errors.append(
-                f"task {task_id} target_state {target_state!r} disagrees with plan.md {manifest_tag}: {task_path}"
-            )
+        if task_path == READ_ONLY_TASK_TARGET:
+            if not record["is_verification_only"]:
+                errors.append(f"task {task_id} uses @verify without a GATE:/VERIFY: gloss")
+            if target_state != "none":
+                errors.append(f"task {task_id} @verify target_state must be none")
+        else:
+            manifest_tag = pathmanifest.get(task_path)
+            expected_state = {"[NEW]": "new", "[MOD]": "mod", "[DEL]": "del"}.get(manifest_tag)
+            if expected_state is None:
+                errors.append(f"task {task_id} path is absent from plan.md pathmanifest: {task_path}")
+            elif target_state != expected_state:
+                errors.append(
+                    f"task {task_id} target_state {target_state!r} disagrees with plan.md {manifest_tag}: {task_path}"
+                )
         if target_state in {"mod", "del"} and task_path not in read_paths:
             errors.append(f"task {task_id} write target is not in read whitelist: {task_path}")
 
@@ -325,7 +333,7 @@ def cmd_resolve(args: argparse.Namespace) -> int:
             "task_id": record["task_id"],
             "status": "X" if record["status"] in {"x", "X"} else " ",
             "task_line": record["line"],
-            "write_paths": [record["path"]],
+            "write_paths": [] if record["path"] == READ_ONLY_TASK_TARGET else [record["path"]],
             "to_read": [
                 {
                     "path": path,

@@ -245,7 +245,7 @@
         }
       ],
       "feature_context": {
-        "mode": "required",
+        "mode": "if_active",
         "artifacts": [
           "spec"
         ]
@@ -345,7 +345,7 @@
         }
       ],
       "feature_context": {
-        "mode": "required",
+        "mode": "if_active",
         "artifacts": [
           "spec",
           "plan",

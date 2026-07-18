@@ -626,7 +626,8 @@ For reverse-engineered specs, prioritise edges that are:
 Rules:
 
 - order UJs by priority;
-- at most 2 UJs may be P1;
+- P1 journeys form the smallest coherent MVP; declare dependencies when more
+  than one P1 journey is required;
 - every UJ has Covers, priority rationale, independent test, and Done when;
 - every AC has inline `[Covers: ...]`;
 - every REQ is covered by at least one UJ/AC;

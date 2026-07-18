@@ -73,7 +73,8 @@ class TestOrderPlanPrompt(unittest.TestCase):
             check_prompt = f.read()
 
         self.assertIn("Severity measures defect impact", check_prompt)
-        self.assertIn("P0-000 (MEDIUM): no active feature", check_prompt)
+        self.assertIn("gate_target.py", check_prompt)
+        self.assertIn("P0-010 (HIGH): plan.md missing", check_prompt)
         self.assertIn("P0-002 (LOW): suspected script-pattern bug", check_prompt)
         self.assertIn("| BLOCK | any routed CRITICAL/HIGH", check_prompt)
         self.assertNotIn("CRITICAL if MVP/P1", check_prompt)

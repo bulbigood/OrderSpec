@@ -32,7 +32,8 @@ Authority:
 
 The gate never repairs inspected artifacts or chooses among conflicting ones.
 Implementation repair belongs to `/order.code`; artifact validity to its
-`*-check`; disagreement to `/order.sync-check`.
+`*-check`. When artifacts disagree, route the root defect to the owner of the
+first invalid upstream artifact; never name a command that is not registered.
 
 Direct writes are forbidden except resolved `code-report.md`. Deterministic
 gate scripts may refresh that report, write the machine ledger, and apply the
@@ -40,24 +41,28 @@ validated active-feature status. Never hand-edit generated state.
 
 ## Step 1 — Resolve Context and Feature
 
-Run first:
+Resolve context and the read-only target together:
 
 ```bash
-python3 .orderspec/framework/scripts/command_context.py resolve order.code-check --json
+python3 .orderspec/framework/scripts/command_context.py resolve order.code-check \
+  --arguments "$ARGUMENTS" --json
 ```
 
 Stop on failed/missing required context. Read all `to_read` items in returned
 order and apply `usage` and `authority` literally.
 
-If input names a feature, select one unambiguous result from
-`active_feature.py list --json` without changing active selection. Otherwise
-use `active_feature.py get --json` and `validate --json`. If no safe feature
-directory resolves, stop in chat; never create a root-level report.
+Use only the returned `target.feature_directory`, `target.feature_id`, and
+`target.base_ref`. If no safe target resolves, stop in chat; never create a
+root-level report or change active selection.
 
 Initialize the canonical report:
 
 ```bash
-python3 .orderspec/framework/scripts/setup.py code-check --json --refresh-template
+TARGET_VARS="$(python3 .orderspec/framework/scripts/gate_target.py \
+  --command order.code-check --arguments "$ARGUMENTS" --shell-vars)" || exit $?
+eval "$TARGET_VARS"
+python3 .orderspec/framework/scripts/setup.py code-check \
+  --feature-dir "$FEATURE_DIR_REL" --json --refresh-template
 ```
 
 Use only returned paths and existence flags.
@@ -97,55 +102,6 @@ The ledger deterministically enumerates normative `REQ`, `NFR`, `SC`, `INV`,
 evidence, and candidate paths. Its ID set defines completeness. Generated
 linkage proves declared mapping only, never runtime behavior.
 
-Inspect every ledger ID exactly once. Resolve one bounded packet at a time:
-
-```bash
-python3 .orderspec/framework/scripts/code_obligations.py packet \
-  --feature-dir "$FEATURE_DIR" --obligation "$OBLIGATION_ID" --json
-```
-
-Read only packet evidence paths plus already resolved project contracts. If
-reachable behavior requires another path, record it as evidence and inspect it;
-do not modify anything. Do not replace the ledger with an informal checklist.
-
-For each packet return:
-
-```json
-{
-  "obligation": "AC-001",
-  "result": "SATISFIED|VIOLATED|UNPROVEN|NOT_CHECKED",
-  "evidence": ["path:symbol — observation"],
-  "implementation_paths": ["path"],
-  "finding": null
-}
-```
-
-Write that JSON to a temporary result file, then record it through the script;
-never hand-edit generated result state:
-
-```bash
-python3 .orderspec/framework/scripts/code_obligations.py record \
-  --ledger "$FEATURE_DIR/.state/code-obligations.json" \
-  --result-file "$RESULT_FILE" --json
-```
-
-Continue until `complete: true`.
-
-Result meanings:
-
-- `SATISFIED`: available evidence agrees with the obligation;
-- `VIOLATED`: reachable code or executed evidence contradicts it;
-- `UNPROVEN`: required implementation or material evidence is missing/weak;
-- `NOT_CHECKED`: named instability or inspection limit prevented judgment.
-
-Every `VIOLATED`, material `UNPROVEN`, and every `NOT_CHECKED` requires a routed
-finding. A denied capability alone is an assurance limit, not `NOT_CHECKED`,
-when static inspection remains possible. A report containing `NOT_CHECKED`
-cannot PASS.
-
-Render only non-satisfied obligations in Coverage Exceptions; keep the complete
-ledger in `.state/code-obligations.json`.
-
 ## Step 4 — Evidence Mode and Assurance
 
 Resolve from constitution and declared topology whether tests are expected and
@@ -169,7 +125,53 @@ Record test and build commands separately with exit status and shortest decisive
 result. Missing, skipped, empty, trivially true, wrong-topology, or weak expected
 tests are `UNPROVEN`. Never mutate code/tests to obtain green evidence.
 
-## Step 5 — Semantic Inspection
+Establish and record this evidence before recording any obligation result. The
+ledger may be created first to enumerate scope, but no packet receives a final
+result until all permitted shared test/build evidence has completed.
+
+## Step 5 — Evaluate Obligation Packets
+
+Inspect every ledger ID exactly once after Step 4. Resolve one bounded packet at
+a time:
+
+```bash
+python3 .orderspec/framework/scripts/code_obligations.py packet \
+  --feature-dir "$FEATURE_DIR" --obligation "$OBLIGATION_ID" --json
+```
+
+Read only packet evidence paths plus already resolved project contracts and the
+Step 4 execution evidence. If reachable behavior requires another path, record
+it as evidence and inspect it; do not modify anything.
+
+Return one schema result and record it through `code_obligations.py record`:
+
+```json
+{
+  "obligation": "AC-001",
+  "result": "SATISFIED|VIOLATED|UNPROVEN|NOT_CHECKED",
+  "evidence": ["path:symbol — observation"],
+  "implementation_paths": ["path"],
+  "finding": null
+}
+```
+
+`SATISFIED` means all available static and executed evidence agrees;
+`VIOLATED` means reachable behavior contradicts the contract; `UNPROVEN` means
+implementation or material evidence is weak/missing; `NOT_CHECKED` means a named
+instability prevented judgment. Record each result once, continue until
+`complete: true`, and render only non-satisfied obligations in Coverage
+Exceptions. Every `VIOLATED`, material `UNPROVEN`, and `NOT_CHECKED` requires a
+routed finding; a report with `NOT_CHECKED` cannot PASS.
+
+Write each result to a temporary file and submit it unchanged:
+
+```bash
+python3 .orderspec/framework/scripts/code_obligations.py record \
+  --ledger "$FEATURE_DIR/.state/code-obligations.json" \
+  --result-file "$RESULT_FILE" --json
+```
+
+## Step 6 — Semantic Inspection
 
 For every packet, inspect only applicable surfaces connected by reachable code,
 declared mapping, or relevant diff:
@@ -216,7 +218,7 @@ fields, permissions, or query semantics without contract basis. Remove through
 `/order.code`, or define intended behavior through `/order.spec`. Direct
 constitution `MUST` violation is CRITICAL. Avoid general style/architecture review.
 
-## Step 6 — Findings and Verdict
+## Step 7 — Findings and Verdict
 
 Severity measures runtime/contract impact only:
 
@@ -228,8 +230,9 @@ Severity measures runtime/contract impact only:
 - `LOW`: minor evidence weakness or contract-adjacent residue.
 
 Generate every ID through `validate_code_report.py finding-id`. Do not assign or
-renumber IDs manually. Maximum 30 detailed findings; aggregate only LOW findings
-sharing owner, obligation, and remediation.
+renumber IDs manually. Never cap material findings. LOW findings may be
+aggregated only when owner, obligations, evidence, and remediation are preserved
+losslessly.
 
 Disposition:
 
@@ -244,7 +247,7 @@ Verdict:
 - `ROUTING_REQUIRED`: routed MEDIUM/LOW without BLOCK condition;
 - `PASS`: every ledger obligation assessed, no routed finding, no `NOT_CHECKED`.
 
-## Step 7 — Write and Finalize
+## Step 8 — Write and Finalize
 
 Fill `CODE_REPORT` using the refreshed template without changing its structure.
 Every routing entry references one finding ID and one copy-pasteable owner

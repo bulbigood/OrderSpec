@@ -22,6 +22,18 @@
 
 ---
 
+## Evidence Sequencing
+
+| Mode | Repository / Contract Evidence | Task Ordering Rule |
+|------|--------------------------------|--------------------|
+| [red-first / characterization-first / implementation-first] | [Observed test topology and reason this mode is executable] | [Tests before implementation with expected red; baseline characterization before change; or implementation before tests with explicit justification] |
+
+- Use `red-first` only when a new/changed assertion can execute and fail before implementation.
+- Use `characterization-first` for existing behavior that must be captured before change; baseline tests may pass.
+- Use `implementation-first` only when repository/project constraints make earlier executable evidence impossible; record the exact constraint.
+
+---
+
 ## Technical Context & Stack Verification
 
 | Item | Verified Value |

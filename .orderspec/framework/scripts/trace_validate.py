@@ -26,9 +26,9 @@ DISPOSITION_MAP = {
     "M13": "Route", "M18": "Route", "M19": "Route", "M20": "Route",
     "M21": "Route", "M22": "Informational", "M23": "Route", "M24": "Route",
     "M25": "Route", "M28": "Route", "M29": "Route", "M30": "Route",
-    "M31": "Route", "M32": "Route", "M33": "Route", "M34": "Route",
+    "M32": "Route", "M33": "Route", "M34": "Route",
     "M35": "Route", "M36": "Route", "M37": "Route", "M38": "Route",
-    "M39": "Route"
+    "M39": "Route", "M40": "Route"
 }
 
 def _load_specids(feature=None):
@@ -75,6 +75,31 @@ def _check_m28(spec_text, add):
     fm_errors = validate_spec_frontmatter(spec_text)
     for field, message in fm_errors:
         add("M28", "HIGH", "spec.md:frontmatter", message)
+
+
+def _check_m40_nfr_provenance(spec_text, add):
+    """MUST-level NFRs need durable provenance available to later gates."""
+    lines = spec_text.splitlines()
+    for index, line in enumerate(lines):
+        match = re.match(r"^\s*- \*\*(NFR-\d{3})\*\*:\s*(.*)$", line)
+        if not match or not re.search(r"\bMUST(?:\s+NOT)?\b", match.group(2)):
+            continue
+        block = []
+        for candidate in lines[index + 1:]:
+            if re.match(r"^\s*- \*\*[A-Z]+-\d{3}\*\*:", candidate) or candidate.startswith("## "):
+                break
+            block.append(candidate)
+        source = ""
+        for value in block:
+            source_match = re.match(r"^\s*- \*\*Source\*\*:\s*(.*?)\s*$", value)
+            if source_match:
+                source = source_match.group(1)
+                break
+        if not re.fullmatch(r"(?:user-request|`?(?:GOV|STACK|ARCH|CONV)-\d{3}`?)", source):
+            add(
+                "M40", "HIGH", f"spec.md:{index + 1}",
+                f"{match.group(1)} MUST-level NFR requires Source: user-request or a project-contract ID",
+            )
 
 
 def _check_m1(spec_text, defined_ids, add):
@@ -365,6 +390,8 @@ def _check_m5_tasks(task_refs, defined_ids, add):
 def _check_m8(task_paths, plan, add):
     manifest_paths, _ = _parse_pathmanifest(plan)
     for p in sorted(task_paths):
+        if p == "@verify":
+            continue
         if p not in manifest_paths:
             add("M8", "HIGH", "tasks.md", f"Path '{p}' used in tasks.md but not in plan.md manifest")
 
@@ -458,18 +485,6 @@ def _check_m30(spec_text, defined_ids, ac_inline_covers, add):
         is_covered = (sid in ac_covers_targets) or bool(re.search(r"covered by\s+ac-\d{3}", text))
         if not is_covered and not is_deferred:
             add("M30", "MEDIUM", "spec.md:\u00a711", f"{sid} has no AC coverage and is not marked deferred")
-
-
-def _check_m31(spec_text, add):
-    uj_p1_ids = []
-    for line in spec_text.splitlines():
-        m_uj = re.match(r"^\s*- \*\*(UJ-\d{3})\*\*", line)
-        if not m_uj:
-            continue
-        if re.search(r"Priority:\s*P1", line, re.IGNORECASE):
-            uj_p1_ids.append(m_uj.group(1))
-    if len(uj_p1_ids) > 2:
-        add("M31", "MEDIUM", "spec.md:\u00a712", f"More than 2 P1 UJs found ({len(uj_p1_ids)}): {', '.join(uj_p1_ids)}")
 
 
 def _check_m32(spec_text, add):
@@ -867,6 +882,7 @@ def cmd_validate(args):
 
     _check_m6(spec_text, add)
     _check_m28(spec_text, add)
+    _check_m40_nfr_provenance(spec_text, add)
     _check_m1(spec_text, defined_ids, add)
 
     ac_ids = {sid for sid in defined_ids if sid.startswith("AC-")}
@@ -971,7 +987,6 @@ def cmd_validate(args):
         _check_m7(task_lines, add)
 
     _check_m30(spec_text, defined_ids, ac_inline_covers, add)
-    _check_m31(spec_text, add)
     _check_m32(spec_text, add)
     _check_contract_risks(
         spec_text, if_records, section_9, if_to_acs, acceptance_sections, add

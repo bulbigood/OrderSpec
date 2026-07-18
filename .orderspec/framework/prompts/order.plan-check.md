@@ -38,9 +38,10 @@ A terminal precondition can require a BLOCK report and stop the command independ
 
 ## Command Context Bootstrap
 
-1. Resolve command context:
+1. Resolve command context and the active-only gate target together:
    ```bash
-   python3 .orderspec/framework/scripts/command_context.py resolve order.plan-check --json
+   python3 .orderspec/framework/scripts/command_context.py resolve order.plan-check \
+     --arguments "$ARGUMENTS" --json
    ```
 2. If `ok` is `false` or non-feature `missing_required` is non-empty, STOP and
    report missing required context. Missing feature artifacts are handled below
@@ -50,25 +51,18 @@ A terminal precondition can require a BLOCK report and stop the command independ
 
 ## Target Feature Resolution
 
-1. Initialize feature paths and report template:
+1. Use only `target.feature_directory` and `target.feature_id` returned by
+   Command Context Bootstrap. This gate accepts no arguments. On target failure,
+   stop in chat; no safe report path exists.
+2. Initialize the report for that exact target:
    ```bash
-   python3 .orderspec/framework/scripts/setup.py plan-check --json --refresh-template > /dev/null
-   eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
+   TARGET_VARS="$(python3 .orderspec/framework/scripts/gate_target.py \
+     --command order.plan-check --arguments "$ARGUMENTS" --shell-vars)" || exit $?
+   eval "$TARGET_VARS"
+   eval "$(python3 .orderspec/framework/scripts/setup.py plan-check \
+     --feature-dir "$FEATURE_DIR_REL" --refresh-template --shell-vars)"
    ```
-   This resolves `$FEATURE_DIR`, `$FEATURE_ID`, and other path variables, and copies the report template to `$FEATURE_DIR/plan-report.md` for you to fill.
-
-2. Validate active feature state:
-   ```bash
-   python3 .orderspec/framework/scripts/active_feature.py get --json
-   python3 .orderspec/framework/scripts/active_feature.py validate --json
-   ```
-3. If active state validation fails and a feature directory was resolved, write
-   a BLOCK report with `P0-003 (MEDIUM): active feature state invalid`, then
-   stop. If no safe report path exists, report the same finding in chat only.
-4. Do not use `active_feature.py select` or otherwise change active state.
-5. If no target is resolved, report `P0-000 (MEDIUM): no active feature` in chat
-   and stop; no report path exists.
-6. If `plan.md` is missing, write a BLOCK report with
+3. If `plan.md` is missing, write a BLOCK report with
    `P0-010 (HIGH): plan.md missing`, route to `/order.plan`, then stop.
 
 ## Upstream Gate Guard
@@ -76,11 +70,9 @@ A terminal precondition can require a BLOCK report and stop the command independ
 A plan-check MUST NOT issue PASS over a known failed spec gate.
 
 ```bash
-eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
-
 python3 .orderspec/framework/scripts/upstream_gate.py \
   --report        "$FEATURE_DIR/spec-report.md" \
-  --artifact      "$FEATURE_SPEC" \
+  --artifact      "$FEATURE_DIR/spec.md" \
   --upstream-name "spec.md" \
   --this          "/order.plan-check" \
   --build         "/order.spec" \
@@ -103,15 +95,22 @@ Run the deterministic validator read-only. State initialization and Spec-ID
 extraction belong to `/order.plan`, never to this gate:
 
 ```bash
-eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
-
 python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" lint
 python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" check-plan
 python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" check-mechanisms
-python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" validate --stage plan --json
+MECHANICAL_RESULT_FILE="$(mktemp "${TMPDIR:-/tmp}/orderspec-plan-check.XXXXXX.json")" || exit 2
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" \
+  --feature-dir "$FEATURE_DIR" validate --stage plan --json \
+  > "$MECHANICAL_RESULT_FILE"
+MECHANICAL_RC=$?
 ```
 
-The JSON output of `validate --stage plan --json` is the **ground truth** for mechanical findings, inventory, categories, matrices, and contradiction grid data.
+Exit 0 or 1 is a completed validation: exit 1 means the JSON contains blocking
+mechanical findings. Any other exit, empty output, or invalid JSON means the
+validator is unavailable. Read `$MECHANICAL_RESULT_FILE`; its JSON is the
+**ground truth** for mechanical findings, inventory, categories, matrices, and
+contradiction grid data. The temporary file is evidence transport only; do not
+write inspection output into feature state.
 You MUST import all findings exactly as provided, including their `severity` and `disposition`.
 You MUST NOT downgrade or suppress imported findings.
 
@@ -128,7 +127,7 @@ when focused evidence demonstrates that the script result is false or materially
 Read `plan.md`, `spec.md`, and `.state/mechanisms.tsv` (via `traceability.py get` / `summarize-mechanisms --json`). Perform the following checks that require LLM judgment.
 For any finding, assign disposition `Route` and create a routing block.
 
-Inspect in numeric ID order. One underlying defect gets exactly one semantic
+Inspect in the listed precedence order. One underlying defect gets exactly one semantic
 finding: choose the most specific check. P1-006 owns method/path/prefix/status
 drift; P1-007 owns executable test topology; P1-012 owns direct mechanism
 ownership and remaining interface semantics; P1-014 owns omissions across
@@ -141,6 +140,9 @@ physical boundaries. Do not duplicate one defect under overlapping checks.
 - `Disposition`: "Route"
 - `Location`: plan section, Spec ID, or mechanism row
 - `Summary`: concise description
+
+Precondition or tooling findings use `Source: "operational"` and a `P0-NNN`
+ID. They are not semantic findings and must not impersonate mechanical output.
 
 ### P1-001 Artifact Hygiene
 Check `plan.md` for unresolved placeholder tokens, a Markdown mechanism table, copied self-check checklists, or comments that are not part of the canonical plan template. Canonical template comments that document machine-readable syntax are allowed and MUST NOT be routed.
@@ -156,7 +158,9 @@ Externally visible contract drift → Route (HIGH for MVP/P1, MEDIUM otherwise).
 
 ### P1-004 Mechanism Adequacy — Documented Misuse
 For each `mechanisms.tsv` row with `coverage_kind=documented`, verify:
-- `primary_files` is `plan.md` or a repo-relative documentation artifact in the `pathmanifest` — not a source file (`.js`, `.ts`, `.py`, `.go`, `.java`, `.rb`, `.php`, `.cs`).
+- `primary_files` is `plan.md` or a repo-relative documentation artifact in the
+  `pathmanifest`, classified from its planned role and repository evidence—not
+  from a language-extension allowlist.
 - MUST-level NFRs are not marked `documented` without justification.
 - Required behavior is not marked `documented` to avoid testing.
 Violation → Route (HIGH when MVP/P1 behavior evades testing; MEDIUM otherwise). Escalate to CRITICAL only when the misuse leaves an invariant with a reachable write path unenforced or creates atomicity, security, data-loss, or data-corruption risk.
@@ -222,8 +226,21 @@ feature-flag, schema-contraction, or `[DEL]` evidence and must end in Contract.
 Missing, unsupported, or contradictory strategy evidence → Route to
 `/order.plan` (HIGH for P1/MVP, MEDIUM otherwise).
 
+### P1-016 Evidence Sequencing
+
+Verify that Evidence Sequencing selects exactly `red-first`,
+`characterization-first`, or `implementation-first` and cites repository or
+project evidence. `red-first` requires an executable pre-implementation failing
+assertion. `characterization-first` may preserve a passing baseline.
+`implementation-first` requires a concrete constraint that prevents earlier
+evidence. Missing, impossible, or unsupported sequencing → Route to
+`/order.plan` (HIGH for P1/MVP, MEDIUM otherwise).
+
 ### P1-008 Physical Grounding & Naming
-Use focused reconnaissance (hard cap ~10 files: one manifest, route registration, exemplars per touched layer, barrel/index files, test exemplar).
+Use focused reconnaissance targeting about 10 files: one manifest, route
+registration, exemplars per touched layer, barrel/index files, and a test
+exemplar. Exceed the target when a named obligation cannot otherwise be
+decided; record why.
 Verify:
 - `[MOD]` files exist; `[NEW]` files are plausible in repo structure.
 - Barrel/index files planned when needed; route mount files planned when new endpoints exist.
@@ -234,9 +251,12 @@ Missing or implausible required mount, export, route registration, or implementa
 ### P1-009 Stack, Constraints & Constitution
 Check against applicable stable IDs in `spec.md`, `Technical Context & Stack Verification` in `plan.md`, and project contracts (`constitution.md`, `stack.md`, `architecture.md`, `conventions.md`):
 - Verified facts have evidence (runtime/package versions found in manifests; test commands real).
-- `CON` constraints honored by stack and mapping decisions.
+- applicable `GOV`, `STACK`, `ARCH`, and `CONV` constraints are honored by stack
+  and mapping decisions.
 - Constitution `MUST` obligations reflected (e.g., route + validation files planned when constitution mandates them).
-Violation → Route (CRITICAL for constitution `MUST`; HIGH for a direct `CON` violation; MEDIUM when an unverified version or stack claim affects a mapping decision; LOW when the claim is cosmetic and has no implementation impact).
+Violation → Route (CRITICAL for constitution `MUST`; HIGH for a direct project
+contract violation; MEDIUM when an unverified version or stack claim affects a
+mapping decision; LOW when cosmetic only).
 
 ### P1-013 Mechanism Evidence & Runtime Closure
 For every material mechanism whose correctness depends on an existing project abstraction, runtime/deployment capability, external service, or concurrency scope, verify `Mechanism Evidence & Runtime Closure` against focused repository evidence:
@@ -294,7 +314,7 @@ Map the JSON output from `traceability.py validate --stage plan` to the template
 - `{routing_blocks}`: insert routing blocks for all findings with disposition `Route`
 - `{deferred_rows}`: `| (none) | — | — |` — plan-check defers nothing
 - `{findings_rows}`: combine mechanical findings (from `findings` array) with semantic findings (P1-xxx). Each row is a complete Markdown row: `| ID | Source | Severity | Disposition | Location | Summary |`. With no findings, use `| (none) | — | — | — | — | — |`.
-- `{coverage_taxonomy_rows}`: from `categories` object. Each row: `| Category | § | Status | Disposition |`. Example row: `| Functional Requirements | §4 | present — 10 REQs | — |`. `missing` MVP/core → Route (HIGH); `empty`/`partial` → Route (MEDIUM)
+- `{coverage_taxonomy_rows}`: from `categories` object. Each row: `| Category | § | Status | Disposition |`. Example row: `| Functional Requirements | §4 | present — 10 REQs | — |`. The validator emits only `present...` or `missing`; determine semantic incompleteness during inspection rather than inventing `empty`/`partial` states.
 - `{contradiction_grid_rows}`: from `contradiction_grid` array. Each row: `| Pair | Verdict | Reason |`. If `tension` is non-empty, render Reason as `{tension} — {reason}`.
 - `{journey_matrix_rows}`: from `matrices.uj_coverage` array. Each row: `| UJ | Priority | Covers REQs | ACs | ACs trace to REQs | Status |`.
 - `{if_matrix_rows}`: from `matrices.if_coverage` array. Each row: `| IF | Kind | Actor | Success | Failure | Covered by ACs | Status |`.
@@ -331,6 +351,23 @@ Use `/order.spec` for spec-rooted defects (contract contradiction, missing contr
 | PASS | traceability succeeded, no routed findings remain, no unresolved CRITICAL/HIGH |
 
 MVP/P1 scope is determined by user journeys marked P1 in `spec.md`.
+
+## Deterministic Report Finalization
+
+After filling the report, validate that no mechanical finding was lost or
+altered and that IDs, severities, dispositions, metrics, and verdict agree:
+
+```bash
+python3 .orderspec/framework/scripts/validate_gate_report.py \
+  "$FEATURE_DIR/plan-report.md" \
+  --mechanical "$MECHANICAL_RESULT_FILE" --json
+REPORT_RC=$?
+if [ "$REPORT_RC" -eq 0 ]; then rm -f "$MECHANICAL_RESULT_FILE"; fi
+```
+
+Do not complete while `REPORT_RC` is non-zero. Correct only the report rendering
+from the already collected mechanical and semantic evidence, then rerun the
+finalizer. Never change an artifact under inspection to make the report pass.
 
 ## Completion Response
 

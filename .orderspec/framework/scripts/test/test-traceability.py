@@ -162,17 +162,17 @@ def add_uj(spec_text, n, priority="P1"):
 
 # ── Tests ────────────────────────────────────────────────────────────────────
 
-# 1. M31 negative: 3 P1 UJs → finding
+# 1. Multiple cohesive P1 UJs are legal; semantic cohesion belongs to spec-check.
 reset_feature()
 spec = MINIMAL_SPEC
 spec = add_uj(spec, 2, "P1")
 spec = add_uj(spec, 3, "P1")
 write_spec(spec)
 rc, data = run_validate()
-if has_finding(data, "M31"):
-    ok("M31 neg: 3 P1 UJs detected")
+if not has_finding(data, "M31"):
+    ok("P1 count: 3 P1 UJs are not rejected mechanically")
 else:
-    bad("M31 neg: 3 P1 UJs not detected", f"findings={[f['check'] for f in data.get('findings',[])]}")
+    bad("P1 count: obsolete hard cap still applied", finding_msg(data, "M31"))
 
 # 2. M31 positive: 1 P1 + 1 P2 → no finding
 reset_feature()

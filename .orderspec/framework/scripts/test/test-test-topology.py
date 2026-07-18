@@ -42,6 +42,7 @@ orderspec:
 
 - **REQ-001**: System MUST support the operation.
 - **NFR-001**: System MUST preserve the documented behavior.
+  - **Source**: user-request
 - **AC-001**: [Covers: REQ-001] The operation returns the expected result.
 - **UJ-001**: Operation journey (Priority: P1)
   Covers: REQ-001, AC-001

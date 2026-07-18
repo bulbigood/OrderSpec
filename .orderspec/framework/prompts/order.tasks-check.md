@@ -3,7 +3,7 @@ orderspec:
   artifact: command_prompt
   command: order.tasks-check
   phase: check
-description: Per-stage gate validating tasks.md as a faithful, path-complete, well-ordered projection of plan.md. Deterministic validation proves structure, coverage, path completeness, cap, binding, and ID legality. The LLM judges only semantic faithfulness, dependency order, plan-selected delivery strategy, test-first discipline, and SC buildability. Pure inspector: writes only tasks-report.md.
+description: Per-stage gate validating tasks.md as a faithful, path-complete, well-ordered projection of plan.md. Deterministic validation proves structure, coverage, path completeness, cap, binding, and ID legality. The LLM judges only semantic faithfulness, dependency order, plan-selected delivery and evidence sequencing, and SC buildability. Pure inspector: writes only tasks-report.md.
 ---
 
 # OrderSpec Tasks Check
@@ -13,14 +13,15 @@ description: Per-stage gate validating tasks.md as a faithful, path-complete, we
 `/order.tasks-check` is the independent inspection gate for `tasks.md`.
 It runs after `/order.tasks` and answers: Is `tasks.md` a faithful, well-ordered projection of the decisions already made in `plan.md`?
 
-**What is already proven before this gate runs.** `/order.tasks` runs `extract-trace` as a hard write-gate (rc=3 rejects). Coverage, the ≤3-ref cap, subset-binding (ref's `primary_files` contains task path), documented/delegated legality — all settled facts. `validate --stage tasks --json` re-confirms them mechanically.
+**What is already proven before this gate runs.** `/order.tasks` runs `extract-trace` as a hard write-gate (rc=3 rejects). Coverage, the ≤3-ref cap, exact binding (ref's single `primary_files` equals task path), documented/delegated legality — all settled facts. `validate --stage tasks --json` re-confirms them mechanically.
 
 **This gate does NOT re-derive, re-count, or re-judge coverage, cap, subset-binding, or ID-legality.** Its entire value is the semantic layer no script can see:
 
 - **T1 — faithfulness**: does any task invent a decision absent from spec/plan?
 - **T2 — executable boundaries**: tasks are cohesive and `[P]` is justified.
 - **T3 — delivery ordering**: E-M-C for migration plans; no invented Contract for non-migration plans.
-- **T4 — test-first**: tests precede impl within a story.
+- **T4 — evidence sequencing**: task order and expected results match the mode
+  selected and justified by the plan.
 - **T5 — SC buildability**: buildable success criteria have tasks.
 - **T6 — evidence topology**: declared unit/integration evidence has executable test-writing tasks; a generic GATE is not evidence for a direct mechanism.
 - **T7 — upstream reroute**: when the root defect lives in plan/spec, route up.
@@ -32,7 +33,7 @@ This gate is a **pure inspector**. It writes only `tasks-report.md`. It MUST NOT
 
 Severity measures defect impact, not whether the command can continue:
 - **CRITICAL**: constitution `MUST` violation; violated or unenforced invariant with a reachable write path; atomicity, security, data-loss, or data-corruption risk.
-- **HIGH**: missing, contradicted, invented, or weakly evidenced P1/MVP obligation; missing required upstream artifact or implementation path; P1 ordering, test-first, prerequisite, or evidence-topology failure; upstream non-PASS.
+- **HIGH**: missing, contradicted, invented, or weakly evidenced P1/MVP obligation; missing required upstream artifact or implementation path; P1 ordering, evidence-sequencing, prerequisite, or evidence-topology failure; upstream non-PASS.
 - **MEDIUM**: non-P1 defect or evidence gap; unavailable or invalid operational context; stale upstream evidence; task scope or sequencing defect without critical risk.
 - **LOW**: cosmetic or organizational residue with no implementation, orchestration, or runtime impact.
 
@@ -40,9 +41,10 @@ A terminal precondition can require a BLOCK report and stop the command independ
 
 ## Command Context Bootstrap
 
-1. Resolve command context:
+1. Resolve command context and the read-only gate target together:
    ```bash
-   python3 .orderspec/framework/scripts/command_context.py resolve order.tasks-check --json
+   python3 .orderspec/framework/scripts/command_context.py resolve order.tasks-check \
+     --arguments "$ARGUMENTS" --json
    ```
 2. If `ok` is `false` or `missing_required` is non-empty, treat this as the terminal precondition `T0-011 (MEDIUM): command context unavailable` and STOP. If a report target can be resolved safely from the available context, write a BLOCK report; otherwise report the finding in chat.
 3. Read every file returned in `to_read`, in returned order.
@@ -50,34 +52,26 @@ A terminal precondition can require a BLOCK report and stop the command independ
 
 ## Target Feature Resolution
 
-1. Initialize feature paths and report template:
+1. Use only `target.feature_directory` and `target.feature_id` returned by
+   Command Context Bootstrap. On target failure, stop in chat; no safe report
+   path exists. Never select or mutate active feature state.
+2. Initialize the report for that exact target:
    ```bash
-   python3 .orderspec/framework/scripts/setup.py tasks-check --json --refresh-template > /dev/null
-   eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
+   TARGET_VARS="$(python3 .orderspec/framework/scripts/gate_target.py \
+     --command order.tasks-check --arguments "$ARGUMENTS" --shell-vars)" || exit $?
+   eval "$TARGET_VARS"
+   eval "$(python3 .orderspec/framework/scripts/setup.py tasks-check \
+     --feature-dir "$FEATURE_DIR_REL" --refresh-template --shell-vars)"
    ```
-   This resolves `$FEATURE_DIR`, `$FEATURE_ID`, and copies the report template to `$FEATURE_DIR/tasks-report.md`.
-
-2. Validate active feature state:
-   ```bash
-   python3 .orderspec/framework/scripts/active_feature.py get --json
-   python3 .orderspec/framework/scripts/active_feature.py validate --json
-   ```
-3. If active state validation fails, write BLOCK report with `T0-002 (MEDIUM): active feature state invalid`, then stop.
-4. If `$ARGUMENTS` contains an explicit feature reference, resolve it read-only using `active_feature.py list --json`.
-   - If ambiguous: write a BLOCK report with `T0-003 (MEDIUM): ambiguous feature reference`, then stop.
-   - If not found: write a BLOCK report with `T0-004 (MEDIUM): feature not found`, then stop.
-5. Do not use `active_feature.py select` in this gate.
-6. If no target is resolved, write BLOCK report with `T0-000 (MEDIUM): no active feature`, then stop.
-
-This gate MUST NOT modify `.orderspec/state/active-feature.json`.
+3. Missing `spec.md`, `plan.md`, or `tasks.md` is a terminal HIGH finding routed
+   to its owner (`/order.spec`, `/order.plan`, or `/order.tasks`). Write BLOCK
+   report and stop before upstream or semantic inspection.
 
 ## Upstream Gate Guard
 
 A tasks-check MUST NOT issue PASS over a known failed plan gate.
 
 ```bash
-eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
-
 python3 .orderspec/framework/scripts/upstream_gate.py \
   --report        "$FEATURE_DIR/plan-report.md" \
   --artifact      "$FEATURE_DIR/plan.md" \
@@ -105,10 +99,18 @@ Do not use `--force` in this gate.
 Run the deterministic validator:
 
 ```bash
-eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
-
-python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" validate --stage tasks --json
+MECHANICAL_RESULT_FILE="$(mktemp "${TMPDIR:-/tmp}/orderspec-tasks-check.XXXXXX.json")" || exit 2
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" \
+  --feature-dir "$FEATURE_DIR" validate --stage tasks --json \
+  > "$MECHANICAL_RESULT_FILE"
+MECHANICAL_RC=$?
 ```
+
+Exit 0 or 1 is a completed validation: exit 1 means the JSON contains blocking
+mechanical findings. Any other exit, empty output, or invalid JSON means the
+validator is unavailable. Read `$MECHANICAL_RESULT_FILE`; its JSON is the
+ground truth described below. The temporary file is evidence transport only;
+do not write inspection output into feature state.
 
 Validate task worker context as a second deterministic gate:
 
@@ -162,6 +164,10 @@ Semantic findings (T1-xxx through T8-xxx) must be integrated into the report's F
 - `Location`: task ID, section, or path
 - `Summary`: concise description
 
+Precondition, upstream-gate, or tooling findings use `Source: "operational"`
+and a `T0-NNN` ID. They are not semantic findings and must not impersonate
+mechanical output.
+
 ### T1. No New Decisions (faithfulness to plan)
 
 - **T1a**: Any task introducing a design decision **absent from spec and plan** (file, mechanism, library, schema field, endpoint not derivable upstream) → **Route** (HIGH for P1/MVP, MEDIUM otherwise). The gate never silently keeps or deletes an invented decision. Escalate to CRITICAL only when the invented decision violates a constitution `MUST`, leaves an invariant unenforced, or creates atomicity, security, data-loss, or data-corruption risk.
@@ -189,12 +195,16 @@ Semantic findings (T1-xxx through T8-xxx) must be integrated into the report's F
   ends with read-only Final Verification. Missing GATE, destructive work before
   it, or invented cleanup → Route to `/order.tasks` (HIGH for P1/MVP, MEDIUM otherwise).
 
-### T4. Test-First Discipline
+### T4. Evidence-Sequencing Discipline
 
-- **T4a**: Within each story phase, test tasks **precede** implementation. A test-after-implementation pair → **Route** to `/order.tasks` (HIGH for P1, MEDIUM otherwise).
+- **T4a**: Ordering must match plan Evidence Sequencing. `red-first` and
+  `characterization-first` place their evidence before implementation;
+  `implementation-first` places it after and requires the plan's explicit
+  justification. Mismatch → **Route** to `/order.tasks` (HIGH for P1, MEDIUM otherwise).
 - **T4b**: Each story phase is closed by a **Checkpoint prose line** (per `/order.tasks` rules: "Checkpoint is prose, not a task"). Missing checkpoint → **Route** to `/order.tasks` (MEDIUM).
-- **T4c**: Test tasks state the expectation to **fail first** (red). Missing red-state note → **Route** to `/order.tasks` (MEDIUM).
-- **T4d**: Inspect Setup/Expand and earlier phases for behavior already
+- **T4c**: Test tasks state the expected red, baseline, or post-implementation
+  result selected by the plan. Missing/mismatched expectation → Route (MEDIUM).
+- **T4d**: In `red-first`, inspect Setup/Expand and earlier phases for behavior already
   implemented before a later test-writing task that targets it. If that task
   cannot produce its declared red state because its model/schema/service/route
   prerequisite is already implemented, route to `/order.tasks` (HIGH for P1,
@@ -262,7 +272,7 @@ You MUST fill this template file in place. Do not invent report sections, table 
 **Body Section Variables** — map from `traceability.py validate --stage tasks` JSON:
 - `{gate_title}`: `Tasks Check`
 - `{target_doc}`: `tasks.md`
-- `{gate_focus}`: `path completeness, ordering, faithfulness, test-first discipline`
+- `{gate_focus}`: `path completeness, ordering, faithfulness, evidence sequencing`
 - `{routing_blocks}`: insert routing blocks for all findings with disposition `Route`
 - `{deferred_rows}`: `| (none) | — | — |` — tasks-check defers nothing
 - `{findings_rows}`: combine mechanical findings (from `findings` array) with semantic findings (T1-T8). Each value is a complete Markdown row: `| ID | Source | Severity | Disposition | Location | Summary |`. With no findings, use `| (none) | — | — | — | — | — |`.
@@ -305,6 +315,23 @@ Use `/order.spec` for spec-rooted defects (contract contradiction, missing decis
 | PASS | validator succeeded, no routed findings remain, no unresolved CRITICAL/HIGH |
 
 MVP/P1 scope is determined by user journeys marked P1 in `spec.md`.
+
+## Deterministic Report Finalization
+
+After filling the report, validate that no mechanical finding was lost or
+altered and that IDs, severities, dispositions, metrics, and verdict agree:
+
+```bash
+python3 .orderspec/framework/scripts/validate_gate_report.py \
+  "$FEATURE_DIR/tasks-report.md" \
+  --mechanical "$MECHANICAL_RESULT_FILE" --json
+REPORT_RC=$?
+if [ "$REPORT_RC" -eq 0 ]; then rm -f "$MECHANICAL_RESULT_FILE"; fi
+```
+
+Do not complete while `REPORT_RC` is non-zero. Correct only the report rendering
+from the already collected mechanical and semantic evidence, then rerun the
+finalizer. Never change an artifact under inspection to make the report pass.
 
 ## Completion Response
 

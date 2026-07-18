@@ -14,7 +14,8 @@ class TasksCheckPromptTests(unittest.TestCase):
     def test_severity_is_distinct_from_terminal_block(self):
         self.assertIn("## Severity Model", PROMPT)
         self.assertIn("Severity measures defect impact", PROMPT)
-        self.assertIn("T0-000 (MEDIUM): no active feature", PROMPT)
+        self.assertIn("gate_target.py", PROMPT)
+        self.assertIn("Missing `spec.md`, `plan.md`, or `tasks.md`", PROMPT)
         self.assertIn("T0-005 (HIGH): upstream plan.md missing", PROMPT)
         self.assertNotIn("CRITICAL if MVP/P1", PROMPT)
         self.assertNotIn("CRITICAL if it blocks", PROMPT)

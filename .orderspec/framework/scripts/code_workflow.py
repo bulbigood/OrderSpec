@@ -18,7 +18,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 
 from common import get_feature_paths, get_repo_root  # noqa: E402
-from task_context import load_and_validate  # noqa: E402
+from task_context import READ_ONLY_TASK_TARGET, load_and_validate  # noqa: E402
 from task_contract_context import resolve as resolve_contract, validate as validate_contracts  # noqa: E402
 from task_progress import parse_tasks  # noqa: E402
 
@@ -199,7 +199,7 @@ def packet_for(
                 }
                 for path in context["read"]
             ],
-            "write_paths": [record["path"]],
+            "write_paths": [] if record["path"] == READ_ONLY_TASK_TARGET else [record["path"]],
             "target_state": context["target_state"],
         },
         "contract_context": contract,

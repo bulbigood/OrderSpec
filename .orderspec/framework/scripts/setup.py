@@ -349,7 +349,10 @@ def cmd_spec_check(args):
         (useful for incremental edits during routing cycles).
     """
     try:
-        paths = get_feature_paths()
+        paths = get_feature_paths(
+            persist_active_feature=False,
+            feature_directory=args.feature_dir,
+        )
     except RuntimeError as e:
         die(str(e), rc=2)
 
@@ -358,15 +361,8 @@ def cmd_spec_check(args):
     spec_report = feature_dir / SPEC_REPORT_FILE
     repo_root = paths["REPO_ROOT"]
 
-    # A spec-check requires spec.md to exist.
-    if not feature_spec.is_file():
-        die(
-            f"spec.md not found: {feature_spec}\n"
-            f"Run /order.spec first to create the feature contract.",
-            rc=2,
-        )
-
-    feature_dir.mkdir(parents=True, exist_ok=True)
+    if not feature_dir.is_dir():
+        die(f"feature directory not found: {feature_dir}", rc=2)
 
     template = resolve_template(REPORT_TEMPLATE_NAME, repo_root)
 
@@ -392,6 +388,7 @@ def cmd_spec_check(args):
         "REPORT_TEMPLATE": template or "",
         "SPEC_REPORT": str(spec_report),
         "SPEC_REPORT_EXISTS": spec_report.is_file(),
+        "SPEC_EXISTS": feature_spec.is_file(),
         "REPORT_REFRESHED": bool(args.refresh_template),
     })
     output_result(payload, args)
@@ -410,7 +407,10 @@ def cmd_plan_check(args):
         (useful for incremental edits during routing cycles).
     """
     try:
-        paths = get_feature_paths(persist_active_feature=False)
+        paths = get_feature_paths(
+            persist_active_feature=False,
+            feature_directory=args.feature_dir,
+        )
     except RuntimeError as e:
         die(str(e), rc=2)
 
@@ -420,7 +420,8 @@ def cmd_plan_check(args):
     plan_report = feature_dir / "plan-report.md"
     repo_root = paths["REPO_ROOT"]
 
-    feature_dir.mkdir(parents=True, exist_ok=True)
+    if not feature_dir.is_dir():
+        die(f"feature directory not found: {feature_dir}", rc=2)
 
     template = resolve_template(REPORT_TEMPLATE_NAME, repo_root)
 
@@ -466,7 +467,10 @@ def cmd_tasks_check(args):
         (useful for incremental edits during routing cycles).
     """
     try:
-        paths = get_feature_paths()
+        paths = get_feature_paths(
+            persist_active_feature=False,
+            feature_directory=args.feature_dir,
+        )
     except RuntimeError as e:
         die(str(e), rc=2)
 
@@ -477,31 +481,8 @@ def cmd_tasks_check(args):
     tasks_report = feature_dir / "tasks-report.md"
     repo_root = paths["REPO_ROOT"]
 
-    # A tasks-check requires spec.md to exist.
-    if not feature_spec.is_file():
-        die(
-            f"spec.md not found: {feature_spec}\n"
-            f"Run /order.spec first to create the feature contract.",
-            rc=2,
-        )
-
-    # A tasks-check requires plan.md to exist.
-    if not impl_plan.is_file():
-        die(
-            f"plan.md not found: {impl_plan}\n"
-            f"Run /order.plan first to create the implementation plan.",
-            rc=2,
-        )
-
-    # A tasks-check requires tasks.md to exist.
-    if not tasks_file.is_file():
-        die(
-            f"tasks.md not found: {tasks_file}\n"
-            f"Run /order.tasks first to create the task list.",
-            rc=2,
-        )
-
-    feature_dir.mkdir(parents=True, exist_ok=True)
+    if not feature_dir.is_dir():
+        die(f"feature directory not found: {feature_dir}", rc=2)
 
     template = resolve_template(REPORT_TEMPLATE_NAME, repo_root)
 
@@ -527,6 +508,9 @@ def cmd_tasks_check(args):
         "REPORT_TEMPLATE": template or "",
         "TASKS_REPORT": str(tasks_report),
         "TASKS_REPORT_EXISTS": tasks_report.is_file(),
+        "SPEC_EXISTS": feature_spec.is_file(),
+        "PLAN_EXISTS": impl_plan.is_file(),
+        "TASKS_EXISTS": tasks_file.is_file(),
         "REPORT_REFRESHED": bool(args.refresh_template),
     })
     output_result(payload, args)
@@ -542,14 +526,18 @@ def cmd_code_check(args):
     plan.md and tasks.md are optional lifecycle inputs.
     """
     try:
-        paths = get_feature_paths(persist_active_feature=False)
+        paths = get_feature_paths(
+            persist_active_feature=False,
+            feature_directory=args.feature_dir,
+        )
     except RuntimeError as e:
         die(str(e), rc=2)
 
     feature_dir = Path(paths["FEATURE_DIR"])
     code_report = feature_dir / CODE_REPORT_FILE
     repo_root = paths["REPO_ROOT"]
-    feature_dir.mkdir(parents=True, exist_ok=True)
+    if not feature_dir.is_dir():
+        die(f"feature directory not found: {feature_dir}", rc=2)
 
     template = resolve_template(CODE_REPORT_TEMPLATE_NAME, repo_root)
     if not template or not Path(template).is_file():
@@ -716,6 +704,7 @@ def main():
         action="store_true",
         help="Regenerate spec-report.md from the resolved report template even if it already exists",
     )
+    spec_check_parser.add_argument("--feature-dir", help="resolved feature directory; never changes active state")
 
     plan_check_parser = subparsers.add_parser("plan-check", help="Setup for /order.plan-check")
     plan_check_parser.add_argument(
@@ -733,6 +722,7 @@ def main():
         action="store_true",
         help="Regenerate plan-report.md from the resolved report template even if it already exists",
     )
+    plan_check_parser.add_argument("--feature-dir", help="resolved feature directory; never changes active state")
 
     tasks_check_parser = subparsers.add_parser("tasks-check", help="Setup for /order.tasks-check")
     tasks_check_parser.add_argument(
@@ -750,6 +740,7 @@ def main():
         action="store_true",
         help="Regenerate tasks-report.md from the resolved report template even if it already exists",
     )
+    tasks_check_parser.add_argument("--feature-dir", help="resolved feature directory; never changes active state")
 
     code_check_parser = subparsers.add_parser("code-check", help="Setup for /order.code-check")
     code_check_parser.add_argument(
@@ -767,6 +758,7 @@ def main():
         action="store_true",
         help="Regenerate code-report.md from the resolved code report template",
     )
+    code_check_parser.add_argument("--feature-dir", help="resolved feature directory; never changes active state")
 
     args = parser.parse_args()
 

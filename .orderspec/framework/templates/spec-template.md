@@ -91,6 +91,7 @@ Keep this section concise. Maximum 5–10 paragraphs.
 Do not invent quantitative thresholds. Do not mention technology names, library names, versions, file paths, class names, plugins, or query syntax. Use §6 for project contract ID references. -->
 
 - **NFR-001**: System MUST [measurable non-functional requirement only if user/project supplied the threshold].
+  - **Source**: [valid `GOV/STACK/ARCH/CONV-NNN` or `user-request`]
 - **NFR-002**: System SHOULD [qualitative non-functional expectation].
 
 ---

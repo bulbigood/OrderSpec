@@ -17,9 +17,10 @@ This command acts as **semantic glue** between deterministic scripts. It does no
 
 ## Command Context Bootstrap
 
-1. Resolve command context:
+1. Resolve command context and the read-only gate target together:
    ```bash
-   python3 .orderspec/framework/scripts/command_context.py resolve order.spec-check --json
+   python3 .orderspec/framework/scripts/command_context.py resolve order.spec-check \
+     --arguments "$ARGUMENTS" --json
    ```
 2. If `ok` is `false` or `missing_required` is non-empty, STOP and report missing required context.
 3. Read every file returned in `to_read`, in returned order.
@@ -27,36 +28,38 @@ This command acts as **semantic glue** between deterministic scripts. It does no
 
 ## Target Feature Resolution
 
-1. Initialize feature paths and report template:
+1. Use only `target.feature_directory` and `target.feature_id` returned by
+   Command Context Bootstrap. If target resolution failed, stop in chat; no safe
+   report path exists. Never select or mutate active feature state.
+2. Initialize the report for that exact target:
    ```bash
-   python3 .orderspec/framework/scripts/setup.py spec-check --json --refresh-template > /dev/null
-   eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
+   TARGET_VARS="$(python3 .orderspec/framework/scripts/gate_target.py \
+     --command order.spec-check --arguments "$ARGUMENTS" --shell-vars)" || exit $?
+   eval "$TARGET_VARS"
+   eval "$(python3 .orderspec/framework/scripts/setup.py spec-check \
+     --feature-dir "$FEATURE_DIR_REL" --refresh-template --shell-vars)"
    ```
-   This resolves `$FEATURE_DIR`, `$FEATURE_ID`, and other path variables, and copies the report template to `$FEATURE_DIR/spec-report.md` for you to fill.
-
-2. Validate active feature state:
-   ```bash
-   python3 .orderspec/framework/scripts/active_feature.py get --json
-   python3 .orderspec/framework/scripts/active_feature.py validate --json
-   ```
-3. If active state validation fails, write BLOCK report with `S0-003 (HIGH): active feature state invalid`, then stop.
-4. If `$ARGUMENTS` contains an explicit feature reference, resolve it read-only using `active_feature.py list --json`.
-   - If ambiguous: `S0-004 (HIGH): ambiguous feature reference`.
-   - If not found: `S0-005 (HIGH): feature not found`.
-5. Do not use `active_feature.py select` in this gate.
-6. If no target is resolved, write BLOCK report with `S0-000 (HIGH): no active feature`.
+3. If `SPEC_EXISTS` is false, write `S0-001 (HIGH): spec.md missing`, route
+   `/order.spec`, finalize a BLOCK report, and stop.
 
 ## Mechanical Validation
 
 Run the deterministic validator:
 
 ```bash
-python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" init
-python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" extract-spec-ids
-python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" validate --stage spec --json
+MECHANICAL_RESULT_FILE="$(mktemp "${TMPDIR:-/tmp}/orderspec-spec-check.XXXXXX.json")" || exit 2
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" \
+  --feature-dir "$FEATURE_DIR" validate --stage spec --json \
+  > "$MECHANICAL_RESULT_FILE"
+MECHANICAL_RC=$?
 ```
 
-The JSON output is the **ground truth** for mechanical findings, inventory, categories, matrices, and contradiction grid data.
+Exit 0 or 1 is a completed validation: exit 1 means the JSON contains blocking
+mechanical findings. Any other exit, empty output, or invalid JSON means the
+validator is unavailable. Read `$MECHANICAL_RESULT_FILE`; its JSON is the
+**ground truth** for mechanical findings, inventory, categories, matrices, and
+contradiction grid data. The temporary file is evidence transport only; never
+write gate evidence into feature state.
 You MUST import all findings exactly as provided, including their `severity` and `disposition`.
 You MUST NOT downgrade or suppress imported findings.
 
@@ -82,6 +85,9 @@ by the mechanical finding.
 - `Location`: spec section or ID
 - `Summary`: concise description
 
+Precondition or tooling findings use `Source: "operational"` and an `S0-NNN`
+ID. They are not semantic findings and must not impersonate mechanical output.
+
 ### S1-001 REQ Contradictions
 Verify no REQ contradicts another REQ, INV, or project contract constraint.
 MVP/core contradiction → Route (HIGH). Use CRITICAL only when no coherent
@@ -105,7 +111,10 @@ MUST-level or core contradiction → Route (HIGH). SHOULD-level, advisory, or
 non-core contradiction → Route (MEDIUM).
 
 ### S1-005 Quantitative NFR Hallucination
-For each quantitative NFR threshold, verify it appears in user input or project contracts.
+For each quantitative NFR threshold, require explicit provenance in its NFR
+record: a valid project-contract ID or `user-request`. Validate project IDs
+against loaded contracts. The gate cannot independently reconstruct historical
+user input; absent or contradictory provenance is the defect.
 Unsourced threshold used as a MUST, acceptance boundary, or core constraint →
 Route (HIGH). Unsourced SHOULD/advisory threshold → Route (MEDIUM).
 
@@ -244,6 +253,23 @@ Map the JSON output from `traceability.py validate` to the template variables:
 | BLOCK | any routed CRITICAL/HIGH; traceability failure; spec missing |
 | ROUTING_REQUIRED | no routed CRITICAL/HIGH, but at least one routed MEDIUM/LOW |
 | PASS | traceability succeeded and no routed findings remain |
+
+## Deterministic Report Finalization
+
+After filling the report, validate that no mechanical finding was lost or
+altered and that IDs, severities, dispositions, metrics, and verdict agree:
+
+```bash
+python3 .orderspec/framework/scripts/validate_gate_report.py \
+  "$FEATURE_DIR/spec-report.md" \
+  --mechanical "$MECHANICAL_RESULT_FILE" --json
+REPORT_RC=$?
+if [ "$REPORT_RC" -eq 0 ]; then rm -f "$MECHANICAL_RESULT_FILE"; fi
+```
+
+Do not complete while `REPORT_RC` is non-zero. Correct only the report rendering
+from the already collected mechanical and semantic evidence, then rerun the
+finalizer. Never change an artifact under inspection to make the report pass.
 
 ## Completion Response
 

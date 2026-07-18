@@ -86,8 +86,9 @@ expect(
     "order.code forbids marker-result laundering and retries",
 )
 expect(
-    "Green-first is a `/order.tasks`" in normalized_code_prompt,
-    "order.code stops on green-first test tasks",
+    "plan Evidence Sequencing" in code_prompt
+    and "never manufacture a red state" in code_prompt,
+    "order.code enforces the plan-selected evidence result",
 )
 expect("`VERIFY:` and `GATE:`" in code_prompt, "order.code defines read-only command gates")
 expect("Phase verification must pass" in code_prompt, "order.code enforces phase verification")
@@ -130,12 +131,13 @@ expect(
     "order.tasks supplies exact contract context to support paths",
 )
 expect(
-    "Every test-writing task's own gloss MUST state the expected red result" in tasks_prompt
-    and "expect failure before implementation:" in tasks_template,
-    "order.tasks makes red-first expectation task-local in prompt and template",
+    "Test-writing tasks state the expected" in tasks_prompt
+    and "expected red/baseline/post-implementation result" in tasks_template,
+    "order.tasks makes plan-selected evidence expectation task-local",
 )
 expect(
-    "command-only lint/typecheck task MUST begin with `VERIFY:`" in tasks_prompt
+    "command-only lint/typecheck" in tasks_prompt
+    and "begins with `VERIFY:`" in tasks_prompt
     and "forbid autofix/writes" in tasks_template,
     "order.tasks makes final command verification explicitly read-only",
 )

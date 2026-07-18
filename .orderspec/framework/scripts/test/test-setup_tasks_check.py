@@ -40,8 +40,8 @@ def test_tasks_check_function_exists():
     print("PASS: cmd_tasks_check function exists")
 
 
-def test_tasks_check_blocks_without_tasks():
-    """Test that tasks-check blocks when tasks.md is missing."""
+def test_tasks_check_reports_without_tasks():
+    """Test that tasks-check creates a report when tasks.md is missing."""
     WORK = Path(tempfile.mkdtemp(prefix="orderspec-tc-test-"))
     try:
         (WORK / ".orderspec" / "framework" / "templates").mkdir(parents=True, exist_ok=True)
@@ -61,11 +61,14 @@ def test_tasks_check_blocks_without_tasks():
         env = os.environ.copy()
         env["ORDERSPEC_ROOT"] = str(WORK)
         result = subprocess.run(
-            [sys.executable, str(Path(__file__).resolve().parent / "setup.py"), "tasks-check", "--json"],
+            [sys.executable, str(Path(__file__).resolve().parent.parent / "setup.py"), "tasks-check", "--json"],
             capture_output=True, text=True, env=env, cwd=str(WORK),
         )
-        assert result.returncode == 2, f"Expected rc=2, got {result.returncode}"
-        print("PASS: tasks-check blocks without tasks.md")
+        assert result.returncode == 0, f"Expected rc=0, got {result.returncode}: {result.stderr}"
+        data = json.loads(result.stdout)
+        assert data["TASKS_EXISTS"] is False
+        assert (fdir / "tasks-report.md").is_file()
+        print("PASS: tasks-check reports without tasks.md")
     finally:
         shutil.rmtree(WORK, ignore_errors=True)
 
@@ -75,7 +78,7 @@ if __name__ == "__main__":
         test_tasks_check_constants_exist()
         test_tasks_check_function_exists()
         test_tasks_check_subparser_registered()
-        test_tasks_check_blocks_without_tasks()
+        test_tasks_check_reports_without_tasks()
         print("\nAll tests passed!")
         sys.exit(0)
     except AssertionError as e:

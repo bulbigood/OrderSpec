@@ -25,7 +25,7 @@
             }
           },
           "target_state": {
-            "enum": ["new", "mod", "del"]
+            "enum": ["new", "mod", "del", "none"]
           },
           "contract_refs": {
             "description": "Optional exact spec IDs needed by this task in addition to coverage refs on the task line.",

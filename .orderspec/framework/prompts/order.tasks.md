@@ -118,9 +118,6 @@ Determine mode before writing any file. State the mode in chat.
 3.  **Existing/Stop** — `tasks.md` already exists, `$ARGUMENTS` is empty, and
     neither an active self-gate finding nor open feedback selects Refine → STOP:
 
-A blocking self-gate selects Refine even when `$ARGUMENTS` is empty. Open
-workflow feedback has the same effect.
-
 ```text
 TASKS_STOPPED: tasks.md already exists
   - To verify the current tasks: /order.tasks-check
@@ -135,10 +132,7 @@ Check the upstream plan gate.
 ```bash
 eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 
-FORCE_FLAG=""
-case "$ARGUMENTS" in
-  *"--force-upstream"*) FORCE_FLAG="--force" ;;
-esac
+FORCE_FLAG="$(python3 -c 'import shlex,sys; print("--force" if "--force-upstream" in shlex.split(sys.argv[1]) else "")' "$ARGUMENTS")"
 
 python3 .orderspec/framework/scripts/upstream_gate.py \
   --report        "$FEATURE_DIR/plan-report.md" \
@@ -244,7 +238,7 @@ This emits `spec_id  coverage_kind  mechanism  primary_files  test_type`. Obey `
 
 Each mechanism BINDS the task that FIRST creates the affected function — fold it into that task's paraphrase. NEVER schedule a later task that retrofits a mechanism into existing code.
 
-**A direct ref means "this mechanism is realized OR exercised in THIS task's `path`" — not "this ID needed a home to satisfy coverage".** A direct mechanism whose `primary_files` is an implementation file (model/service/controller/route) belongs on the IMPLEMENTATION task that writes that file — NOT on a verification/GATE/test task. Do NOT move a direct ID onto an unrelated task merely to clear an "uncovered" rejection: that is ID-parking, and it makes `traceability.md` lie about where the behavior lives. If a direct ID has nowhere to go within the 3-ref cap, that is the signal to add a task for its primary_files, not to park it elsewhere (see Granularity: god-file split). This is now MACHINE-ENFORCED: `extract-trace` rejects (rc=3) any ref whose mechanism's `primary_files` does not contain that task's path, so ID-parking fails the build rather than silently corrupting `traceability.md`.
+**A direct ref means "this mechanism is realized OR exercised in THIS task's `path`" — not "this ID needed a home to satisfy coverage".** A direct mechanism whose `primary_files` is an implementation file (model/service/controller/route) belongs on the IMPLEMENTATION task that writes that file — NOT on a verification/GATE/test task. Do NOT move a direct ID onto an unrelated task merely to clear an "uncovered" rejection: that is ID-parking, and it corrupts the trace projection. If a direct ID has nowhere to go within the 3-ref cap, that is the signal to add a task for its `primary_files`, not to park it elsewhere (see Granularity: god-file split). This is MACHINE-ENFORCED: `extract-trace` rejects (rc=3) any ref whose single `primary_files` value does not equal that task's path.
 
 ### Test Topology Binding
 
@@ -281,7 +275,8 @@ Use these as building blocks for Step 9 (Write `tasks.md`):
 2. Add `[USn]` from user-story mapping. Omit `[P]` by default; add it only when
    the plan explicitly establishes both file-disjointness and dependency independence.
 3. Refine `gloss_hint` into a ≤15-word gloss.
-4. Add a GATE task at the end (path = test file from manifest, refs = empty, gloss = "GATE: run [test command]...").
+4. Add a read-only GATE task at the end (`path = @verify`, refs empty, gloss
+   `GATE: run [test command]...`).
 5. Add any missing infra tasks (barrels, fixtures) that the tool didn't suggest.
 
 ### Step 8: Build Sequencing Inventory
@@ -313,16 +308,22 @@ template or from memory.
 - **Phase 1 — Setup & Expand** (all changes non-breaking):
   - *if persistent storage*: additive migrations with rollback scripts (Spec § Data Model).
   - *if interfaces (API/CLI/UI)*: contract/route/DTO/command stubs (Spec § Contracts).
-  - passive model entities only when no later test-writing task is expected to
-    observe their absence. If a story test covers model/schema behavior, put
-    that test before the model/schema implementation; do not pre-implement the
-    behavior in Expand.
+  - passive model entities only when their placement agrees with plan Evidence
+    Sequencing. In `red-first`, do not establish behavior a later test must
+    observe as absent. In `characterization-first`, preserve the baseline the
+    earlier test records. In `implementation-first`, cite the plan's explicit
+    constraint before placing implementation ahead of evidence.
   - environment setup only when `plan.md` declares a repository-owned artifact
     such as a compose file, fixture, or configuration. Operator recovery actions
     remain approval-gated implementation preflight, not hidden tasks.
 - **Phase 2+ — Migrate**: US1 (P1, MVP) first, then one phase per remaining UJ in priority order.
   Within each story phase:
-  1. Test-writing tasks first (carry that story's `AC-NNN` refs; MUST fail before implementation). Every test-writing task's own gloss MUST state the expected red result, for example `expect failure before implementation: ...`. A phase heading or surrounding prose does not satisfy this task-local instruction. Split into multiple sequential test tasks on the same file if ACs exceed the 3-ref cap (see test-file split rule).
+  1. Apply the plan's Evidence Sequencing mode. In `red-first`, test-writing
+     tasks precede implementation and their gloss states the expected failure.
+     In `characterization-first`, baseline tests precede change and state the
+     expected baseline result. In `implementation-first`, tests follow the
+     implementation and carry the plan's justification. Split test tasks when
+     ACs exceed the 3-ref cap.
   2. Data layer → service logic → wiring to contracts.
   3. `EDGE-NNN` for this story.
   4. Emit a **Verification** prose line with the exact permitted test command and asserted AC/INV IDs, then a **Checkpoint** prose line: story independently functional and backwards-compatible. Neither line is a task; `/order.code` executes the declared Verification command at the phase barrier.
@@ -333,10 +334,12 @@ template or from memory.
   the cleanup transitions declared by the plan.
 - **Final Verification**: for a non-migration work order, end with the same
   read-only GATE/VERIFY evidence but no invented cleanup task.
-  **GATE task path**: the GATE task's `path` field MUST be a test file path listed in `plan.md` pathmanifest (e.g. `tests/integration/task.test.js`). The test command (e.g. `npm test`) goes in the gloss. This keeps `path` machine-valid against the manifest (check M8) without special-casing commands as paths.
-  **Verification-only command task**: prefix gloss with `VERIFY:` and use any
-  relevant path from the plan pathmanifest only for machine binding. This task
-  is read-only and reports `changed_files: []`. Its command MUST NOT use an
+  **Read-only task target**: `GATE:` and command-only `VERIFY:` tasks use the
+  reserved field-2 target `@verify`, empty refs, and `target_state: "none"`.
+  `@verify` is a task type marker, not a repository path; its packet has
+  `write_paths: []`.
+  **Verification-only command task**: prefix gloss with `VERIFY:` and use the
+  `@verify` target. This task is read-only and reports `changed_files: []`. Its command MUST NOT use an
   autofix/write option. On failure, `/order.code` stops; it never edits files
   or disguises changes under the binding path. Formatting compliance must be
   achieved by each earlier file-owning implementation task.
@@ -355,12 +358,17 @@ exactly four fields and exactly three ` | ` separators. Emit EXACTLY:
    third field: `... | path |  | gloss`. NEVER invent a ref to give a task a home.
   **AC refs belong on test-WRITING tasks** (the task that writes the test code exercising that AC), NOT on verification/GATE tasks. Verification/GATE tasks carry EMPTY refs and list asserted AC/INV IDs in the gloss. Coverage of an AC is proven by the test-writing task that creates its test, not by the verification task that runs the suite.
   A story-phase task may also have empty refs when no direct mechanism has this task's exact path in `primary_files` (for example, unit evidence tasks, controller support tasks, or wiring tasks). Do not invent or park a ref only to satisfy the `[USn]` marker; ref presence is required only on story tasks that own a direct mechanism path.
-4. gloss — ≤15-word paraphrase. Free text, never grepped (so prose like "see AC-999" is safe). Every test-writing task MUST include an explicit red-first instruction in this field, such as `expect failure before implementation: ...`; do not rely on its section heading. A command-only lint/typecheck task MUST begin with `VERIFY:`, forbid automatic writes/autofix, and route or stop on violations.
+4. gloss — ≤15-word paraphrase. Free text. Test-writing tasks state the expected
+   result required by plan Evidence Sequencing. A command-only lint/typecheck
+   task begins with `VERIFY:`, forbids automatic writes/autofix, and routes or
+   stops on violations.
 
 **Constraints the tool ENFORCES** (any violation fails `extract-trace` with rc=3, file untouched):
 
 - `primary_files` in `mechanisms.tsv` is a single path per row (TSV, same format as `spec-ids.tsv`). A declared ref is valid iff the ref's `primary_files` equals this task's exact `path`.
-- Subset binding: a DECLARED ref MUST be a direct mechanism whose `primary_files` (in `mechanisms.tsv`) CONTAINS this task's exact path. A ref attached to a path that does not realize/exercise it (e.g. `REQ-001` on `src/models/index.js` when `REQ-001`'s `primary_files` is `task.model.js`) is a filler/mis-attribution and is REJECTED. This makes ID-parking structurally impossible — you cannot satisfy coverage by relocating a ref onto a barrel/verify/GATE line.
+- Exact binding: a DECLARED ref MUST be a direct mechanism whose single
+  `primary_files` value EQUALS this task's exact path. A ref attached elsewhere
+  is rejected as filler/mis-attribution.
 - `documented` IDs MUST NOT appear as refs (`plan.md` row only). Tasking one → rejected.
 - `delegated:<ID>` IDs MUST NOT appear as refs — task `<ID>` (the delegate) instead → rejected.
 - Atomicity cap: at most 3 spec IDs in field 3. 4+ refs = kitchen-sink defect, REJECTED. No GATE exemption — assert extra IDs in the gloss or split lines.
@@ -375,10 +383,10 @@ exactly four fields and exactly three ` | ` separators. Emit EXACTLY:
 - BAD: `- [ ] T012 [US1] | src/a.js | REQ-001, AC-002 | ...` (space in refs → rejected)
 - BAD: `- [ ] T020 [US1] | src/x.js | REQ-003,REQ-004,REQ-005,REQ-006 | does everything` (4 refs → rejected)
 - BAD: `- [ ] T003 | src/models/index.js | REQ-001 | barrel` (`REQ-001`'s `primary_files` is the model file, NOT `index.js` → filler/mis-attributed ref → rejected rc=3; leave refs EMPTY instead)
-- OK:  `- [ ] T099 | package.json |  | VERIFY: run npm run lint; no autofix`
+- OK:  `- [ ] T099 | @verify |  | VERIFY: run project lint command; no autofix`
 
 `[USn]` is required on story-phase tasks (1:1 with `UJ-00n`), including valid no-ref support tasks; omitted in Setup/Expand and Contract. A no-ref story task is valid when its exact path is not a direct mechanism's `primary_files` path.
-For endpoint tasks, fold non-2xx semantics from Spec § API Contracts into the gloss (e.g. `404 if task never existed including soft-deleted`).
+For interface tasks, fold contracted failure semantics into the gloss.
 
 ### Task Context Block
 
@@ -403,7 +411,8 @@ entry for every task ID. For each task, `target_state` MUST copy the status of
 its path from `plan.md` (`new` for `[NEW]`, `mod` for `[MOD]`, `del` for
 `[DEL]`). `read` MUST contain the exact existing repo-relative files the worker
 needs to inspect, in read order, including a `mod` or `del` task write target.
-A `[NEW]` write target is not included until it exists. Do not list
+A `[NEW]` write target is not included until it exists. A read-only `@verify`
+entry uses `target_state: "none"`. Do not list
 directories, globs, or broad repository scans.
 Do not include Markdown unless it is the task's own write target. Derive the
 list from the task objective, `plan.md`, and targeted source inspection. An
@@ -449,11 +458,12 @@ Acceptance Criteria). Mention Contract only for a migration work order.
 - **No stub-then-implement**: never create a file with empty/stub methods early to fill later; its FIRST task carries real implementation. (Exception: contract boundaries `plan.md` explicitly marks as stubs.) A file appearing in two phases where the earlier says "stub"/"skeleton" is a defect.
 - **God-file split (resolves cap-vs-coverage pressure)**: when one `primary_files` carries MORE than 3 direct mechanisms (a "god file" like a central service), do NOT cram them into one task and do NOT park the overflow on verify/GATE tasks. Split into several IMPLEMENTATION tasks on the SAME path, each grouping ≤3 cohesive mechanisms by behavior (e.g. one task for create+list+get, another for update+soft-delete, another for atomic-audit+error-wrapping). These same-file tasks are sequential (NOT `[P]` — they share a file) and each carries the direct IDs it actually implements. This keeps every direct ID on the task that realizes it AND stays under the cap.
 - **Test-file split (mirror of god-file split, for test files)**: when one test `primary_files` carries MORE than 3 direct ACs, do NOT cram them into one task. Split into several TEST-WRITING tasks on the SAME test path, each carrying ≤3 ACs grouped by behavior (e.g. one task for create+list tests, another for update tests, another for soft-delete tests). These same-file test tasks are sequential (NOT `[P]` — they share a file) and each carries the AC IDs it actually exercises.
-- **Red-state prerequisite closure**: no Setup/Expand or earlier story task may
+- **Evidence-sequencing closure**: in `red-first`, no Setup/Expand or earlier story task may
   establish behavior that a later test-writing task is supposed to prove
   missing. Move that test earlier or move implementation later. Every declared
-  test-writing task must have an executable expected red state and state that
-  expectation in its own gloss.
+  test-writing task must have an executable expected red state. Apply the
+  distinct expectations recorded by `characterization-first` or
+  `implementation-first` without inventing a red state.
 - **Barrel/index exception**: registering multiple same-phase entities into barrel/index files is ONE task listing all of them — not one per file.
 - **Cross-cutting test tasks**: tests spanning multiple UJs (e.g. shared unauthenticated-access tests) omit the `[USn]` marker. Place them in the phase of their primary UJ or in the Final Phase before GATE. They carry AC refs normally (≤3 per line). A cross-cutting AC (e.g. AC-018 covering both GET and PATCH 404) is covered by placing its ref on ONE test-writing task whose path equals the AC's `primary_files` — no duplication needed; double coverage is not penalized.
 - Task IDs MAY have gaps (e.g. T005, T010, T015) — gaps are legal and reduce churn when inserting tasks. Only duplicate IDs are rejected.
@@ -486,7 +496,8 @@ python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$F
 - `[P]` is absent unless the plan explicitly proves both file-disjointness and
   dependency independence; adjacent `[P]` tasks never touch the same path.
 - Each task's prerequisites precede it.
-- US1 alone is a viable, independently testable MVP.
+- Every P1 journey and its declared dependencies form the minimal MVP; do not
+  assume US1 alone is sufficient when multiple P1 journeys exist.
 
 If you change any task line, re-run `extract-trace`.
 
@@ -603,7 +614,7 @@ Report to chat:
 - [ ] Every `[NEW]`/`[MOD]`/`[DEL]` path is tasked; no task path lies outside the manifest
 - [ ] `extract-trace` exited 0; no hand-built coverage/files matrix was authored
 - [ ] Sequential execution is correct; `[P]` appears only with explicit plan evidence of path and dependency independence
-- [ ] Test tasks are red-first and precede implementation; checkpoints are prose; GATE/`VERIFY:` tasks are read-only with empty refs
+- [ ] Test ordering follows plan Evidence Sequencing; checkpoints are prose; GATE/`VERIFY:` tasks use `@verify`, empty refs, and no write paths
 - [ ] Buildable SCs, prerequisites, environment boundaries, and plan-declared recovery constraints are preserved
 - [ ] `task_context.py` and `task_contract_context.py` passed with minimal exact read/contract context
 - [ ] `validate --stage tasks` has no blocking findings

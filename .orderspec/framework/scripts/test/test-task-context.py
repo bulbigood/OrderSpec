@@ -141,6 +141,22 @@ with tempfile.TemporaryDirectory(prefix="orderspec-task-context-") as temp:
 
     write_tasks(
         feature,
+        json.dumps({"version": 1, "tasks": {"T001": {"read": ["src/input.py"], "target_state": "none"}}}),
+        "- [ ] T001 | @verify |  | VERIFY: run project check without writes",
+    )
+    rc, data = run(root, "resolve", "--feature-dir", str(feature), "--task-id", "T001")
+    expect(rc == 0 and data["write_paths"] == [], "@verify resolves to an empty write set")
+
+    write_tasks(
+        feature,
+        json.dumps({"version": 1, "tasks": {"T001": {"read": [], "target_state": "none"}}}),
+        "- [ ] T001 | @verify |  | mutate implementation",
+    )
+    rc, data = run(root, "validate", "--feature-dir", str(feature))
+    expect(rc != 0 and "without a GATE:/VERIFY:" in " ".join(data["validation_errors"]), "@verify rejects write-task glosses")
+
+    write_tasks(
+        feature,
         json.dumps({"version": 1, "tasks": {"T001": {"read": ["src/input.py"], "target_state": "mod"}}}),
         "- [ ] T001 | src/existing.py |  | update existing implementation",
     )

@@ -267,13 +267,14 @@ def persist_feature_json(repo_root, feature_dir_value):
 
 # ── feature paths ────────────────────────────────────────────────────────────
 
-def get_feature_paths(persist_active_feature=True):
+def get_feature_paths(persist_active_feature=True, feature_directory=None):
     """Resolve all feature paths as a dict.
 
     Resolution priority for the feature directory:
-      1. `SPECIFY_FEATURE_DIRECTORY` env var (explicit override)
-      2. `.orderspec/state/active-feature.json` `feature_directory` key
-      3. Error
+      1. explicit ``feature_directory`` argument;
+      2. `SPECIFY_FEATURE_DIRECTORY` env var (legacy explicit override);
+      3. `.orderspec/state/active-feature.json` `feature_directory` key;
+      4. Error.
 
     Returns a dict with keys:
       REPO_ROOT, CURRENT_BRANCH, FEATURE_DIR, FEATURE_SPEC,
@@ -284,7 +285,7 @@ def get_feature_paths(persist_active_feature=True):
     repo_root = get_repo_root()
     current_branch = get_current_branch()
 
-    specify_feature_dir = os.environ.get("SPECIFY_FEATURE_DIRECTORY")
+    specify_feature_dir = feature_directory or os.environ.get("SPECIFY_FEATURE_DIRECTORY")
 
     if specify_feature_dir:
         feature_dir = Path(specify_feature_dir)
@@ -292,8 +293,8 @@ def get_feature_paths(persist_active_feature=True):
             feature_dir = repo_root / feature_dir
         feature_dir = feature_dir.resolve()
 
-        # Persist to active-feature state so future sessions without the env var work.
-        # Callers that must be read-only, such as `setup.py paths`, disable this.
+        # Persist only when the caller explicitly owns active-feature selection.
+        # Gate/setup callers pass persist_active_feature=False.
         if persist_active_feature:
             persist_active_feature_state(repo_root, specify_feature_dir)
     else:

@@ -575,14 +575,14 @@ def materialize(
     }
 
 
-def resolve_active_feature_directory(root: Path) -> Path | None:
+def resolve_active_feature_directory(root: Path, explicit_directory: str | None = None) -> Path | None:
     """Resolve active feature directory without mutating runtime state.
 
     Command context resolution runs before command-specific path setup. It uses
     the same two read-only sources as `setup.py paths`: explicit environment
     override first, then active-feature state.
     """
-    raw_value = os.environ.get("SPECIFY_FEATURE_DIRECTORY")
+    raw_value = explicit_directory or os.environ.get("SPECIFY_FEATURE_DIRECTORY")
 
     if not raw_value:
         state_path = root / ".orderspec" / "state" / "active-feature.json"
@@ -615,6 +615,7 @@ def resolve_feature_context(
     root: Path,
     feature_context: dict[str, Any] | None,
     command: str,
+    feature_directory: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Materialize active feature artifacts declared by command context.
 
@@ -627,7 +628,7 @@ def resolve_feature_context(
 
     mode = feature_context["mode"]
     artifacts = feature_context["artifacts"]
-    feature_dir = resolve_active_feature_directory(root)
+    feature_dir = resolve_active_feature_directory(root, feature_directory)
     summary: dict[str, Any] = {
         "mode": mode,
         "artifacts": artifacts,
@@ -744,6 +745,7 @@ def resolve_with_normalized_manifest(
     root: Path,
     normalized_manifest: dict[str, Any],
     command: str,
+    feature_directory: str | None = None,
 ) -> dict[str, Any]:
     commands = normalized_manifest.get("commands", {})
 
@@ -781,6 +783,7 @@ def resolve_with_normalized_manifest(
             root,
             feature_context,
             command,
+            feature_directory,
         )
     except ValueError as exc:
         result["ok"] = False
@@ -837,7 +840,7 @@ def resolve_with_normalized_manifest(
     return result
 
 
-def resolve_command(root: Path, command: str) -> dict[str, Any]:
+def resolve_command(root: Path, command: str, feature_directory: str | None = None) -> dict[str, Any]:
     manifest, load_errors = load_manifest(root)
 
     if load_errors:
@@ -868,7 +871,7 @@ def resolve_command(root: Path, command: str) -> dict[str, Any]:
 
     assert normalized is not None
 
-    return resolve_with_normalized_manifest(root, normalized, command)
+    return resolve_with_normalized_manifest(root, normalized, command, feature_directory)
 
 
 def list_commands(root: Path) -> dict[str, Any]:
@@ -962,6 +965,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_resolve = sub.add_parser("resolve")
     p_resolve.add_argument("command")
     p_resolve.add_argument("--json", action="store_true")
+    p_resolve.add_argument(
+        "--arguments",
+        help="raw command arguments; gate commands resolve their target read-only before context materialization",
+    )
 
     p_list = sub.add_parser("list")
     p_list.add_argument("--json", action="store_true")
@@ -979,7 +986,39 @@ def main(argv: list[str]) -> int:
     root = Path(args.directory).resolve()
 
     if args.action == "resolve":
-        data = resolve_command(root, args.command)
+        feature_directory = None
+        target = None
+        if args.arguments is not None:
+            from gate_target import COMMANDS as GATE_COMMANDS, resolve as resolve_gate_target
+
+            if args.command not in GATE_COMMANDS:
+                data = {
+                    "ok": False,
+                    "command": args.command,
+                    "validation_errors": ["--arguments is supported only for gate commands"],
+                    "to_read": [],
+                    "missing_required": [],
+                    "skipped_if_missing": [],
+                }
+                json_print(data)
+                return 1
+            target, target_rc = resolve_gate_target(root, args.command, args.arguments, posix(Path(".orderspec/features")))
+            if target_rc:
+                data = {
+                    "ok": False,
+                    "command": args.command,
+                    "target": target,
+                    "validation_errors": [target.get("error", "target_resolution_failed")],
+                    "to_read": [],
+                    "missing_required": [],
+                    "skipped_if_missing": [],
+                }
+                json_print(data)
+                return 1
+            feature_directory = target["feature_directory"]
+        data = resolve_command(root, args.command, feature_directory)
+        if target is not None:
+            data["target"] = target
     elif args.action == "list":
         data = list_commands(root)
     elif args.action == "validate":

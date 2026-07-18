@@ -183,9 +183,9 @@ and resumability are not completion boundaries.
 
 ### Verification Rules
 
-- Test-writing tasks must run the declared test when permitted and observe the
-  expected red state before implementation. Green-first is a `/order.tasks`
-  ordering/evidence defect.
+- Test-writing tasks must run permitted evidence and observe the result declared
+  by plan Evidence Sequencing. A mismatch is routed to `/order.tasks` or
+  `/order.plan`; never manufacture a red state.
 - `VERIFY:` and `GATE:` packets are read-only and report `changed_files: []`.
 - A task requiring verification cannot complete from source inspection or
   intent. Denied/unavailable required execution leaves it unchecked and routes

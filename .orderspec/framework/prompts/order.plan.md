@@ -231,8 +231,8 @@ reason in `Verified Against`. Prefer exemplars over exhaustive scans.
 -   Cross-boundary completeness for every planned behavior: persistence/schema,
     service, controller/serializer, route, export/wiring, and test boundaries
     that must cooperate. A later task MUST NOT discover that an earlier model,
-    schema, DTO, or route lacks fields or operations already required by
-    `spec.md`.
+    schema, DTO, or route is not planned to establish fields or operations
+    already required by `spec.md`.
 
 For each material mechanism, distinguish three evidence classes:
 
@@ -261,6 +261,9 @@ syntax. Additional semantic rules:
 - Replace `[DATE]`; remove all remaining placeholders and authoring residue.
 - Keep Summary technical and role-pure. Select delivery strategy only from its
   template evidence rule.
+- Select Evidence Sequencing from repository/project evidence. Do not require a
+  red-first test when the relevant assertion cannot execute or is already
+  satisfied; justify `characterization-first` or `implementation-first` instead.
 - Record only verified stack/repository facts and exact evidence paths. A
   planned `[NEW]` file is `DESIGN-OK`, never present-state `PASS` evidence.
 - Fill `Mechanism Evidence & Runtime Closure` from repository evidence and the
@@ -332,26 +335,30 @@ PLAN_STOPPED: spec-ids extraction failed
   Run /order.spec to create or fix the feature contract.
 ```
 
-**2. Prepare Rows:**
-For each required Spec ID (`REQ`, `IF`, `AC`, `EDGE`, `INV`, `NFR`; conditional `ASM`), construct a row using **only** these templates.
+**2. Prepare JSON:**
+For each required Spec ID (`REQ`, `IF`, `AC`, `EDGE`, `INV`, `NFR`; conditional
+`ASM`), construct one object with exactly five fields.
 
 **Do NOT** emit rows for `UJ`, `DEC`, or `SC` IDs. They are not testable mechanisms and will be rejected by `put-mechanisms`.
 
--   **TEMPLATE 1 (Testable logic):** `SPEC_ID<TAB>direct<TAB>mechanism<TAB>file<TAB>unit`
--   **TEMPLATE 2 (Testable via API):** `SPEC_ID<TAB>direct<TAB>mechanism<TAB>file<TAB>integration`
--   **TEMPLATE 3 (Covered by other test):** `SPEC_ID<TAB>delegated:ID<TAB>mechanism<TAB>file<TAB>unit`
--   **TEMPLATE 4 (Design only):** `SPEC_ID<TAB>documented<TAB>mechanism<TAB>plan.md<TAB>documented`
+```json
+[{"spec_id":"REQ-001","coverage_kind":"direct","mechanism":"validate credentials","primary_files":"src/services/auth.js","test_type":"unit"}]
+```
 
-**3. Write Rows:**
+Allowed combinations: `direct` with `unit` or `integration`;
+`delegated:<ID>` with the delegate's topology; `documented` with
+`test_type: documented` and `primary_files: plan.md` or a planned documentation
+artifact.
+
+**3. Write Validated JSON:**
 ```bash
 eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 
-printf 'REQ-001\tdirect\tvalidate credentials\tsrc/services/auth.js\tunit\nIF-001\tdirect\tHTTP route\tsrc/routes/auth.js\tintegration\n' \\n
-  | python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" put-mechanisms
-
-**CRITICAL:** Fields MUST be separated by literal TAB characters (`\\t` in printf), NOT spaces. The `mechanisms.tsv` file is tab-separated. Using spaces will cause `put-mechanisms` to fail or produce corrupt data.
+python3 .orderspec/framework/scripts/traceability.py -C "$PWD" \
+  --feature-dir "$FEATURE_DIR" put-mechanisms --json < "$MECHANISMS_RESULT_FILE"
 ```
-If `put-mechanisms` exits non-zero, read stderr, fix rows, and re-run. Do not hand-edit `mechanisms.tsv`.
+If it exits non-zero, fix only the rejected JSON object and rerun. Never emit
+literal TSV or hand-edit `mechanisms.tsv`.
 
 **4. Lint & Check:**
 ```bash

@@ -439,27 +439,37 @@ rc, out, err = run_setup("tasks", "--json", "--refresh-template")
 assert_rc(0, rc, "tasks with override exits zero", out, err)
 assert_true((fdir / "tasks.md").read_text(encoding="utf-8") == "OVERRIDE TASKS TEMPLATE\n", "override tasks-template wins")
 
-# 30. tasks-check --json blocks when spec.md is missing
+# 30. tasks-check prepares a report when spec.md is missing
 reset_repo()
+write_core_template("report-template", "CORE REPORT TEMPLATE\n")
 set_active_feature_state("specs/F")
 (WORK / "specs" / "F").mkdir(parents=True, exist_ok=True)
 (WORK / "specs" / "F" / "plan.md").write_text("PLAN\n", encoding="utf-8")
 (WORK / "specs" / "F" / "tasks.md").write_text("# Tasks\n", encoding="utf-8")
 rc, out, err = run_setup("tasks-check", "--json")
-assert_rc(2, rc, "tasks-check blocks without spec.md", out, err)
+assert_rc(0, rc, "tasks-check prepares report without spec.md", out, err)
+data = parse_json_stdout(out)
+assert_true(data["SPEC_EXISTS"] is False, "tasks-check reports missing spec.md")
+assert_true((WORK / "specs" / "F" / "tasks-report.md").is_file(), "tasks-check creates report without spec.md")
 
-# 31. tasks-check --json blocks when plan.md is missing
+# 31. tasks-check prepares a report when plan.md is missing
 reset_repo()
+write_core_template("report-template", "CORE REPORT TEMPLATE\n")
 make_feature("specs/F", spec=True, plan=False)
 (WORK / "specs" / "F" / "tasks.md").write_text("# Tasks\n", encoding="utf-8")
 rc, out, err = run_setup("tasks-check", "--json")
-assert_rc(2, rc, "tasks-check blocks without plan.md", out, err)
+assert_rc(0, rc, "tasks-check prepares report without plan.md", out, err)
+data = parse_json_stdout(out)
+assert_true(data["PLAN_EXISTS"] is False, "tasks-check reports missing plan.md")
 
-# 32. tasks-check --json blocks when tasks.md is missing
+# 32. tasks-check prepares a report when tasks.md is missing
 reset_repo()
+write_core_template("report-template", "CORE REPORT TEMPLATE\n")
 make_feature("specs/F", spec=True, plan=True, tasks=False)
 rc, out, err = run_setup("tasks-check", "--json")
-assert_rc(2, rc, "tasks-check blocks without tasks.md", out, err)
+assert_rc(0, rc, "tasks-check prepares report without tasks.md", out, err)
+data = parse_json_stdout(out)
+assert_true(data["TASKS_EXISTS"] is False, "tasks-check reports missing tasks.md")
 
 # 33. tasks-check --json creates tasks-report.md from core report template when spec+plan+tasks exist
 reset_repo()

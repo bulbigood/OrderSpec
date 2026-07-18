@@ -497,18 +497,21 @@ Do not create directories, write `spec.md`, update active feature state, or init
   - Every `EDGE-NNN` must either reference `→ covered by AC-NNN` or be explicitly marked `→ deferred (reason)`.
 8. Author the full `spec.md` content.
 9. Write `spec.md` in one complete mutation. Do not leave placeholder partial specs.
-9. Run traceability projection and validation.
-10. Update active feature state with `active_feature.py set`.
+10. Run traceability projection and validation.
+11. Update active feature state with `active_feature.py set`.
 
 ### Scope sizing gate
 
-If any two of these heuristics fire, treat the request as oversized and switch to Decompose Mode:
+Use these only as cohesion signals, never as an automatic split rule:
 
 - roughly more than 25–30 plausible REQs;
 - more than 3 independent functional domains;
 - more than 3 distinct primary actor sets;
-- more than 2 viable P1 MVP slices that are not one end-to-end thread;
+- multiple viable MVP slices that are not one end-to-end thread;
 - multiple independently releasable modules with separate contracts.
+
+Switch to Decompose only for independently releasable contracts or an explicit
+user request. Otherwise retain the cohesive feature and note the sizing signal.
 
 ## Refine Mode
 
@@ -637,6 +640,9 @@ If a threshold is not supplied by user input, constitution, or project contracts
 - write a qualitative SHOULD; or
 - ask through Clarification Protocol if critical.
 
+Every quantitative NFR records provenance in an indented `Source` field: a
+valid project-contract ID or `user-request`. Do not copy source prose.
+
 ### Architecture & Behaviour
 
 Use logical roles only:
@@ -736,8 +742,6 @@ Also include rows for:
 - INV × ASM where ASM weakens or qualifies behaviour;
 - REQ × ASM where ASM narrows a REQ.
 
-Every INV-NNN containing absolute quantifiers (`MUST have`, `MUST produce`, `exactly`, `always`, `never`) MUST have at least one explicit row in the Contradiction Grid, even if the verdict is `compatible`.
-
 This ensures every absolute invariant is consciously checked against weakening NFRs/ASMs.
 
 Example for an invariant with no weakening tension:
@@ -767,7 +771,8 @@ Verify the AC actually covers it.
 Rules:
 
 - order UJs by priority;
-- at most 2 UJs may be P1;
+- P1 journeys form the smallest coherent MVP; declare dependencies when more
+  than one P1 journey is required;
 - every UJ has Covers, priority rationale, independent test, and Done when;
 - every AC has inline `[Covers: ...]`;
 - every REQ is covered by at least one UJ/AC;
@@ -838,8 +843,9 @@ Rules:
 - Never hand-write or hand-read `spec-ids.tsv`.
 - If any script exits non-zero, STOP the mutation flow and report/fix according to ownership.
 - If validation findings are owned by `/order.spec` and self-fixable without changing meaning, fix and rerun.
-- Maximum 3 self-fix iterations.
-- If still failing, report residual findings and recommend `/order.spec-check`.
+- Stop self-fixing when the same finding repeats without changed evidence.
+- Failed validation is a BLOCKED outcome: report residual findings and do not
+  update active feature state.
 
 ### Active feature state update
 
@@ -862,26 +868,21 @@ Before completion, reason through these checks. Do not write a checklist file.
 
 ### Required semantic checks
 
-- No file paths, library names, class names, plugin names, framework-specific query syntax, or technology versions appear in `spec.md`.
-- IF `Failure` field must not contain template residue: `semicolon-separated`, `[Failure outcomes]`, or `None` as a literal value.
-- §6 references only valid `GOV-NNN`, `STACK-NNN`, `ARCH-NNN`, `CONV-NNN` IDs with neutral labels.
-- No unresolved blocking clarification remains.
-- No REQ contradicts another REQ, INV, or project contract constraint; no AC contradicts its covered REQ or IF; every `[narrowing REQ-NNN]` ASM preserves all cases required by that REQ.
-- NFRs do not mandate behaviour listed in §2 Out of Scope; quantitative thresholds have a source; every NFR has a sourced threshold, named standard, or qualitative SHOULD oracle.
-- Every REQ has acceptance coverage.
-- Every AC has inline `[Covers: ...]`.
-- IF `Covers` references defined IDs.
-- IF success/failure outcomes match related ACs.
-- Every declared IF input option has explicit success/failure behaviour and response semantics, including filters, optional fields, nullability, malformed identifiers, and pagination bounds, ordering, envelope, and empty-page semantics.
-- Authorization is specified for mutating interfaces and cross-owner reads (where the resource owner differs from the authenticated user).
-- Atomic/best-effort/compensating semantics are specified for multi-entity writes.
-- REQ/INV/IF wording is reconciled with EDGE, DEC, ASM, information-model fields, and §2 Out of Scope; contradiction review is not limited to the §10 grid.
-- Every absolute guarantee using `exactly`, `every`, `always`, or `never` identifies its supported write paths and failure states, or explicitly scopes the guarantee to defined paths.
-- Contradiction grid is present and has no unresolved conflict.
-- DEC/ASM separation is correct.
-- Tombstoned IDs remain strict anchors.
-- Cross-feature refs use `FEAT-NNN-slug:LOCAL-NNN`.
-- No placeholder values remain in frontmatter or normative sections.
+- Role purity: observable WHAT only; no physical paths, libraries, classes, or versions.
+- No unresolved blocking clarification, placeholder, or contradiction known from this run.
+- Quantitative NFRs carry provenance; DEC/ASM and tombstones are valid.
+- Interface, invariant, edge, journey, and AC changes remain mutually consistent.
+- Every REQ is observable and covered by a UJ/AC; every AC has inline `Covers`.
+- Every IF input option, response shape, nullability, failure, and authorization
+  rule relevant to the feature has an observable outcome and matching AC.
+- Multi-entity writes state atomic, best-effort, compensating, or partial-failure
+  semantics; absolute guarantees name their write/failure scope.
+- REQ/INV/IF wording agrees with EDGE, DEC, ASM, information-model fields, and
+  Out of Scope; the contradiction grid has no unresolved conflict.
+- §6 contains only loaded project-contract IDs with neutral labels; cross-feature
+  references are namespaced and removed IDs remain strict-anchor tombstones.
+- Mechanical coverage and ID validation pass. Full independent semantic
+  assurance and severity assignment belong to `/order.spec-check`.
 
 ## Downstream Impact
 
@@ -975,7 +976,7 @@ Include:
 - [ ] Blocking clarifications resolved
 - [ ] `traceability.py init` succeeded
 - [ ] `traceability.py extract-spec-ids` succeeded
-- [ ] `traceability.py validate --stage spec --json` succeeded or residual findings were reported
+- [ ] `traceability.py validate --stage spec --json` succeeded
 - [ ] Active feature state updated via `active_feature.py set`
 - [ ] Refine/decompose downstream impact reported
 - [ ] Open `order.spec` workflow feedback loaded; addressed items consumed only after validation
