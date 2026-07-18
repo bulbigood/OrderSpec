@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Regression tests for deterministic code-report validation."""
 
+import json
 import sys
 import tempfile
 import unittest
@@ -101,6 +102,55 @@ class CodeReportValidatorTests(unittest.TestCase):
             self.assertEqual(result["active_feature_status"], "verified")
             command = run.call_args.args[0]
             self.assertEqual(command[command.index("--status") + 1], "verified")
+
+    def test_ledger_requires_complete_results(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            path = root / "code-report.md"
+            path.write_text(report(), encoding="utf-8")
+            ledger = root / "code-obligations.json"
+            ledger.write_text('{"obligation_ids":["AC-001"]}', encoding="utf-8")
+            (root / "code-obligation-results.json").write_text(
+                '{"ledger_ids":["AC-001"],"results":{}}', encoding="utf-8"
+            )
+            result = validate(path, ledger)
+            self.assertFalse(result["ok"])
+            self.assertTrue(any(e["field"] == "ledger.completeness" for e in result["errors"]))
+
+    def test_not_checked_forces_block(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            fid = finding_id("C0", "order.code", "AC-001", "src/a.ts:handler")
+            row = f"| {fid} | semantic | LOW | NOT_CHECKED | Route | /order.code | src/a.ts:handler ↔ AC-001 | inspection limit |"
+            text = report(
+                verdict="PASS",
+                finding_row=row,
+                routing=f"- {fid}: `/order.code`",
+                severity_counts="CRITICAL=0 · HIGH=0 · MEDIUM=0 · LOW=1",
+            ).replace(
+                "### Metrics\n",
+                "### Metrics\n- Obligations assessed: 1\n"
+                "- Results: SATISFIED=0 · VIOLATED=0 · UNPROVEN=0 · NOT_CHECKED=1\n",
+            )
+            path = root / "code-report.md"
+            path.write_text(text, encoding="utf-8")
+            ledger = root / "code-obligations.json"
+            ledger.write_text('{"obligation_ids":["AC-001"]}', encoding="utf-8")
+            (root / "code-obligation-results.json").write_text(json.dumps({
+                "ledger_ids": ["AC-001"],
+                "results": {
+                    "AC-001": {
+                        "obligation": "AC-001",
+                        "result": "NOT_CHECKED",
+                        "evidence": [],
+                        "implementation_paths": [],
+                        "finding": None,
+                    }
+                },
+            }), encoding="utf-8")
+            result = validate(path, ledger)
+            self.assertFalse(result["ok"])
+            self.assertTrue(any("deterministic verdict BLOCK" in e["message"] for e in result["errors"]))
 
 
 if __name__ == "__main__":

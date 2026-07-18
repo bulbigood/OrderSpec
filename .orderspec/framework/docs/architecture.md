@@ -165,6 +165,12 @@ The coordinator reads feature artifacts and passes workers only explicit task
 packets with finite read/write paths. Workers do not scan the repository or
 interpret OrderSpec Markdown contracts.
 
+`code_workflow.py` is the implementation state-machine boundary: it performs
+preflight, chooses the next legal task unit, constructs packets through the
+task resolvers, and validates terminal completeness. `/order.code-check` uses
+`code_obligations.py` to generate a complete machine ledger and record one
+schema-validated semantic result per obligation before report finalization.
+
 ## Repository layout
 
 ```text

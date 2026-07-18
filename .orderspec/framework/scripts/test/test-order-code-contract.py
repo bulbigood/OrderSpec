@@ -30,10 +30,10 @@ expect(
 )
 expect(
     manifest["commands"]["order.code"]["feature_context"] == {
-        "mode": "required",
+        "mode": "if_active",
         "artifacts": ["tasks", "plan"],
     },
-    "order.code loads active tasks before plan",
+    "order.code preloads active tasks before plan without hiding lifecycle errors",
 )
 expect(
     resources["protocol.sub_agent_execution"]["usage"] == "apply"
@@ -50,8 +50,8 @@ expect(
     "order.code gives explicit user local execution priority over dispatch capability",
 )
 expect(
-    "keep all work in one agent session" in normalized_code_prompt
-    and "Do not inspect dispatch capability or resolve a worker" in normalized_code_prompt,
+    "natural-language single-agent constraint" in normalized_code_prompt
+    and "do not inspect, configure, dispatch, or wait for a worker" in normalized_code_prompt,
     "order.code maps a single-agent-session constraint to local execution",
 )
 expect("task_progress.py mark" in code_prompt, "order.code delegates marker writes to deterministic script")
@@ -60,55 +60,55 @@ expect(
     "order.code reconciles previously completed unchecked work from evidence",
 )
 expect(
-    "work_order.py rollback" in code_prompt and "Step 3.25: RESET Work Order" in code_prompt,
+    "RESET_PREVIEW" in code_prompt and "### Reset" in code_prompt,
     "order.code reset uses a bounded work-order baseline",
 )
 expect(
-    "workflow_feedback.py create" in code_prompt and "Persistent Routing Report" in code_prompt,
+    "workflow_feedback.py create" in code_prompt and "Before every upstream route" in code_prompt,
     "order.code persists every upstream route",
 )
 expect(
-    "task_progress.py assert-complete" in normalized_code_prompt
-    and "return to Step 9" in normalized_code_prompt,
+    "code_workflow.py finish" in normalized_code_prompt
+    and "return to Step 4" in normalized_code_prompt,
     "order.code deterministically rejects voluntary partial completion",
 )
 expect(
-    "No Voluntary Partial Completion" in code_prompt
-    and "Task count, elapsed work, context size, token/tool budget" in normalized_code_prompt,
+    "Task count, elapsed work, context size, token/tool budget" in normalized_code_prompt,
     "order.code forbids workload-based LOCAL_ALL chunking",
 )
 expect(
-    "PHASE_COMPLETE" in code_prompt
-    and "state is **HALTED** with that evidence" in normalized_code_prompt,
+    "PHASE_COMPLETE" in code_prompt and "HALTED" in code_prompt,
     "order.code distinguishes phase completion from evidenced halt",
 )
 expect(
-    "Marker rejection is terminal" in code_prompt
-    and "NEVER alter or retry" in code_prompt,
+    "rejected result is terminal" in code_prompt
+    and "Never alter `changed_files`" in code_prompt,
     "order.code forbids marker-result laundering and retries",
 )
 expect(
-    "If it passes immediately, STOP" in normalized_code_prompt,
+    "Green-first is a `/order.tasks`" in normalized_code_prompt,
     "order.code stops on green-first test tasks",
 )
-expect("`VERIFY:` tasks" in code_prompt, "order.code defines read-only command gates")
-expect("`**Verification**` line" in code_prompt, "order.code uses phase Verification prose")
-expect("task_contract_context.py" in code_prompt, "order.code resolves task contract context")
+expect("`VERIFY:` and `GATE:`" in code_prompt, "order.code defines read-only command gates")
+expect("Phase verification must pass" in code_prompt, "order.code enforces phase verification")
+expect("contract_context" in code_prompt, "order.code consumes resolved task contract context")
 expect(
-    "MUST NOT open, search, or preload full" in normalized_code_prompt,
+    "Do not open full `spec.md`" in normalized_code_prompt,
     "order.code forbids bypassing resolved spec excerpts",
 )
 expect(
-    "Frozen Baseline and Pathmanifest Semantics" in code_prompt
-    and "Do not run `check-plan`" in code_prompt,
+    "Applied `[NEW]` and `[DEL]` transitions" in code_prompt
+    and "Never run plan-authoring current-state checks" in code_prompt,
     "order.code preserves plan baseline during resume",
 )
 expect(
-    "Task decomposition defect" in code_prompt
-    and "Plan mapping defect" in code_prompt,
+    "task packet omits it: `/order.tasks`" in code_prompt
+    and "physical mapping is absent or wrong: `/order.plan`" in code_prompt,
     "order.code routes task and plan defects separately",
 )
-expect("`contract_refs`" in code_prompt, "order.code forwards support-path contract refs")
+expect("code_workflow.py preflight" in code_prompt, "order.code delegates mechanical preflight")
+expect("tooling-protocol.md" not in code_prompt, "order.code contains no dead tooling branch")
+expect("Mark Gate Report Consumed" not in code_prompt, "order.code does not consume tasks gate reports")
 
 tasks_prompt = (FRAMEWORK / "prompts" / "order.tasks.md").read_text(encoding="utf-8")
 tasks_template = (FRAMEWORK / "templates" / "tasks-template.md").read_text(encoding="utf-8")

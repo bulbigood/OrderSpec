@@ -97,6 +97,8 @@ No OrderSpec-generated artifact is written to the repository root. Everything li
 | `.orderspec/features/*/spec.md` | `/order.spec` | Stable WHAT-contract. |
 | `.orderspec/features/*/plan.md` | `/order.plan` | Technical plan. |
 | `.orderspec/features/*/tasks.md` | `/order.tasks` | Task content and order. During `/order.code`, execution checkboxes may change only through `task_progress.py`; task content remains frozen. |
+| `.orderspec/features/*/.state/code-obligations.json` | `code_obligations.py` | Deterministic whole-contract code-check ledger. Never hand-edit. |
+| `.orderspec/features/*/.state/code-obligation-results.json` | `code_obligations.py` | Schema-validated per-obligation inspection results. Never hand-edit. |
 
 Plan/work-order baseline rules:
 
@@ -143,6 +145,13 @@ Execution marker rules:
 - Every `/order.code` stop routed upstream MUST create typed persistent feedback
   under the feature `.state/feedback/`; owner commands load open feedback
   automatically and consume it only after successful validation.
+- `/order.code` mechanical preflight, next-task selection, packet construction,
+  terminal completeness, coverage, and status transitions are owned by
+  `code_workflow.py`. The runtime agent performs only the bounded semantic task
+  returned by that state machine.
+- `/order.code-check` MUST enumerate the whole contract through
+  `code_obligations.py`, record exactly one result per ledger obligation, and
+  finalize against that ledger. Any `NOT_CHECKED` result prevents PASS.
 
 ## 4. Frontmatter Rule
 

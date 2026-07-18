@@ -338,7 +338,7 @@
         }
       ],
       "feature_context": {
-        "mode": "required",
+        "mode": "if_active",
         "artifacts": [
           "tasks",
           "plan"

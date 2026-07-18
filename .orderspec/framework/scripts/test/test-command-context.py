@@ -988,10 +988,11 @@ if _real_manifest.exists():
         rc == 0
         and expected_feature_paths.issubset(items)
         and all(items[path]["authority"] == "feature" for path in expected_feature_paths)
-        and all(items[path]["required"] is True for path in expected_feature_paths)
+        and all(items[path]["required"] is False for path in expected_feature_paths)
         and data.get("feature_context", {}).get("active") is True
+        and data.get("feature_context", {}).get("mode") == "if_active"
     ):
-        ok("real manifest: order.code requires active feature plan and tasks")
+        ok("real manifest: order.code preloads active feature plan and tasks when available")
     else:
         bad(f"order.code feature context wrong :: rc={rc} items={items} data={data} err={err!r}")
 else:

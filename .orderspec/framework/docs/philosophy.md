@@ -15,6 +15,10 @@ The answer is consistent: mechanical work goes to deterministic scripts,
 semantic judgment is narrow and evidence-bound, and defects are routed to the
 command that owns the affected artifact.
 
+The model never owns lifecycle control flow. A deterministic state machine
+selects the next legal transition and supplies one bounded semantic packet; the
+model returns schema-validated evidence for that packet.
+
 ## Design principles
 
 - **Specs are the source of truth.** Code, plans, tasks, and generated views
@@ -23,6 +27,8 @@ command that owns the affected artifact.
   not only frontier models.
 - **Deterministic core.** Resolution, validation, synchronization, and state
   management do not depend on model memory.
+- **One semantic question at a time.** Workflow engines enumerate work and
+  evidence obligations; models judge or implement one bounded packet.
 - **Gates detect and route; owners fix.** Inspection and authorship remain
   separate.
 - **Default-deny capabilities.** Silence in project governance is never

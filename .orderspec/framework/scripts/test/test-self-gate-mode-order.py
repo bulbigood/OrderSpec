@@ -21,9 +21,14 @@ class SelfGateModeOrderTests(unittest.TestCase):
         self.assertIn("select **Refine** even when `$ARGUMENTS` is empty", content)
 
     def test_all_report_readers_treat_consumed_as_inactive(self):
-        for command in ("spec", "code-to-spec", "plan", "tasks", "code", "code-check"):
+        for command in ("spec", "code-to-spec", "plan", "tasks", "code-check"):
             content = (ROOT / "prompts" / f"order.{command}.md").read_text(encoding="utf-8")
             self.assertIn("CONSUMED_STALE", content, command)
+
+        code = (ROOT / "prompts" / "order.code.md").read_text(encoding="utf-8")
+        self.assertIn("code_workflow.py preflight", code)
+        upstream = (ROOT / "scripts" / "upstream_gate.py").read_text(encoding="utf-8")
+        self.assertIn("CONSUMED_STALE", upstream)
 
     def test_all_marker_calls_identify_consumer_and_recheck(self):
         expected = {
@@ -31,12 +36,15 @@ class SelfGateModeOrderTests(unittest.TestCase):
             "code-to-spec": ("/order.code-to-spec", "/order.spec-check"),
             "plan": ("/order.plan", "/order.plan-check"),
             "tasks": ("/order.tasks", "/order.tasks-check"),
-            "code": ("/order.code", "/order.tasks-check"),
         }
         for command, (consumer, recheck) in expected.items():
             content = (ROOT / "prompts" / f"order.{command}.md").read_text(encoding="utf-8")
             self.assertIn(f"--consumer {consumer}", content, command)
             self.assertIn(f"--recheck {recheck}", content, command)
+
+        code = (ROOT / "prompts" / "order.code.md").read_text(encoding="utf-8")
+        self.assertIn("not consumed by `/order.code`", code)
+        self.assertNotIn("--consumer /order.code", code)
 
 
 if __name__ == "__main__":

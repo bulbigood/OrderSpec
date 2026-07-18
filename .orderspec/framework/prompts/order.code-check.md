@@ -3,7 +3,7 @@ orderspec:
   artifact: command_prompt
   command: order.code-check
   phase: check
-description: Terminal OrderSpec implementation gate. Traces stable contract obligations to executable paths and evidence, separates impact from proof strength, writes and validates code-report.md, and routes defects without modifying implementation artifacts.
+description: Terminal pure-inspection gate driven by a deterministic whole-contract obligation ledger.
 ---
 
 ## User Input
@@ -12,311 +12,254 @@ description: Terminal OrderSpec implementation gate. Traces stable contract obli
 $ARGUMENTS
 ```
 
-Use non-empty input only to select an unambiguous feature or an explicit
-`--base <ref>`. It does not grant execution capabilities or alter the contract.
+Use input only for unambiguous feature selection or `--base <ref>`. It never
+grants capabilities or changes the contract.
 
-## Role and Claim Boundary
+## Contract
 
-`/order.code-check` is a pure inspector. It answers:
+`/order.code-check` is a pure inspector. It answers one question per agreed
+runtime obligation:
 
-> For each agreed runtime obligation, what implementation and evidence exist,
-> and is the obligation satisfied, violated, unproven, or not checked?
+> What reachable implementation and evidence exist, and is this obligation
+> satisfied, violated, unproven, or not checked?
 
-The gate does not claim that static inspection proves program correctness.
-Verdict, assurance, and obligation result are independent:
+Authority:
 
-- `verdict` controls workflow advancement;
-- `assurance` states evidence strength;
-- obligation `result` states what was observed.
+1. `spec.md`: normative behavior;
+2. `plan.md` and `.state/mechanisms.tsv`: physical mapping;
+3. `tasks.md`: advisory execution/evidence topology;
+4. source and tests: evidence, never requirements.
 
-Authority order:
+The gate never repairs inspected artifacts or chooses among conflicting ones.
+Implementation repair belongs to `/order.code`; artifact validity to its
+`*-check`; disagreement to `/order.sync-check`.
 
-1. `spec.md` — normative behavior;
-2. `plan.md` and `.state/mechanisms.tsv` — repository mapping, when present;
-3. `tasks.md` — advisory execution/evidence topology, when present;
-4. source and tests — implementation evidence, never a source of requirements.
+Direct writes are forbidden except resolved `code-report.md`. Deterministic
+gate scripts may refresh that report, write the machine ledger, and apply the
+validated active-feature status. Never hand-edit generated state.
 
-Internal artifact validity belongs to its `*-check`. Artifact disagreement
-belongs to `/order.sync-check`. Implementation repair belongs to `/order.code`.
+## Step 1 — Resolve Context and Feature
 
-## Non-Negotiable Rules
-
-1. Never edit spec, plan, tasks, generated state, source, tests, or configuration.
-2. The only feature-artifact write is the resolved `code-report.md`.
-3. Write a report for every computed verdict when a safe feature path exists.
-   A resolver/path failure without a safe target is a chat-only STOP, not a verdict.
-4. Route every `VIOLATED` or material `UNPROVEN` finding to the artifact owner.
-   Reduced-assurance notes may be `Advisory` and do not require routing.
-5. Severity measures runtime/contract impact, not test status, evidence source,
-   inspection difficulty, or whether inspection can continue.
-6. Capability silence means denial. Run tests/builds only when the resolved
-   constitution grants that exact capability. Lint and style review are out of scope.
-7. Framework scripts named by this prompt are deterministic gate mechanics and
-   must be used exactly. Never hand-edit active-feature state.
-8. Core checks are stack-neutral. Discover mutation, serialization, concurrency,
-   and registration surfaces from resolved stack/architecture/convention contracts
-   and repository evidence. Never assume a framework-specific API list.
-
-## Step 1 — Resolve Command Context
-
-Run before repository inspection or feature setup:
+Run first:
 
 ```bash
 python3 .orderspec/framework/scripts/command_context.py resolve order.code-check --json
 ```
 
-If `ok` is false or `missing_required` is non-empty, STOP. Read every existing
-`to_read` item in returned order and apply its `usage` and `authority` literally.
-Do not substitute a manual preload list.
+Stop on failed/missing required context. Read all `to_read` items in returned
+order and apply `usage` and `authority` literally.
 
-## Step 2 — Resolve Feature and Canonical Report
+If input names a feature, select one unambiguous result from
+`active_feature.py list --json` without changing active selection. Otherwise
+use `active_feature.py get --json` and `validate --json`. If no safe feature
+directory resolves, stop in chat; never create a root-level report.
 
-If input names a feature, select only an unambiguous match from:
-
-```bash
-python3 .orderspec/framework/scripts/active_feature.py list --json
-```
-
-Do not mutate active selection. Otherwise validate the active feature:
-
-```bash
-python3 .orderspec/framework/scripts/active_feature.py get --json
-python3 .orderspec/framework/scripts/active_feature.py validate --json
-```
-
-If no safe feature directory resolves, STOP in chat with
-`CODE_STOPPED: no active feature`; do not create a root-level report.
-
-Initialize paths and overwrite the report from its framework-owned template:
+Initialize the canonical report:
 
 ```bash
 python3 .orderspec/framework/scripts/setup.py code-check --json --refresh-template
 ```
 
-Use only the returned `CODE_REPORT`, `REPORT_TEMPLATE`, paths, and existence
-flags. The setup script intentionally creates the report template even when
-`spec.md` is missing so the missing contract can be recorded as a terminal
-precondition.
+Use only returned paths and existence flags.
 
-- Missing `spec.md`: write `BLOCK`, set `terminal_precondition: true`, route to
-  `/order.spec`, validate the report, set status `blocked`, and stop.
-- Missing/archived `plan.md`: continue in spec-only mode. Record an assurance
-  limit, not a finding. Skip mapping checks.
-- Missing `tasks.md`: continue without task findings. Tasks are advisory.
+- Missing `spec.md`: write terminal `BLOCK`, route `/order.spec`, finalize, stop.
+- Missing/archived `plan.md`: continue spec-only; record an assurance limit and
+  skip mapping checks.
+- Missing `tasks.md`: continue without task-derived evidence; tasks are advisory.
 
-## Step 3 — Establish Target Stability and Scope
+## Step 2 — Establish Stable Target
 
-Read existing upstream reports as signals; do not rerun upstream gates.
+Read existing upstream reports as signals; never rerun their gates.
 
-- Missing upstream report is an assurance note, not a defect.
-- `CONSUMED_STALE` is inactive advisory history: it is neither a finding nor
-  current PASS evidence. Continue from current artifacts and available evidence.
-- Stale `PASS` is not proof. If affected obligations remain independently
-  unambiguous, inspect them and record reduced assurance; otherwise route the
-  unstable target to the relevant check.
-- Existing `BLOCK`/`ROUTING_REQUIRED` or an observed artifact contradiction
-  makes `target stability: UNSTABLE`. Emit one root-cause finding, set
-  `terminal_precondition: true`, stop semantic judgment against that target,
-  write and validate `BLOCK`, and route to the owning check or `/order.sync-check`.
-- Never select a winner among disagreeing artifacts.
+- Missing report or `CONSUMED_STALE`: assurance note, not defect or PASS proof.
+- Stale PASS: reduced assurance; inspect independently when obligations remain
+  unambiguous.
+- Active BLOCK/ROUTING or artifact contradiction: target `UNSTABLE`; emit one
+  routed root-cause finding, set `terminal_precondition: true`, stop semantic
+  inspection of that target, write/finalize `BLOCK`.
 
-Scope is always the complete contract obligation set. `--base <ref>` or an
-active merge may prioritize changed paths, but the report must say
-`whole-contract, delta-prioritized vs <base>`; delta inspection is not permission
-to omit P1, invariants, or interfaces. Use only read-only Git commands.
+Never select a winner among disagreeing artifacts. Scope remains the complete
+contract. `--base` only prioritizes changed paths; record
+`whole-contract, delta-prioritized vs <base>`. Use read-only Git commands only.
 
-## Step 4 — Resolve Evidence Mode and Assurance
+## Step 3 — Build the Obligation Ledger
 
-Resolve independently from the constitution and declared topology:
+Create the machine-owned whole-contract ledger:
 
-- whether tests are expected;
-- whether the exact test command may execute;
-- whether the exact build/compile command may execute.
+```bash
+python3 .orderspec/framework/scripts/code_obligations.py write-ledger \
+  --feature-dir "$FEATURE_DIR" \
+  --output "$FEATURE_DIR/.state/code-obligations.json" --json
+```
 
-Evidence modes:
+The ledger deterministically enumerates normative `REQ`, `NFR`, `SC`, `INV`,
+`EDGE`, `IF`, and `AC` records, priority context, declared mechanisms, task
+evidence, and candidate paths. Its ID set defines completeness. Generated
+linkage proves declared mapping only, never runtime behavior.
 
-| Mode | Meaning |
-|---|---|
-| `FULL` | relevant tests and build permitted and executed |
-| `TEST_ONLY` | relevant tests executed; build denied or unavailable |
-| `STATIC_TESTS` | tests inspected but execution denied or unavailable |
-| `STATIC_CODE` | direct code tracing; no declared test topology |
+Inspect every ledger ID exactly once. Resolve one bounded packet at a time:
+
+```bash
+python3 .orderspec/framework/scripts/code_obligations.py packet \
+  --feature-dir "$FEATURE_DIR" --obligation "$OBLIGATION_ID" --json
+```
+
+Read only packet evidence paths plus already resolved project contracts. If
+reachable behavior requires another path, record it as evidence and inspect it;
+do not modify anything. Do not replace the ledger with an informal checklist.
+
+For each packet return:
+
+```json
+{
+  "obligation": "AC-001",
+  "result": "SATISFIED|VIOLATED|UNPROVEN|NOT_CHECKED",
+  "evidence": ["path:symbol — observation"],
+  "implementation_paths": ["path"],
+  "finding": null
+}
+```
+
+Write that JSON to a temporary result file, then record it through the script;
+never hand-edit generated result state:
+
+```bash
+python3 .orderspec/framework/scripts/code_obligations.py record \
+  --ledger "$FEATURE_DIR/.state/code-obligations.json" \
+  --result-file "$RESULT_FILE" --json
+```
+
+Continue until `complete: true`.
+
+Result meanings:
+
+- `SATISFIED`: available evidence agrees with the obligation;
+- `VIOLATED`: reachable code or executed evidence contradicts it;
+- `UNPROVEN`: required implementation or material evidence is missing/weak;
+- `NOT_CHECKED`: named instability or inspection limit prevented judgment.
+
+Every `VIOLATED`, material `UNPROVEN`, and every `NOT_CHECKED` requires a routed
+finding. A denied capability alone is an assurance limit, not `NOT_CHECKED`,
+when static inspection remains possible. A report containing `NOT_CHECKED`
+cannot PASS.
+
+Render only non-satisfied obligations in Coverage Exceptions; keep the complete
+ledger in `.state/code-obligations.json`.
+
+## Step 4 — Evidence Mode and Assurance
+
+Resolve from constitution and declared topology whether tests are expected and
+whether each exact test/build command may run. Capability silence means denial.
+Lint/style and dependency freshness are out of scope.
+
+Evidence mode:
+
+- `FULL`: relevant permitted tests and build executed;
+- `TEST_ONLY`: tests executed; build denied/unavailable;
+- `STATIC_TESTS`: relevant tests inspected, execution denied/unavailable;
+- `STATIC_CODE`: direct code tracing; no declared test topology.
 
 Assurance:
 
-| Assurance | Meaning |
-|---|---|
-| `EXECUTED` | all contract-required permitted executable evidence was run |
-| `STATIC_STRONG` | complete static trace with relevant test/source evidence, but no execution |
-| `STATIC_LIMITED` | evidence, mapping, scope, or environment materially limits proof |
+- `EXECUTED`: all contract-required permitted executable evidence ran;
+- `STATIC_STRONG`: complete static trace with relevant source/test evidence;
+- `STATIC_LIMITED`: mapping, evidence, scope, or environment materially limits proof.
 
-Denied capability is an assurance limit, never an invented defect. An expected
-test that is missing, skipped, empty, trivially true, or too weak to establish
-its obligation is `UNPROVEN`. When execution is allowed, record test and build
-commands separately with exit status and the shortest decisive result. Never
-modify code or tests to obtain green evidence.
+Record test and build commands separately with exit status and shortest decisive
+result. Missing, skipped, empty, trivially true, wrong-topology, or weak expected
+tests are `UNPROVEN`. Never mutate code/tests to obtain green evidence.
 
-## Step 5 — Build the Obligation Ledger
+## Step 5 — Semantic Inspection
 
-Derive the finite obligation set from `spec.md`. Include at minimum:
+For every packet, inspect only applicable surfaces connected by reachable code,
+declared mapping, or relevant diff:
 
-- every P1 acceptance criterion;
-- every invariant;
-- every interface method/path/auth/input/status/shape/error obligation;
-- runtime-observable NFR and success criterion;
-- applicable edge cases and negative permissions.
+### C0 — Integrity
 
-Use `.state/spec-ids.tsv` and `.state/mechanisms.tsv` for identifiers and declared
-mapping when present. Generated traceability proves declared linkage only; it
-does not prove executable behavior.
+Unavailable required target is a terminal precondition, not automatically
+CRITICAL. Script crash/malformed output is a framework concern; never replace it
+with manual mechanics.
 
-For every obligation trace:
+### C1 — Obligation and evidence
 
-```text
-obligation → implementation path → evidence → observed result
-```
+Locate reachable implementation and faithful evidence. TODO, stub, fixture-only
+branch, unreachable code, documentation, or path match is not executable proof.
+Exact response contracts require evidence detecting missing and extra fields.
+Wrong evidence topology routes `/order.plan`; omitted faithful code/evidence
+routes `/order.code` or `/order.tasks` by ownership.
 
-Use exactly these results:
+### C2 — Interfaces
 
-- `SATISFIED`: available evidence agrees with the obligation;
-- `VIOLATED`: concrete implementation/executed evidence contradicts it;
-- `UNPROVEN`: required implementation or material evidence is absent/weak;
-- `NOT_CHECKED`: target instability or a named inspection limit prevented judgment.
+Trace registration, authentication, authorization, validation, handler,
+serialization, middleware/interceptors, and error mapping. Compare method/path,
+input semantics, status, names, presence, nullability, types, IDs, timestamps,
+pagination, exact shapes, and failures only where contracted.
 
-Only `VIOLATED`, `UNPROVEN`, and `NOT_CHECKED` belong in Coverage Exceptions.
-Do not render the full satisfied matrix in Markdown.
+### C3 — Invariants and writes
 
-## Step 6 — Semantic Inspection Passes
+Discover reachable mutation/deletion surfaces from actual stack and repository.
+Check enforcement boundary, bulk/direct paths, owner derivation, visibility,
+audit effects, immutability, partial failure, retry, and concurrency where
+contracted. Undecided externally visible failure semantics route `/order.spec`;
+never impose a preferred mechanism.
 
-Run every applicable pass. Attribute behavior only when a reachable path,
-feature mapping, or relevant diff connects it to the feature.
+### C4 — Mapping
 
-### C0 — Gate and evidence integrity
-
-- Required contract/path unavailable: terminal precondition, not automatically
-  CRITICAL.
-- Permitted test/build failure is objective evidence, but severity comes from
-  the exposed contract impact.
-- Tool/script crash or malformed output is a framework concern and cannot be
-  silently replaced by manual mechanics.
-
-### C1 — Obligation, evidence, implementation
-
-- Locate a reachable implementation for each obligation.
-- A documented mechanism, TODO, stub, fixture-only branch, unreachable code, or
-  path-only match is not executable proof.
-- Match declared unit/integration/system topology without silently substituting
-  another evidence type. Route wrong topology to `/order.plan`; omitted faithful
-  implementation/evidence to `/order.code` or `/order.tasks` according to ownership.
-- Exact response contracts require evidence that detects missing and extra fields;
-  subset assertions alone do not prove exactness.
-
-### C2 — Interfaces and serialization
-
-Trace the complete reachable boundary: registration, authentication,
-authorization, validation, handler, serialization, middleware/interceptors, and
-error mapping. Compare input semantics, status, names, presence, nullability,
-types, pagination, IDs, timestamps, and exact shapes where contracted.
-
-### C3 — Invariants, writes, concurrency, and failure semantics
-
-For every invariant, discover all reachable mutation and deletion surfaces from
-the actual stack and repository. Verify enforcement at the correct boundary,
-including bulk/direct paths, owner derivation, visibility filters, audit effects,
-immutability, partial failure, retries, and concurrency where contracted.
-
-If the contract leaves required atomicity/compensation/partial-failure semantics
-undecided, the root finding belongs to `/order.spec`; do not impose a preferred
-technology mechanism.
-
-### C4 — Mapping and lifecycle fidelity
-
-Skip when plan is absent. `[NEW]` means expected to exist after implementation.
-Verify `[NEW]`, `[MOD]`, and direct mechanisms by symbol and behavior, not path
-alone. Attribute unplanned feature behavior carefully. Route an incorrect mapping
-to `/order.plan`; route code that ignored a sound mapping to `/order.code`.
+Skip without plan. Verify `[NEW]`, `[MOD]`, `[DEL]`, and mechanisms by symbol and
+behavior, not path alone. Wrong mapping routes `/order.plan`; code ignoring sound
+mapping routes `/order.code`.
 
 ### C5 — Uncontracted behavior and governance
 
-Identify reachable new endpoints, state transitions, side effects, persistence,
-response fields, permissions, or query semantics without contract basis. Route
-removal to `/order.code`, or intended missing behavior to `/order.spec`. A direct
-constitution `MUST` violation is CRITICAL. Do not expand into general architecture,
-style, dependency freshness, lint, or whole-system review.
+Find reachable new endpoints, state transitions, side effects, persistence,
+fields, permissions, or query semantics without contract basis. Remove through
+`/order.code`, or define intended behavior through `/order.spec`. Direct
+constitution `MUST` violation is CRITICAL. Avoid general style/architecture review.
 
-## Step 7 — Finding Identity, Severity, and Verdict
+## Step 6 — Findings and Verdict
 
-Finding severity measures impact only:
+Severity measures runtime/contract impact only:
 
 - `CRITICAL`: security, data loss/corruption, reachable invariant violation,
-  dangerous atomicity failure, or constitution `MUST` violation;
-- `HIGH`: missing/contradicted P1/MVP behavior, required interface mismatch,
-  release-blocking implementation/build path, or material P1 evidence gap;
-- `MEDIUM`: non-P1 behavioral/evidence/mapping defect with material impact;
-- `LOW`: minor evidence weakness or contract-adjacent residue without runtime impact.
+  dangerous atomicity failure, constitution `MUST` violation;
+- `HIGH`: missing/contradicted P1 behavior, interface mismatch,
+  release-blocking path, material P1 evidence gap;
+- `MEDIUM`: material non-P1 behavioral/evidence/mapping defect;
+- `LOW`: minor evidence weakness or contract-adjacent residue.
 
-A failing build or P1 test is HIGH by default; escalate only when the revealed
-impact satisfies the CRITICAL definition.
-
-Use a deterministic finding ID. For each finding run:
-
-```bash
-python3 .orderspec/framework/scripts/validate_code_report.py finding-id \
-  --pass C1 --owner order.code --obligation AC-001 --location path/to/file:symbol
-```
-
-The ID is a stable hash of pass, owner, obligation, and normalized location.
-Do not assign or renumber IDs manually. Keep at most 30 detailed findings;
-aggregate only LOW findings that share owner, obligation, and remediation.
+Generate every ID through `validate_code_report.py finding-id`. Do not assign or
+renumber IDs manually. Maximum 30 detailed findings; aggregate only LOW findings
+sharing owner, obligation, and remediation.
 
 Disposition:
 
 - `Route`: owner action required;
-- `Advisory`: assurance/environment note without an artifact defect;
-- `Accepted`: only when an explicit resolved contract accepts the condition.
+- `Advisory`: assurance/environment note without artifact defect;
+- `Accepted`: only an explicit resolved contract may accept the condition;
+  never use it for `NOT_CHECKED`.
 
-Deterministic verdict:
+Verdict:
 
-- `BLOCK`: terminal precondition or routed CRITICAL/HIGH;
-- `ROUTING_REQUIRED`: no BLOCK condition, but routed MEDIUM/LOW;
-- `PASS`: no routed findings. Advisory notes may remain.
+- `BLOCK`: terminal precondition, any routed CRITICAL/HIGH, or any `NOT_CHECKED`;
+- `ROUTING_REQUIRED`: routed MEDIUM/LOW without BLOCK condition;
+- `PASS`: every ledger obligation assessed, no routed finding, no `NOT_CHECKED`.
 
-## Step 8 — Fill and Validate the Canonical Report
+## Step 7 — Write and Finalize
 
-Fill `CODE_REPORT` in place using `REPORT_TEMPLATE`. Do not add, remove, rename,
-or duplicate sections/frontmatter fields. Routing entries reference finding IDs
-and contain one copy-pasteable owner command; do not duplicate full evidence
-already present in Findings. Escape Markdown table pipes inside evidence.
-
-Use `terminal_precondition: true|false` as a YAML boolean, not a quoted string.
-Fill every placeholder. Empty sections/tables use `(none)` rows.
-
-Validate after writing and apply the status derived from the validated verdict:
+Fill `CODE_REPORT` using the refreshed template without changing its structure.
+Every routing entry references one finding ID and one copy-pasteable owner
+command. Escape table pipes. Fill every placeholder; use `(none)` rows for empty
+tables.
 
 ```bash
-python3 .orderspec/framework/scripts/validate_code_report.py finalize "$CODE_REPORT" --json
+python3 .orderspec/framework/scripts/validate_code_report.py finalize \
+  "$CODE_REPORT" --ledger "$FEATURE_DIR/.state/code-obligations.json" --json
 ```
 
-`finalize` performs no status write unless validation succeeds. It maps `PASS`
-to `verified` and both non-PASS verdicts to `blocked` through `active_feature.py`.
-If it fails, correct only `code-report.md` and rerun it. Never hand-compute a
-different verdict or write status separately.
+The finalizer validates ledger completeness, result/finding consistency,
+deterministic verdict, report structure, and derived active-feature status. On
+failure, correct only `code-report.md`; never hand-edit status or ledger.
 
-## Step 9 — Complete
-
-Completion chat states verdict, assurance, scope, report path, result/severity
-counts, separate test/build state, and next routed commands. A `PASS` with static
-assurance means no routed defect was observed under the recorded limits; it does
-not claim that tests or build ran.
-
-## Done When
-
-- [ ] context and feature paths resolved without mutating selection;
-- [ ] canonical template refreshed through `setup.py code-check`;
-- [ ] target stability and whole-contract scope recorded;
-- [ ] finite obligations traced to implementation and evidence;
-- [ ] stack-specific surfaces discovered from resolved contracts/repository;
-- [ ] impact, result, disposition, and assurance kept independent;
-- [ ] exception-only coverage and separate execution evidence rendered;
-- [ ] report finalizer validated the verdict and applied its derived status;
-- [ ] implementation and upstream artifacts remained unchanged.
+Completion chat: verdict, assurance, whole-contract scope, ledger/report paths,
+result/severity counts, separate test/build state, and routed commands. Static
+PASS means no routed defect under recorded limits; it never claims execution.

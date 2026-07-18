@@ -23,7 +23,7 @@ REQUIRED_HEADINGS = (
     "### Metrics",
 )
 SEVERITIES = {"CRITICAL", "HIGH", "MEDIUM", "LOW"}
-RESULTS = {"VIOLATED", "UNPROVEN"}
+RESULTS = {"VIOLATED", "UNPROVEN", "NOT_CHECKED"}
 DISPOSITIONS = {"Route", "Advisory", "Accepted"}
 FINDING_ID_RE = re.compile(r"^C[0-5]-[0-9a-f]{8}$")
 PLACEHOLDER_RE = re.compile(
@@ -32,6 +32,11 @@ PLACEHOLDER_RE = re.compile(
 SEVERITY_METRICS_RE = re.compile(
     r"Findings by severity: CRITICAL=(\d+) · HIGH=(\d+) · MEDIUM=(\d+) · LOW=(\d+)"
 )
+RESULT_METRICS_RE = re.compile(
+    r"Results: SATISFIED=(\d+) · VIOLATED=(\d+) · UNPROVEN=(\d+) · NOT_CHECKED=(\d+)"
+)
+ASSESSED_RE = re.compile(r"Obligations assessed: (\d+)")
+OBLIGATION_RE = re.compile(r"(?:REQ|NFR|SC|INV|EDGE|IF|AC)-\d{3}")
 
 
 def section(text, heading):
@@ -59,7 +64,7 @@ def parse_findings(text, errors):
         if len(cells) != 8:
             errors.append({"field": "findings", "message": f"finding row must have 8 columns: {line}"})
             continue
-        finding_id, _, severity, result, disposition, owner, _, _ = cells
+        finding_id, _, severity, result, disposition, owner, location, _ = cells
         if not FINDING_ID_RE.fullmatch(finding_id):
             errors.append({"field": "findings.id", "message": f"invalid stable finding ID: {finding_id}"})
         elif finding_id in seen_ids:
@@ -73,11 +78,48 @@ def parse_findings(text, errors):
             errors.append({"field": "findings.disposition", "message": f"invalid disposition for {finding_id}: {disposition}"})
         if disposition == "Route" and not owner.startswith("/order."):
             errors.append({"field": "findings.owner", "message": f"routed finding {finding_id} needs an /order.* owner"})
-        findings.append({"id": finding_id, "severity": severity, "result": result, "disposition": disposition})
+        if result == "NOT_CHECKED" and disposition != "Route":
+            errors.append({
+                "field": "findings.disposition",
+                "message": f"NOT_CHECKED finding {finding_id} must be routed",
+            })
+        findings.append({
+            "id": finding_id,
+            "severity": severity,
+            "result": result,
+            "disposition": disposition,
+            "obligations": OBLIGATION_RE.findall(location),
+        })
     return findings
 
 
-def validate(path):
+def load_ledger_results(ledger_path, errors):
+    try:
+        ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+        results_path = ledger_path.with_name("code-obligation-results.json")
+        stored = json.loads(results_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        errors.append({"field": "ledger", "message": f"cannot load obligation ledger/results: {exc}"})
+        return [], {}
+    ids = ledger.get("obligation_ids")
+    results = stored.get("results")
+    if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids):
+        errors.append({"field": "ledger", "message": "ledger obligation_ids must be a string array"})
+        return [], {}
+    if stored.get("ledger_ids") != ids or not isinstance(results, dict):
+        errors.append({"field": "ledger", "message": "obligation results do not match ledger IDs"})
+        return ids, {}
+    missing = [item for item in ids if item not in results]
+    extra = [item for item in results if item not in ids]
+    if missing or extra:
+        errors.append({
+            "field": "ledger.completeness",
+            "message": f"obligation results incomplete: missing={missing}, extra={extra}",
+        })
+    return ids, results
+
+
+def validate(path, ledger_path=None):
     text = path.read_text(encoding="utf-8")
     errors = [
         {"field": field, "message": message}
@@ -117,8 +159,43 @@ def validate(path):
                 "field": "metrics",
                 "message": f"severity metrics {reported} do not match findings {actual}",
             })
+    result_counts = None
+    if ledger_path is not None:
+        ledger_ids, obligation_results = load_ledger_results(Path(ledger_path), errors)
+        result_counts = {name: 0 for name in ("SATISFIED", "VIOLATED", "UNPROVEN", "NOT_CHECKED")}
+        for obligation_id, item in obligation_results.items():
+            result = item.get("result") if isinstance(item, dict) else None
+            if result not in result_counts:
+                errors.append({"field": "ledger.result", "message": f"invalid result for {obligation_id}: {result}"})
+                continue
+            result_counts[result] += 1
+            if result != "SATISFIED" and not any(
+                finding["result"] == result and obligation_id in finding["obligations"]
+                for finding in findings
+            ):
+                errors.append({
+                    "field": "ledger.finding",
+                    "message": f"{obligation_id} result {result} has no matching finding",
+                })
+        metrics_body = section(text, "### Metrics")
+        assessed_match = ASSESSED_RE.search(metrics_body)
+        result_match = RESULT_METRICS_RE.search(metrics_body)
+        if not assessed_match or int(assessed_match.group(1)) != len(ledger_ids):
+            errors.append({"field": "metrics", "message": "obligations assessed does not match ledger"})
+        if not result_match:
+            errors.append({"field": "metrics", "message": "missing obligation result metrics"})
+        else:
+            reported_results = dict(
+                zip(("SATISFIED", "VIOLATED", "UNPROVEN", "NOT_CHECKED"), map(int, result_match.groups()))
+            )
+            if reported_results != result_counts:
+                errors.append({
+                    "field": "metrics",
+                    "message": f"result metrics {reported_results} do not match ledger results {result_counts}",
+                })
     terminal = fm.get("terminal_precondition") is True
-    if terminal or any(item["severity"] in {"CRITICAL", "HIGH"} for item in routed):
+    has_not_checked = bool(result_counts and result_counts["NOT_CHECKED"])
+    if terminal or has_not_checked or any(item["severity"] in {"CRITICAL", "HIGH"} for item in routed):
         expected = "BLOCK"
     elif routed:
         expected = "ROUTING_REQUIRED"
@@ -153,8 +230,8 @@ def finding_id(pass_name, owner, obligation, location):
     return f"{pass_name.upper()}-{digest}"
 
 
-def finalize(path):
-    result = validate(path)
+def finalize(path, ledger_path=None):
+    result = validate(path, ledger_path)
     if not result["ok"]:
         return result, 1
 
@@ -211,6 +288,7 @@ def main():
         parser = argparse.ArgumentParser(description="Validate a code report and apply its derived feature status")
         parser.add_argument("finalize")
         parser.add_argument("report")
+        parser.add_argument("--ledger")
         parser.add_argument("--json", action="store_true")
         args = parser.parse_args()
         path = Path(args.report)
@@ -218,7 +296,7 @@ def main():
             result = {"ok": False, "errors": [{"field": "file", "message": "report not found"}]}
             print(json.dumps(result))
             return 2
-        result, rc = finalize(path)
+        result, rc = finalize(path, args.ledger)
         if args.json:
             print(json.dumps(result, indent=2))
         else:
@@ -228,13 +306,14 @@ def main():
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("report")
+    parser.add_argument("--ledger")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
     path = Path(args.report)
     if not path.is_file():
         print(json.dumps({"ok": False, "errors": [{"field": "file", "message": "report not found"}]}))
         return 2
-    result = validate(path)
+    result = validate(path, args.ledger)
     if args.json:
         print(json.dumps(result, indent=2))
     else:

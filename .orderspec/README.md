@@ -88,6 +88,7 @@ agent-specific commands, read [Getting Started](framework/docs/getting-started.m
 
 - Specs are the stable source of truth; plans and tasks are derived.
 - Deterministic scripts own mechanical work.
+- Deterministic state machines select one bounded semantic question at a time.
 - Gates detect and route; artifact owners fix.
 - Capabilities are default-deny and governed by project contracts.
 - Every requirement traces forward, and every implementation file traces back.
