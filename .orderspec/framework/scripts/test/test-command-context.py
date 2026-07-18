@@ -998,6 +998,41 @@ else:
     ok("real manifest feature context test skipped")
 
 
+# 29g. real manifest: code-check feature artifacts are optional lifecycle inputs
+reset_work()
+setup_base_files()
+if _real_manifest.exists():
+    _shutil.copy2(_real_manifest, manifest_path())
+    feature = WORK / ".orderspec" / "features" / "001-demo"
+    write(feature / "spec.md", "# spec.md\n")
+    write(
+        WORK / ".orderspec" / "state" / "active-feature.json",
+        json.dumps(
+            {
+                "feature_id": "001-demo",
+                "feature_directory": ".orderspec/features/001-demo",
+                "status": "implementing",
+            }
+        ),
+    )
+    rc, data, err = run_cc_json("resolve", "order.code-check", "--json")
+    items = {item["path"]: item for item in data.get("to_read", [])}
+    spec_path = ".orderspec/features/001-demo/spec.md"
+    missing_paths = {item["path"] for item in data.get("missing_required", [])}
+    if (
+        rc == 0
+        and data.get("ok") is True
+        and spec_path in items
+        and items[spec_path]["required"] is False
+        and ".orderspec/features/001-demo/plan.md" not in missing_paths
+        and ".orderspec/features/001-demo/tasks.md" not in missing_paths
+        and data.get("feature_context", {}).get("mode") == "if_active"
+    ):
+        ok("real manifest: order.code-check treats feature lifecycle inputs as optional")
+    else:
+        bad(f"order.code-check feature context wrong :: rc={rc} items={items} data={data} err={err!r}")
+
+
 # 30. v2 ref and group entries expand in order
 reset_work()
 setup_base_files()

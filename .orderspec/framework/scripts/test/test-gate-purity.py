@@ -14,6 +14,7 @@ CHECK_SURFACES = [
     FRAMEWORK_DIR / "prompts" / "order.tasks-check.md",
     FRAMEWORK_DIR / "prompts" / "order.code-check.md",
     FRAMEWORK_DIR / "templates" / "report-template.md",
+    FRAMEWORK_DIR / "templates" / "code-report-template.md",
     FRAMEWORK_DIR / "scripts" / "bootstrap_contracts.py",
     FRAMEWORK_DIR / "docs" / "architecture.md",
 ]

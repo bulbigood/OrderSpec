@@ -38,7 +38,10 @@ PLAN_TEMPLATE_FILE = f"{PLAN_TEMPLATE_NAME}.md"
 
 REPORT_TEMPLATE_NAME = "report-template"
 REPORT_TEMPLATE_FILE = f"{REPORT_TEMPLATE_NAME}.md"
+CODE_REPORT_TEMPLATE_NAME = "code-report-template"
+CODE_REPORT_TEMPLATE_FILE = f"{CODE_REPORT_TEMPLATE_NAME}.md"
 SPEC_REPORT_FILE = "spec-report.md"
+CODE_REPORT_FILE = "code-report.md"
 
 
 def output_json(data):
@@ -543,6 +546,56 @@ def cmd_tasks_check(args):
     output_result(payload, args)
 
 
+# ── subcommand: code-check ──────────────────────────────────────────────────────────
+
+def cmd_code_check(args):
+    """Setup for /order.code-check and create/refresh code-report.md.
+
+    Unlike upstream gates, code-check requires only a safely resolved feature
+    directory. Missing spec.md is a reportable terminal precondition, while
+    plan.md and tasks.md are optional lifecycle inputs.
+    """
+    try:
+        paths = get_feature_paths(persist_active_feature=False)
+    except RuntimeError as e:
+        die(str(e), rc=2)
+
+    feature_dir = Path(paths["FEATURE_DIR"])
+    code_report = feature_dir / CODE_REPORT_FILE
+    repo_root = paths["REPO_ROOT"]
+    feature_dir.mkdir(parents=True, exist_ok=True)
+
+    template = resolve_template(CODE_REPORT_TEMPLATE_NAME, repo_root)
+    if not template or not Path(template).is_file():
+        die(
+            f"Could not resolve required {CODE_REPORT_TEMPLATE_NAME} for {repo_root}",
+            rc=2,
+        )
+
+    if code_report.is_file() and not args.refresh_template:
+        print(
+            f"Report already exists at {code_report}, skipping template copy "
+            f"(use --refresh-template to regenerate)",
+            file=sys.stderr,
+        )
+    else:
+        shutil.copy2(template, code_report)
+        action = "Refreshed" if args.refresh_template else "Copied"
+        print(f"{action} report template at {code_report}", file=sys.stderr)
+
+    payload = base_paths_payload(paths)
+    payload.update({
+        "REPORT_TEMPLATE": str(template),
+        "CODE_REPORT": str(code_report),
+        "CODE_REPORT_EXISTS": code_report.is_file(),
+        "REPORT_REFRESHED": bool(args.refresh_template),
+        "SPEC_EXISTS": Path(paths["FEATURE_SPEC"]).is_file(),
+        "PLAN_EXISTS": Path(paths["IMPL_PLAN"]).is_file(),
+        "TASKS_EXISTS": Path(paths["TASKS"]).is_file(),
+    })
+    output_result(payload, args)
+
+
 # ── subcommand: spec ─────────────────────────────────────────────────────────
 
 def cmd_spec(args):
@@ -712,6 +765,23 @@ def main():
         help="Regenerate tasks-report.md from the resolved report template even if it already exists",
     )
 
+    code_check_parser = subparsers.add_parser("code-check", help="Setup for /order.code-check")
+    code_check_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output in JSON (always on)",
+    )
+    code_check_parser.add_argument(
+        "--shell-vars",
+        action="store_true",
+        help="Output as eval-ready shell variables",
+    )
+    code_check_parser.add_argument(
+        "--refresh-template",
+        action="store_true",
+        help="Regenerate code-report.md from the resolved code report template",
+    )
+
     args = parser.parse_args()
 
     if args.cmd == "paths":
@@ -730,6 +800,8 @@ def main():
         cmd_plan_check(args)
     elif args.cmd == "tasks-check":
         cmd_tasks_check(args)
+    elif args.cmd == "code-check":
+        cmd_code_check(args)
     else:
         parser.print_help()
         sys.exit(64)

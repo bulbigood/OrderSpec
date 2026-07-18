@@ -38,6 +38,7 @@ GATE_REPORT_REQUIRED_FIELDS = [
     "verdict", "feature_id", "feature_directory",
 ]
 GATE_REPORT_VERDICT_VALUES = {"PASS", "BLOCK", "ROUTING_REQUIRED"}
+CODE_REPORT_ASSURANCE_VALUES = {"EXECUTED", "STATIC_STRONG", "STATIC_LIMITED"}
 
 PROJECT_CONTRACT_REQUIRED_FIELDS = ["artifact", "kind"]
 PROJECT_CONTRACT_KIND_VALUES = {"constitution", "stack", "architecture", "conventions"}
@@ -337,6 +338,17 @@ def validate_gate_report_frontmatter(text):
     verdict = orderspec.get("verdict")
     if verdict and not looks_like_unresolved_placeholder(verdict) and verdict not in GATE_REPORT_VERDICT_VALUES:
         errors.append(("orderspec.verdict", f"orderspec.verdict must be one of {sorted(GATE_REPORT_VERDICT_VALUES)}, got '{verdict}'"))
+
+    if orderspec.get("command") == "order.code-check":
+        assurance = orderspec.get("assurance")
+        if looks_like_unresolved_placeholder(assurance):
+            errors.append(("orderspec.assurance", "Required code report field 'orderspec.assurance' is missing, empty, or unresolved"))
+        elif assurance not in CODE_REPORT_ASSURANCE_VALUES:
+            errors.append(("orderspec.assurance", f"orderspec.assurance must be one of {sorted(CODE_REPORT_ASSURANCE_VALUES)}, got '{assurance}'"))
+
+        terminal_precondition = orderspec.get("terminal_precondition")
+        if not isinstance(terminal_precondition, bool):
+            errors.append(("orderspec.terminal_precondition", "Required code report field 'orderspec.terminal_precondition' must be true or false"))
 
     return errors
 
