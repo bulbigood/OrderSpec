@@ -229,10 +229,63 @@ Tooling v3 binds skills through `contract_refs`, which may contain `GOV-NNN`,
 are blocking errors.
 
 Determine discovery-tool availability from actual runtime tools and exact CLI
-probes. Offer discovery only for uncovered project-contract needs. Installation
-or registration requires approval for exact skill, source, refs, commands, and
-project-local destination. Never move or remove a global skill. Project-required
-skills must end under `.orderspec/skills/<name>/` with `SKILL.md`.
+probes. Inspect validator output and runtime-provided skill metadata before any
+network lookup.
+
+Build skill coverage groups from live project-contract entries:
+
+- stack technologies and frameworks from `STACK-NNN`;
+- reusable architecture practices from `ARCH-NNN`;
+- reusable implementation or verification practices from `CONV-NNN`;
+- governance capabilities from `GOV-NNN` only when a skill could implement a
+  narrowly defined, approved workflow.
+
+Do not create a group for a project name, product domain, incidental package,
+version-only entry, or rule too project-specific to benefit from a reusable
+skill. One group may cover multiple related contract IDs.
+
+On Init, discovery is required for every uncovered coverage group. On Refine,
+it is required for groups that are new, changed, pending, missing, or still
+uncovered; do not repeat network discovery for a valid installed binding unless
+the operator requests alternatives. Before network access, show the exact
+queries and discovery sources as one bounded batch and obtain approval required
+by the constitution. If discovery is denied or unavailable, record each group
+as unresolved and continue only when no downstream command requires the skill.
+
+Use `npx skills find <query>` when the default discovery CLI is available.
+Collect up to three materially distinct candidates per group. For each
+candidate inspect the exact source and `SKILL.md`, then present:
+
+- exact `<owner>/<repository>@<skill>` identity and source URL;
+- covered contract IDs and commands;
+- discovery rank and install count when the source reports them;
+- maintainer/source identity, content fit, requested capabilities, and notable
+  risks;
+- installation configuration: canonical destination
+  `.orderspec/skills/<name>/` and the enabled agents that will receive that
+  canonical directory through their adapters.
+
+Recommend at most one candidate per coverage group. Popularity is a ranking
+signal, not trust evidence. Do not recommend a result solely because it has the
+largest install count.
+
+Ask one bounded selection question for the candidate/configuration matrix. The
+operator may choose one candidate per group, skip a group, change applicable
+commands, or skip installation. Agent exposure is the enabled set approved in
+Phase 3 and applies to the canonical directory as a whole. If the operator wants
+a different agent set, leave installation unresolved and rerun bootstrap with
+that agent selection; do not invent per-skill adapter filtering. Never install
+the same skill separately into agent-specific directories:
+`.orderspec/skills/` is the single project source of truth, and agent adapters
+expose that directory.
+
+Installation or registration requires approval for the exact skill, source,
+refs, commands, canonical project-local destination, and enabled-agent exposure.
+Never move or remove a global skill. Project-required skills must end under
+`.orderspec/skills/<name>/` with `SKILL.md`. After installation, re-run
+`agents_sync.py sync --agents <approved-enabled-ids> --json` so every approved
+agent receives the canonical skill directory, then verify the installed source
+identity and binding.
 
 Register an approved binding only via:
 
@@ -242,9 +295,7 @@ python3 .orderspec/framework/scripts/tooling_config.py add-binding \
   --skills <names> [--commands <order.command>] --status <status>
 ```
 
-Popularity alone is not trust evidence. Check source identity, content fit, and
-requested scope before recommending a skill. Re-run validation until successful
-or report a blocking operator decision.
+Re-run validation until successful or report a blocking operator decision.
 
 ## Phase 5: external rules
 
@@ -297,5 +348,9 @@ external-rule integration, unresolved decisions, and downstream impact.
 - every semantic governance change has operator approval;
 - tooling v3 refs resolve to live project-contract IDs;
 - installed skills exist project-locally;
+- Init searched every eligible uncovered skill coverage group, or reports the
+  exact denied/unavailable/unresolved groups;
+- each approved skill records reviewed source identity, contract bindings,
+  command scope, canonical destination, and enabled-agent exposure;
 - external rules were ignored or operator-approved and routed by owner;
 - top-level run updated bootstrap baseline only after all validation succeeded.

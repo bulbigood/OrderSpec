@@ -73,7 +73,8 @@ Run an individual test file directly only when isolating a failure.
 
 ## Current limitations
 
-- Installation is manual.
+- Skill discovery and installation are operator-approved bootstrap steps;
+  unattended installation is not supported.
 - Python 3 is required by the framework scripts.
 - Contract paths under `.orderspec/contracts/` are fixed.
 - Operator-defined procedural extensions and arbitrary prompt hooks are not

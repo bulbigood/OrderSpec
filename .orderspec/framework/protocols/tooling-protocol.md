@@ -41,6 +41,8 @@ If `.orderspec/config/tooling.json` does not exist, has empty fields, or does no
 
 ### Skills
 - **Discovery command:** `npx skills find <technology>`.
+- **Discovery result:** ranked candidates may include install counts; install
+  count is a popularity signal, not source-trust evidence.
 - **Install action:** use an operator-approved mechanism that writes or vendors the exact skill directly under `.orderspec/skills/<skill-name>/`; never relocate or remove a global skill.
 - **Install policy:** `ask_user` (оператор должен подтвердить установку).
 - **Install location:** `.orderspec/skills/<skill-name>/` (project-local, VCS-synced).
@@ -99,6 +101,24 @@ Version 2 `match.stack_id` bindings MUST be migrated with
 5. **Matching:** Required skills are matched through `contract_refs` containing `GOV-NNN`, `STACK-NNN`, `ARCH-NNN`, or `CONV-NNN`. The validator resolves each ID in its owning contract and rejects unknown or tombstoned IDs.
 6. **Missing skills:** If a required skill is missing, commands MUST NOT silently continue when the missing skill is required for library-specific work.
 7. **Pre-discovery check:** Before network discovery, inspect validator output for project-local skills and runtime-provided skill metadata. Global skills may be reported as candidates but are never treated as installed project skills.
+8. **Bootstrap coverage:** Init MUST offer approved discovery for each eligible,
+   uncovered skill-coverage group derived from live project-contract IDs.
+   Refine MUST do so for new, changed, missing, pending, or uncovered groups.
+   Project-specific rules and incidental packages do not create coverage groups.
+9. **Candidate comparison:** Present no more than three materially distinct
+   candidates per group. Include exact source identity, covered contract IDs,
+   command scope, discovery rank, reported install count, content fit,
+   capabilities, and risks. Inspect the candidate `SKILL.md` before recommending
+   it. Popularity MUST NOT be represented as trust or quality proof.
+10. **Agent exposure:** `.orderspec/skills/` is the single source of truth.
+    Install once into that directory, then use enabled adapters to expose it to
+    approved agents. Exposure applies to the canonical directory as a whole; a
+    different exposure set requires a different enabled-agent selection, not
+    per-skill adapter filtering or per-agent copies.
+11. **Selection:** Ask one bounded selection question for the candidate and
+    configuration matrix. Approval identifies exact skill, source, contract
+    refs, commands, canonical destination, and enabled-agent exposure. A group
+    may be explicitly skipped and recorded as unresolved.
 
 Before library-specific work, validate bindings deterministically:
 

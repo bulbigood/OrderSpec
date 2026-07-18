@@ -51,8 +51,12 @@ Bootstrap creates or refines:
 .orderspec/state/agents.json
 ```
 
-It also detects agents and tooling, synchronizes enabled agents, registers
-project skills, and offers to integrate external agent rules according to the
+It also detects agents and tooling, synchronizes enabled agents, derives
+reusable skill needs from the project contracts, and—after approval for the
+exact search queries—compares popular discovery candidates. Bootstrap asks
+which candidate/configuration to install, vendors approved skills once under
+`.orderspec/skills/`, exposes that canonical directory through approved agent
+adapters, and offers to integrate external agent rules according to the
 constitution.
 
 ## Create and implement a feature
