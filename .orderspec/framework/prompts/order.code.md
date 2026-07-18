@@ -28,7 +28,11 @@ You **MUST** consider the user input before proceeding (if not empty).
   the same bounded task packet itself. Coordinator always validates results,
   updates `[X]` markers through the deterministic script, and reports.
 - **Sequential by default, `[P]` is a hint**: tasks execute top-to-bottom in ID order. `[P]` means a task is file-disjoint from adjacent `[P]` tasks, so their sub-agents MAY run concurrently. Sequential execution remains the fallback for any task that is not proven safe to parallelize.
-- **Resumable**: tasks marked `[X]` are done — skip them, never redo or "improve". A re-run continues from the first unchecked task. Never remove `[X]` markers.
+- **Resumable after interruption**: tasks marked `[X]` are done — skip them,
+  never redo or "improve". A re-run continues from the first unchecked task.
+  Resumability preserves work after an evidenced stop or external interruption;
+  it is not permission to choose a batch size or end a healthy `LOCAL_ALL` run.
+  Never remove `[X]` markers.
 - **No silent deviations**: if a task cannot be executed as written (missing path, contradiction with `plan.md`, broken dependency), apply the Deviation Rule below — do not improvise.
 
 ### Frozen Baseline and Pathmanifest Semantics
@@ -59,6 +63,12 @@ physical mapping, or task prerequisites—not an expected manifest transition.
    ```
 3. **Scope Lock:** You execute `tasks.md`. Do not invent new requirements, endpoints, fields, or permissions. If execution strictly requires a new externally visible behavior not present in `spec.md`, STOP and report `CODE_BLOCKED: contract decision required`.
 4. **Environment Boundary:** Apply `environment-block.md`. The coordinator diagnoses runtime blockers and asks for approval before mutating recovery actions; workers never mutate the environment.
+5. **No Voluntary Partial Completion:** `LOCAL_ALL` and `DELEGATED` continue
+   until every task is `[X]` unless a STOP/HALT condition explicitly named by
+   this artifact actually occurs and is reported with concrete evidence. Task
+   count, elapsed work, context size, token/tool budget, convenient batch size,
+   and resumability are not STOP/HALT conditions. Never convert partial progress
+   into a successful command ending or suggest `--resume` merely to split work.
 
 ---
 
@@ -368,6 +378,9 @@ Run phases strictly in order (hard sequential barriers). Within a phase, execute
 3. In `DELEGATED`, dispatch every task in the execution unit to its own sub-agent. In `LOCAL_PHASE` and `LOCAL_ALL`, execute the same task packet in the coordinator.
 4. Wait for the result, inspect allowed changes, run declared verification, then call `task_progress.py mark` with the worker result. Continue only after the marker script marks that exact task `[X]`.
 5. Advance to the next unchecked task in ID order. Do not leave the phase until every task and its checkpoint are complete.
+6. In `LOCAL_ALL` and `DELEGATED`, repeat this loop without an arbitrary task
+   limit until no unchecked task remains. Tenth-task, round-number, file-count,
+   and tool-call milestones are not phase barriers.
 
 #### Task packet, worker boundary, and parallelism (`[P]`) — delegation when available
 
@@ -530,9 +543,36 @@ read-only check from `plan.md` when constitution capabilities permit it.
 - A worker result containing a deviation is rejected and remains unchecked.
   Record the blocker in the Completion Report; never clear it to obtain `[X]`.
 
+### Step 9.5: Terminal State Guard
+
+Classify the execution outcome before entering post-execution handling. Exactly
+one state is legal:
+
+1. **COMPLETE** — `LOCAL_ALL` or `DELEGATED` has no unchecked task. Prove it:
+   ```bash
+   eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
+   python3 .orderspec/framework/scripts/task_progress.py assert-complete \
+     --tasks "$FEATURE_DIR/tasks.md"
+   ```
+   Exit 0 permits Step 10. Non-zero with `error: tasks_incomplete` is not a
+   halt: obey `required_action`, return to Step 9 at `first_unchecked`, and do
+   not emit a Completion Report.
+2. **PHASE_COMPLETE** — `LOCAL_PHASE` completed every unchecked task and the
+   checkpoint in the selected phase. This intentional phase barrier permits
+   Step 10 without asserting the whole work order complete.
+3. **HALTED** — a specific STOP/HALT rule in this artifact was triggered. Record
+   its exact rule, task/phase, command or worker evidence, and routing target.
+   Partial task counts, successful validation, or a desire to resume later do
+   not establish this state.
+
+Never enter Step 10 from `LOCAL_ALL`/`DELEGATED` with unchecked tasks unless
+state is **HALTED** with that evidence. An unexplained early exit is a command
+failure, not resumable success.
+
 ### Step 10: Post-Execution Coverage Check
 
-After all tasks complete (or on halt), run a mechanical coverage check:
+After Step 9.5 establishes **COMPLETE**, **PHASE_COMPLETE**, or evidenced
+**HALTED**, run a mechanical coverage check:
 
 ```bash
 eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
@@ -547,7 +587,7 @@ Note: `extract-trace` validates task line coverage, not `[X]` execution state. E
 
 ### Step 11: Update Active Feature State
 
-On successful completion of all tasks (or on halt with partial progress), update the active feature status:
+After the terminal state guard, update the active feature status:
 
 ```bash
 eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
@@ -597,7 +637,10 @@ Report to chat:
 - **Deviation blockers**: rejected task ID/result and routing target, or "none".
 - **Environment blockers**: prerequisite, observed failure, user-approved recovery or fallback, and outcome (or "none").
 - **Library Documentation Evidence**: for each library-specific claim, cite the evidence source (skill name, docs source name, or user-provided reference). If a required source was unavailable, record that and the fallback applied.
-- **If halted early**: exact stopping point (phase/task), reason, and the recommended next command (`/order.code` to resume, or `/order.tasks` / `/order.plan` if the failure is a design gap).
+- **If halted early**: exact stopping point (phase/task), named STOP/HALT rule,
+  concrete evidence, and recommended next command (`/order.code` to resume, or
+  `/order.tasks` / `/order.plan` if the failure is a design gap). Never report
+  partial progress alone as the reason.
 - **Active feature status**: updated to `implementing` (or not, with reason).
 - **Gate report consumed**: if `tasks-report.md` was marked consumed in Step 12.
 - **Manual/orchestrator next step**: Run `/order.code-check` to verify the implementation before considering the feature done.
@@ -612,7 +655,12 @@ Report to chat:
 - [ ] Upstream gate respected: guard returned `ok`/`advisory`/`forced` (not `halt`/`stop`/`error`); on `forced`, a `--force` warning was recorded in the completion report; on `advisory`, user was warned in chat
 - [ ] Tooling validated via `validate_tooling.py` (if `tooling-protocol.md` was loaded); missing required skills routed per rule 6, not silently continued
 - [ ] Prior gate report consumed (if present and targeting `/order.code`): findings addressed or routed; `mark-consumed` run
-- [ ] All tasks executed in phase + task-ID order; each successful marker written by `task_progress.py`, or a precise stopping point reported
+- [ ] All tasks executed in phase + task-ID order; each successful marker
+  written by `task_progress.py`; or a named STOP/HALT rule reported with
+  concrete evidence
+- [ ] `LOCAL_ALL`/`DELEGATED` normal completion passed
+  `task_progress.py assert-complete`; incomplete output returned execution to
+  Step 9 instead of producing a Completion Report
 - [ ] `[P]` groups run concurrently ONLY after path-disjoint verification via `plan.md` pathmanifest; otherwise sequential
 - [ ] All story checkpoints passed; GATE passed before any Contract task ran
 - [ ] Environment prerequisites checked before dependent tasks; recovery actions were approval-gated and documented

@@ -2,7 +2,8 @@
 """Deterministic task state checks and completion marking for /order.code.
 
 The coordinator owns worker result interpretation. This script owns the narrow
-state transition from one unchecked task to `[X]` after a successful result.
+state transition from one unchecked task to `[X]` after a successful result and
+the terminal assertion that no unchecked tasks remain.
 """
 
 from __future__ import annotations
@@ -128,6 +129,43 @@ def cmd_validate(args: argparse.Namespace) -> int:
             "completed": len(records) - len(incomplete),
             "unchecked": len(incomplete),
             "first_unchecked": incomplete[0] if incomplete else None,
+        }
+    )
+    return 0
+
+
+def cmd_assert_complete(args: argparse.Namespace) -> int:
+    records, errors = parse_tasks(Path(args.tasks))
+    if errors:
+        return fail("; ".join(errors), code="invalid_tasks_file")
+
+    incomplete = [record["task_id"] for record in records if record["status"] == " "]
+    if incomplete:
+        emit(
+            {
+                "ok": False,
+                "error": "tasks_incomplete",
+                "message": (
+                    f"{len(incomplete)} unchecked tasks remain; continue at {incomplete[0]}"
+                ),
+                "tasks_file": args.tasks,
+                "total": len(records),
+                "completed": len(records) - len(incomplete),
+                "unchecked": len(incomplete),
+                "first_unchecked": incomplete[0],
+                "required_action": "CONTINUE Step 9; do not emit the Completion Report",
+            }
+        )
+        return 1
+
+    emit(
+        {
+            "ok": True,
+            "tasks_file": args.tasks,
+            "total": len(records),
+            "completed": len(records),
+            "unchecked": 0,
+            "first_unchecked": None,
         }
     )
     return 0
@@ -281,6 +319,12 @@ def main() -> int:
     validate = subparsers.add_parser("validate", help="validate task lines and report completion state")
     validate.add_argument("--tasks", required=True)
     validate.set_defaults(handler=cmd_validate)
+
+    assert_complete = subparsers.add_parser(
+        "assert-complete", help="fail while any task remains unchecked"
+    )
+    assert_complete.add_argument("--tasks", required=True)
+    assert_complete.set_defaults(handler=cmd_assert_complete)
 
     mark = subparsers.add_parser("mark", help="mark one successful task [X] from worker JSON")
     mark.add_argument("--tasks", required=True)

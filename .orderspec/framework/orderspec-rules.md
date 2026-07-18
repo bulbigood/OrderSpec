@@ -125,6 +125,9 @@ Execution marker rules:
   follows. Already loaded feature artifacts are reused, not reopened later.
 - A rejected `task_progress.py mark` call is terminal for that run. Runtime
   agents MUST NOT alter result fields or retry to bypass path/deviation checks.
+- Normal completion of `LOCAL_ALL` or delegated full execution MUST pass
+  `task_progress.py assert-complete`. An incomplete result requires continued
+  execution from `first_unchecked`; it is not a voluntary resume boundary.
 - `VERIFY:` and `GATE:` tasks are read-only and report no changed files.
 
 ## 4. Frontmatter Rule

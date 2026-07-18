@@ -56,6 +56,21 @@ expect(
 )
 expect("task_progress.py mark" in code_prompt, "order.code delegates marker writes to deterministic script")
 expect(
+    "task_progress.py assert-complete" in normalized_code_prompt
+    and "return to Step 9" in normalized_code_prompt,
+    "order.code deterministically rejects voluntary partial completion",
+)
+expect(
+    "No Voluntary Partial Completion" in code_prompt
+    and "Task count, elapsed work, context size, token/tool budget" in normalized_code_prompt,
+    "order.code forbids workload-based LOCAL_ALL chunking",
+)
+expect(
+    "PHASE_COMPLETE" in code_prompt
+    and "state is **HALTED** with that evidence" in normalized_code_prompt,
+    "order.code distinguishes phase completion from evidenced halt",
+)
+expect(
     "Marker rejection is terminal" in code_prompt
     and "NEVER alter or retry" in code_prompt,
     "order.code forbids marker-result laundering and retries",
@@ -128,6 +143,11 @@ expect(
 
 rules = (FRAMEWORK / "orderspec-rules.md").read_text(encoding="utf-8")
 expect("task_progress.py" in rules, "framework rules define marker ownership")
+expect(
+    "task_progress.py assert-complete" in rules
+    and "not a voluntary resume boundary" in rules,
+    "framework rules require deterministic full-execution completion",
+)
 expect("task-context" in rules and "task_context.py" in rules, "framework rules define task context authority")
 expect("Plan/work-order baseline rules" in rules, "framework rules freeze work-order baseline")
 

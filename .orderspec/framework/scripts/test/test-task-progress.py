@@ -53,6 +53,15 @@ with tempfile.TemporaryDirectory(prefix="orderspec-task-progress-") as temp:
     rc, data = run("validate", "--tasks", str(tasks))
     expect(rc == 0 and data["unchecked"] == 6 and data["first_unchecked"] == "T001", "validate reports task state")
 
+    rc, data = run("assert-complete", "--tasks", str(tasks))
+    expect(
+        rc != 0
+        and data["error"] == "tasks_incomplete"
+        and data["first_unchecked"] == "T001"
+        and data["required_action"].startswith("CONTINUE Step 9"),
+        "completion guard rejects partial progress and orders continuation",
+    )
+
     out_of_order = {
         "task_id": "T002",
         "status": "SUCCESS",
@@ -149,5 +158,8 @@ with tempfile.TemporaryDirectory(prefix="orderspec-task-progress-") as temp:
     )
     rc, _ = run("mark", "--tasks", str(tasks), input_text=json.dumps(parallel_first))
     expect(rc == 0 and "- [X] T005" in tasks.read_text(encoding="utf-8"), "remaining parallel sibling marks afterward")
+
+    rc, data = run("assert-complete", "--tasks", str(tasks))
+    expect(rc == 0 and data["unchecked"] == 0, "completion guard accepts all tasks marked")
 
 print("All task-progress tests passed")
