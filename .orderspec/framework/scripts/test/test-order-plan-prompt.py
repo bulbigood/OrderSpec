@@ -68,5 +68,15 @@ class TestOrderPlanPrompt(unittest.TestCase):
         self.assertIn("Cross-boundary completeness", plan_prompt)
         self.assertIn("P1-014 Cross-Boundary Completeness", check_prompt)
 
+    def test_plan_check_severity_model(self):
+        with open(self.check_prompt_path, "r") as f:
+            check_prompt = f.read()
+
+        self.assertIn("Severity measures defect impact", check_prompt)
+        self.assertIn("P0-000 (MEDIUM): no active feature", check_prompt)
+        self.assertIn("P0-002 (LOW): suspected script-pattern bug", check_prompt)
+        self.assertIn("| BLOCK | any routed CRITICAL/HIGH", check_prompt)
+        self.assertNotIn("CRITICAL if MVP/P1", check_prompt)
+
 if __name__ == '__main__':
     unittest.main()

@@ -17,6 +17,16 @@ This command acts as **semantic glue** between deterministic scripts. It does no
 
 This gate is a **pure inspector**. It writes only `plan-report.md`. It MUST NOT edit `spec.md`, `plan.md`, `tasks.md`, `.state/*.tsv`, or source code.
 
+## Severity Model
+
+Severity measures defect impact, not whether the command can continue:
+- **CRITICAL**: constitution `MUST` violation; violated or unenforced invariant with a reachable write path; atomicity, security, data-loss, or data-corruption risk.
+- **HIGH**: missing, contradicted, or weakly evidenced P1/MVP obligation; interface status/shape/route mismatch; missing required implementation path; P1 test-topology failure; upstream non-PASS.
+- **MEDIUM**: non-P1 defect or evidence gap; unavailable plan context; stale upstream evidence; mechanism deviation that does not create critical risk.
+- **LOW**: cosmetic residue or minor evidence weakness with no implementation or runtime impact.
+
+A terminal precondition can require a BLOCK report and stop the command independently of finding severity. Do not inflate an operational/context finding to CRITICAL merely because inspection cannot continue.
+
 ## Command Context Bootstrap
 
 1. Resolve command context:
@@ -41,12 +51,12 @@ This gate is a **pure inspector**. It writes only `plan-report.md`. It MUST NOT 
    python3 .orderspec/framework/scripts/active_feature.py get --json
    python3 .orderspec/framework/scripts/active_feature.py validate --json
    ```
-3. If active state validation fails, write BLOCK report with `P0-003 (HIGH): active feature state invalid`, then stop.
+3. If active state validation fails, write BLOCK report with `P0-003 (MEDIUM): active feature state invalid`, then stop.
 4. If `$ARGUMENTS` contains an explicit feature reference, resolve it read-only using `active_feature.py list --json`.
-   - If ambiguous: `P0-004 (HIGH): ambiguous feature reference`.
-   - If not found: `P0-005 (HIGH): feature not found`.
+   - If ambiguous: write a BLOCK report with `P0-004 (MEDIUM): ambiguous feature reference`, then stop.
+   - If not found: write a BLOCK report with `P0-005 (MEDIUM): feature not found`, then stop.
 5. Do not use `active_feature.py select` in this gate.
-6. If no target is resolved, write BLOCK report with `P0-000 (CRITICAL): no active feature`.
+6. If no target is resolved, write BLOCK report with `P0-000 (MEDIUM): no active feature`, then stop.
 
 ## Upstream Gate Guard
 
@@ -66,9 +76,9 @@ python3 .orderspec/framework/scripts/upstream_gate.py \
 ```
 
 Interpret exit codes:
-- **exit 2 (stop)** — upstream artifact (`spec.md`) missing. Write BLOCK report with `P0-006 (CRITICAL): upstream spec.md missing`, route to `/order.spec`, then stop.
+- **exit 2 (stop)** — upstream artifact (`spec.md`) missing. Write BLOCK report with `P0-006 (HIGH): upstream spec.md missing`, route to `/order.spec`, then stop.
 - **exit 1 (halt)** — spec gate report exists and is non-PASS. Write BLOCK report with `P0-007 (HIGH): upstream spec gate non-PASS (verdict: {verdict})`, route to `/order.spec` then `/order.spec-check`, then stop.
-- **exit 0 (advisory)** — spec gate report absent or stale. Proceed, but record `P0-008 (LOW): spec gate advisory ({reason})`.
+- **exit 0 (advisory)** — spec gate report absent or stale. Proceed, but record `P0-008 (MEDIUM): spec gate advisory ({reason})`.
 - **exit 0 (ok)** — Proceed.
 - **exit 64 (error)** — invocation error (empty arguments). Write BLOCK report with `P0-009 (HIGH): upstream_gate invocation error`.
 
@@ -93,7 +103,7 @@ The JSON output of `validate --stage plan --json` is the **ground truth** for me
 You MUST import all findings exactly as provided, including their `severity` and `disposition`.
 You MUST NOT downgrade or suppress imported findings.
 
-If a script crashes or returns unparseable output, record `P0-001 (HIGH): mechanical validator unavailable` and route to maintainer/tooling. If a script reports a finding you suspect is a script bug, record `P0-002 (MEDIUM): suspected script-pattern bug` alongside the original finding — never suppress the original.
+If a script crashes or returns unparseable output, record `P0-001 (HIGH): mechanical validator unavailable` and route to maintainer/tooling. If a script reports a finding you suspect is a script bug, record `P0-002 (LOW): suspected script-pattern bug` alongside the original finding — never suppress the original. Escalate P0-002 to MEDIUM only when focused evidence demonstrates that the script result is false or materially misleading.
 
 ## Semantic Inspection
 
@@ -110,30 +120,30 @@ For any finding, assign disposition `Route` and create a routing block.
 
 ### P1-001 Artifact Hygiene
 Check `plan.md` for unresolved placeholder tokens, a Markdown mechanism table, copied self-check checklists, or comments that are not part of the canonical plan template. Canonical template comments that document machine-readable syntax are allowed and MUST NOT be routed.
-Residue present → Route (HIGH for unresolved placeholders / mechanism table; MEDIUM/LOW for non-canonical comments).
+Residue present → Route. An unresolved placeholder that leaves a P1/MVP mapping, mechanism, path, or obligation incomplete is HIGH; other unresolved placeholders are MEDIUM. A Markdown mechanism table is MEDIUM unless it conflicts with the canonical TSV or can materially misdirect implementation, then HIGH. Copied checklists and non-canonical comments are LOW unless they alter normative meaning, then MEDIUM.
 
 ### P1-002 Role Purity — Spec Duplication
 Verify `plan.md` does not restate the Executive Summary, duplicate full interface contracts, or redraw spec logical diagrams.
-Duplication → Route (MEDIUM).
+Duplication without contradiction → Route (LOW). If duplicated text changes or contradicts the contract, classify the defect under P1-003 or P1-006 instead.
 
 ### P1-003 Role Purity — New Behavior Invented
 Verify `plan.md` does not add new product behavior, status codes, fields, roles, permissions, TTLs, jobs, or NFR numbers absent from `spec.md`.
-Externally visible contract drift → Route (CRITICAL if MVP/P1, else HIGH). Non-behavioral overreach → Route (MEDIUM).
+Externally visible contract drift → Route (HIGH for MVP/P1, MEDIUM otherwise). Escalate to CRITICAL only when the invented behavior violates a constitution `MUST`, leaves an invariant unenforced, or creates security, data-loss, or data-corruption risk. Non-behavioral overreach → Route (LOW when cosmetic, MEDIUM when it creates implementation work or constrains design).
 
 ### P1-004 Mechanism Adequacy — Documented Misuse
 For each `mechanisms.tsv` row with `coverage_kind=documented`, verify:
 - `primary_files` is `plan.md` or a repo-relative documentation artifact in the `pathmanifest` — not a source file (`.js`, `.ts`, `.py`, `.go`, `.java`, `.rb`, `.php`, `.cs`).
 - MUST-level NFRs are not marked `documented` without justification.
 - Required behavior is not marked `documented` to avoid testing.
-Violation → Route (HIGH; CRITICAL if MVP/P1 behavior evades testing).
+Violation → Route (HIGH when MVP/P1 behavior evades testing; MEDIUM otherwise). Escalate to CRITICAL only when the misuse leaves an invariant with a reachable write path unenforced or creates atomicity, security, data-loss, or data-corruption risk.
 
 ### P1-005 Mechanism Adequacy — Delegation Semantics
 For each `coverage_kind=delegated:<ID>` row, verify the delegation target semantically covers the source ID (e.g., an AC delegated to an IF that actually verifies that criterion; an EDGE delegated to a generic endpoint without explicit edge coverage is invalid).
-Invalid delegation → Route (HIGH).
+Invalid delegation → Route (HIGH for MVP/P1 coverage, MEDIUM otherwise).
 
 ### P1-006 Route / Interface Preservation
 For every `IF-NNN` in `spec.md`, verify `plan.md` preserves method, externally visible path, mounted route prefix, and status codes. No extra endpoint should appear unless present in `spec.md`.
-Route drift (e.g., spec `GET /v1/tasks/:taskId/audit` mapped to a file mounted under unrelated prefix without explicit note) → Route (HIGH; CRITICAL if MVP/P1).
+Route or interface drift (e.g., spec `GET /v1/tasks/:taskId/audit` mapped to a file mounted under unrelated prefix without explicit note) → Route (HIGH). Escalate to CRITICAL only when the drift violates an invariant or creates security, data-loss, or data-corruption risk.
 
 ### P1-007 Test Topology
 Compare `mechanisms.tsv` test claims with `pathmanifest`:
@@ -141,14 +151,14 @@ Compare `mechanisms.tsv` test claims with `pathmanifest`:
 - Service/model mechanisms marked `unit` have corresponding unit tests or explicit justification.
 - Every `IF-NNN` has integration coverage.
 - Delegated `AC-NNN` rows point to an executable path that can actually verify the AC.
-Implausible topology → Route (HIGH for missing IF integration; MEDIUM/HIGH for service/model unit gaps).
+Implausible topology → Route (HIGH when P1/MVP interface or invariant coverage is missing; MEDIUM for non-P1 interface coverage and ordinary service/model unit gaps). Escalate to CRITICAL only when an invariant with a reachable write path has no executable enforcement test or evidence.
 
 ### P1-012 Mechanism-to-Path and Interface Fidelity
 For every direct mechanism, verify that primary_files directly realizes the
 mechanism described in the TSV row, not merely participates in the flow. A
 service that creates audit entries does not, by itself, enforce audit-log
 immutability owned by the model/write boundary. Route a misleading
-primary_files claim to /order.plan (HIGH for P1 behaviour).
+primary_files claim to /order.plan using the severity rules below.
 
 For every IF, compare the plan mapping and mechanism rows with all declared
 input semantics, response fields, nullability, pagination/filter behaviour,
@@ -161,6 +171,8 @@ plan manifest. An integration-only test file is not a unit-test justification.
 Task-writing evidence belongs to `/order.tasks` and `/order.tasks-check`; this
 gate MUST NOT inspect or modify `tasks.md`, and a generic GATE task is not
 evidence for the plan-stage topology check.
+
+Severity for P1-012 findings: HIGH for P1/MVP mechanism ownership or interface status/shape/route mismatch; MEDIUM for non-P1 ownership, input-semantic, or test-topology gaps. Escalate to CRITICAL only when the mismatch leaves an invariant unenforced or creates atomicity, security, data-loss, or data-corruption risk.
 
 ### P1-014 Cross-Boundary Completeness
 
@@ -175,7 +187,7 @@ schema, DTO, serializer, or route to gain contract-required fields or operations
 that its planned obligation omitted. Generic path duties such as "create schema"
 or "add audit support" do not prove completeness when `spec.md` defines exact
 fields, snapshots, identifiers, response values, or failure behavior. Severity
-is HIGH for P1/MVP paths, MEDIUM otherwise.
+is HIGH for P1/MVP paths, MEDIUM otherwise. Escalate to CRITICAL only when the omitted boundary leaves an invariant with a reachable write path unenforced or creates atomicity, security, data-loss, or data-corruption risk.
 
 ### P1-008 Physical Grounding & Naming
 Use focused reconnaissance (hard cap ~10 files: one manifest, route registration, exemplars per touched layer, barrel/index files, test exemplar).
@@ -184,14 +196,14 @@ Verify:
 - Barrel/index files planned when needed; route mount files planned when new endpoints exist.
 - Multi-word filename naming cites actual same-layer precedent or fallback rules.
 - Feature path and physical paths are repo-relative and match the resolved active feature and current repository.
-Violation → Route (MEDIUM; LOW for minor naming).
+Missing or implausible required mount, export, route registration, or implementation path → Route (HIGH for P1/MVP, MEDIUM otherwise). Other grounding defects → Route (MEDIUM). Minor naming-only inconsistency → Route (LOW).
 
 ### P1-009 Stack, Constraints & Constitution
 Check against `CON-NNN` in `spec.md`, `Technical Context & Stack Verification` in `plan.md`, and project contracts (`constitution.md`, `stack.md`, `architecture.md`, `conventions.md`):
 - Verified facts have evidence (runtime/package versions found in manifests; test commands real).
 - `CON` constraints honored by stack and mapping decisions.
 - Constitution `MUST` obligations reflected (e.g., route + validation files planned when constitution mandates them).
-Violation → Route (CRITICAL for constitution MUST; HIGH for direct CON violation; LOW/MEDIUM for unverified version claims).
+Violation → Route (CRITICAL for constitution `MUST`; HIGH for a direct `CON` violation; MEDIUM when an unverified version or stack claim affects a mapping decision; LOW when the claim is cosmetic and has no implementation impact).
 
 ### P1-013 Mechanism Evidence & Runtime Closure
 For every material mechanism whose correctness depends on an existing project abstraction, runtime/deployment capability, external service, or concurrency scope, verify `Mechanism Evidence & Runtime Closure` against focused repository evidence:
@@ -204,15 +216,15 @@ For every material mechanism whose correctness depends on an existing project ab
 
 Examples: an ODM transaction API without evidence of a transaction-capable database topology is not closed; a process-local lock cannot satisfy a cluster-wide concurrency invariant; bypassing an observed shared pagination or serialization mechanism requires a concrete incompatibility.
 
-Missing section/table, unverified correctness prerequisite, missing prerequisite path, missing readiness check/recovery boundary/fallback, or scope mismatch → Route to `/order.plan` (CRITICAL when it invalidates an MVP/P1 invariant or atomicity guarantee; HIGH otherwise). Unjustified duplication of an existing project mechanism → Route to `/order.plan` (HIGH for contract-significant behavior; MEDIUM otherwise).
+For a material mechanism, missing section/table, unverified correctness prerequisite, missing prerequisite path, missing readiness check/recovery boundary/fallback, or scope mismatch → Route to `/order.plan` (HIGH for P1/MVP correctness, MEDIUM otherwise). Escalate to CRITICAL when the defect invalidates an atomicity guarantee, leaves an invariant with a reachable write path unenforced, or creates security, data-loss, or data-corruption risk. If no material mechanism needs closure, absence of closure detail is not a finding. Unjustified duplication of an existing project mechanism → Route to `/order.plan` (HIGH for P1/MVP contract-significant behavior; MEDIUM otherwise).
 
 ### P1-010 Spec-Rooted Defect
 If `plan.md` cannot be correct because `spec.md` is the root problem (contradictions, missing status codes needed by ACs, impossible constraints, measurable NFR without target), route upward.
-Route to `/order.spec` (CRITICAL if blocks MVP/P1; HIGH/MEDIUM otherwise). Do not "fix" the plan around a spec defect.
+Route to `/order.spec` (HIGH if it blocks MVP/P1; MEDIUM otherwise). Escalate to CRITICAL only for an impossible or contradictory constitution `MUST`, invariant, atomicity, security, data-loss, or data-corruption contract. Do not "fix" the plan around a spec defect.
 
 ### P1-011 Conditional ASM Overuse
 For `ASM-NNN` rows in `mechanisms.tsv`: if the ASM is `[default]` and merely restates normal behavior without implementation significance, flag unnecessary mechanism row. If `[narrowing ...]` and materially affects implementation, a mechanism row is appropriate.
-Unjustified default ASM mechanism → Route (MEDIUM).
+Unjustified default ASM mechanism → Route (LOW). Use MEDIUM when it materially misstates coverage, creates unnecessary implementation work, or constrains design.
 
 ## Report Generation
 
@@ -281,7 +293,7 @@ Use `/order.spec` for spec-rooted defects (contract contradiction, missing contr
 ### Verdict
 | Verdict | Conditions |
 |---|---|
-| BLOCK | any routed CRITICAL; any routed HIGH that breaks MVP/P1 mapping; upstream spec gate non-PASS; required artifact missing; traceability failure |
+| BLOCK | any routed CRITICAL/HIGH; any terminal precondition explicitly requiring BLOCK; upstream spec gate non-PASS; required artifact missing; traceability failure |
 | ROUTING_REQUIRED | no BLOCK condition, but at least one routed MEDIUM/LOW |
 | PASS | traceability succeeded, no routed findings remain, no unresolved CRITICAL/HIGH |
 
