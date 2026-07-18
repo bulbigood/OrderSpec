@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "orderspec://schemas/automation-run-state.schema.json",
+  "title": "OrderSpec Automation Run State",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version", "id", "status", "project_root", "feature_dir", "current_command",
+    "created_at", "updated_at", "transition_count", "route_count", "decision_counts",
+    "event_counts", "pending_interaction", "resume_input", "session_mode", "history"
+  ],
+  "properties": {
+    "version": {"const": 1},
+    "id": {"type": "string", "pattern": "^RUN-[0-9]{3}$"},
+    "status": {"enum": ["RUNNING", "WAITING_OPERATOR", "PAUSED", "STOPPED", "COMPLETE"]},
+    "project_root": {"type": "string", "minLength": 1},
+    "feature_dir": {"type": ["string", "null"]},
+    "current_command": {"type": "string", "pattern": "^order\\.[a-z][a-z0-9-]*$"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "transition_count": {"type": "integer", "minimum": 0},
+    "route_count": {"type": "integer", "minimum": 0},
+    "decision_counts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+    "event_counts": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0}},
+    "pending_interaction": {"type": ["object", "null"]},
+    "resume_input": {"type": ["object", "null"]},
+    "session_mode": {"enum": ["fresh", "resume", "compact"]},
+    "history": {"type": "array", "items": {"type": "object"}}
+  }
+}

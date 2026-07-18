@@ -24,6 +24,7 @@ It is framework-owned, read-only material, not generated project state.
 | [Getting Started](framework/docs/getting-started.md) | installation, agent sync, bootstrap, the feature workflow, gates, or brownfield extraction |
 | [Architecture](framework/docs/architecture.md) | artifact ownership and lifecycles, gates, governance, command context, feedback, rollback, or repository layout |
 | [Multi-Agent Support](framework/docs/multi-agent.md) | adapters, prompt/skill delivery, worker selection and configuration, or adding an agent |
+| [Continuous Execution](framework/docs/continuous-execution.md) | optional automatic routing, operator interrupts, context isolation, run checkpoints, or loop limits |
 | [Philosophy](framework/docs/philosophy.md) | design principles, weak-model-first reasoning, or comparison with spec-kit and OpenSpec |
 | [Reference](framework/docs/reference.md) | supported customization, direct script commands, tests, limitations, or roadmap |
 

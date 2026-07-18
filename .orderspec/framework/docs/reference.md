@@ -15,6 +15,7 @@ Supported:
 - project skills under `.orderspec/skills/`;
 - agent adapters under `.orderspec/framework/adapters/`;
 - external-rules integration policy in the constitution.
+- optional automatic routing policy through `.orderspec/config/automation.json`.
 
 Not supported:
 
@@ -56,6 +57,15 @@ python3 .orderspec/framework/scripts/agents_sync.py sync \
 python3 .orderspec/framework/scripts/agents_sync.py read-rules \
   --agents kilocode claude_code codex --json
 python3 .orderspec/framework/scripts/agents_sync.py state --json
+
+# Continuous execution policy and persistent run state
+python3 .orderspec/framework/scripts/automation_policy.py validate
+python3 .orderspec/framework/scripts/automation_policy.py classify \
+  --event-file <event.json>
+python3 .orderspec/framework/scripts/workflow_supervisor.py start \
+  --feature-dir <feature> --command order.code
+python3 .orderspec/framework/scripts/workflow_supervisor.py status \
+  --run-file <run-file>
 ```
 
 `work_order.py rollback` previews by default; pass `--apply` only after
@@ -85,6 +95,8 @@ Run an individual test file directly only when isolating a failure.
 - Adapters currently cover Kilo Code, Claude Code, and Codex only.
 - Claude Code skill registration uses a symlink, which can require developer
   mode on Windows.
+- The continuous supervisor core is runtime-neutral; agent-specific unattended
+  invocation drivers must submit schema-valid terminal events.
 
 Unresolved markers are intentional: an explicit unknown is safer than an
 invented project contract.
@@ -92,7 +104,7 @@ invented project contract.
 ## Roadmap
 
 - adapters for additional agents;
-- automation and orchestration hooks;
+- Codex, Claude Code, and Kilo continuous-execution runtime drivers;
 - improved cross-platform behavior;
 - MDA-like structures alongside feature specifications;
 - a system-level specification graph with cross-spec validation;

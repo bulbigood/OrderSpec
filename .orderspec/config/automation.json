@@ -1,0 +1,59 @@
+{
+  "$schema": "../framework/schemas/automation-config.schema.json",
+  "version": 1,
+  "enabled": false,
+  "context": {
+    "between_commands": "fresh",
+    "after_operator_input": "resume"
+  },
+  "defaults": {
+    "advance": "auto_route",
+    "route": "pause",
+    "operator_input": "pause",
+    "runtime_failure": "stop"
+  },
+  "rules": [
+    {
+      "id": "auto-gate-artifact-fixes",
+      "match": {
+        "kind": "ROUTE",
+        "reason": ["ARTIFACT_DEFECT", "UPSTREAM_DEFECT"],
+        "source": ["order.spec-check", "order.plan-check", "order.tasks-check", "order.code-check"]
+      },
+      "action": "auto_route",
+      "max_occurrences": 4
+    },
+    {
+      "id": "auto-code-upstream-routing",
+      "match": {
+        "kind": "ROUTE",
+        "reason": ["ARTIFACT_DEFECT", "UPSTREAM_DEFECT"],
+        "source": ["order.code", "order.code-check"],
+        "target": ["order.spec", "order.plan", "order.tasks", "order.code"]
+      },
+      "action": "auto_route",
+      "max_occurrences": 4
+    },
+    {
+      "id": "retry-transient-runtime-once",
+      "match": {
+        "kind": "RUNTIME",
+        "reason": "TRANSIENT_FAILURE"
+      },
+      "action": "retry",
+      "max_occurrences": 1
+    },
+    {
+      "id": "pause-operator-input",
+      "match": {
+        "kind": "OPERATOR_INPUT"
+      },
+      "action": "pause"
+    }
+  ],
+  "limits": {
+    "max_transitions": 30,
+    "max_routes": 10,
+    "max_same_event": 3
+  }
+}

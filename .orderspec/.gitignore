@@ -6,3 +6,8 @@ venv/
 # Ephemeral /order.code snapshots and worker results. Successful attempts are
 # removed after their tasks are marked; failed attempts remain local evidence.
 /features/*/.state/code-attempts/
+
+# Local continuous-execution checkpoints. They survive process restarts but are
+# runtime state, not shared feature artifacts.
+/features/*/.state/runs/
+/state/runs/

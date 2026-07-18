@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "orderspec://schemas/automation-event.schema.json",
+  "title": "OrderSpec Automation Event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "id", "kind", "reason", "source"],
+  "properties": {
+    "version": {"const": 1},
+    "id": {"type": "string", "minLength": 1},
+    "kind": {"enum": ["ADVANCE", "ROUTE", "OPERATOR_INPUT", "RUNTIME", "COMPLETE"]},
+    "reason": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"},
+    "source": {"type": "string", "pattern": "^order\\.[a-z][a-z0-9-]*$"},
+    "target": {"type": ["string", "null"], "pattern": "^order\\.[a-z][a-z0-9-]*$"},
+    "severity": {"type": ["string", "null"], "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL", null]},
+    "destructive": {"type": "boolean", "default": false},
+    "summary": {"type": "string", "default": ""},
+    "evidence": {"type": "string", "default": ""},
+    "interaction": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "kind", "question"],
+          "properties": {
+            "id": {"type": "string", "minLength": 1},
+            "kind": {"type": "string", "pattern": "^[A-Z][A-Z0-9_]*$"},
+            "question": {"type": "string", "minLength": 1},
+            "response_type": {"enum": ["choice", "text"], "default": "choice"},
+            "options": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 1}
+            },
+            "exact_action": {"type": ["string", "null"]},
+            "resume_strategy": {"enum": ["same_session", "fresh_session"], "default": "same_session"}
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {"response_type": {"const": "text"}},
+                "required": ["response_type"]
+              },
+              "then": {"properties": {"options": {"maxItems": 0}}},
+              "else": {"required": ["options"], "properties": {"options": {"minItems": 2}}}
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"kind": {"enum": ["ADVANCE", "ROUTE"]}}},
+      "then": {"required": ["target"]}
+    },
+    {
+      "if": {"properties": {"kind": {"const": "OPERATOR_INPUT"}}},
+      "then": {"required": ["interaction"]}
+    }
+  ]
+}

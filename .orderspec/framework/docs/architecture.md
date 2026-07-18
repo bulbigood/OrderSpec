@@ -197,6 +197,21 @@ task resolvers, and validates terminal completeness. `/order.code-check` uses
 `code_obligations.py` to generate a complete machine ledger and record one
 schema-validated semantic result per obligation before report finalization.
 
+## Continuous execution policy
+
+Optional continuous execution remains outside artifact authorship. Commands
+produce typed boundary events; the deterministic supervisor applies
+`.orderspec/config/automation.json` and persists a feature- or project-scoped
+run checkpoint. `ADVANCE` and `ROUTE` may continue automatically. Questions and
+exact approvals become `OPERATOR_INPUT` interrupts and can only pause or stop;
+operator configuration never fabricates an answer.
+
+Normal cross-command transitions start a fresh agent context and reconstruct
+authoritative input through the command context resolver. An interrupted
+command may resume its own session after the operator answers. Route,
+transition, same-event, and per-rule limits stop non-progress cycles. See
+[Continuous Execution](continuous-execution.md).
+
 ## Repository layout
 
 ```text

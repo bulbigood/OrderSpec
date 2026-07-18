@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "orderspec://schemas/automation-config.schema.json",
+  "title": "OrderSpec Automation Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "enabled", "context", "defaults", "rules", "limits"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "version": {"const": 1},
+    "enabled": {"type": "boolean"},
+    "context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["between_commands", "after_operator_input"],
+      "properties": {
+        "between_commands": {"enum": ["fresh", "resume", "compact"]},
+        "after_operator_input": {"enum": ["resume", "fresh"]}
+      }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["advance", "route", "operator_input", "runtime_failure"],
+      "properties": {
+        "advance": {"enum": ["auto_route", "pause", "stop"]},
+        "route": {"enum": ["auto_route", "pause", "stop"]},
+        "operator_input": {"enum": ["pause", "stop"]},
+        "runtime_failure": {"enum": ["retry", "pause", "stop"]}
+      }
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "match", "action"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+          "match": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": false,
+            "properties": {
+              "kind": {"$ref": "#/$defs/stringOrArray"},
+              "reason": {"$ref": "#/$defs/stringOrArray"},
+              "source": {"$ref": "#/$defs/stringOrArray"},
+              "target": {"$ref": "#/$defs/stringOrArray"},
+              "severity": {"$ref": "#/$defs/stringOrArray"},
+              "destructive": {
+                "oneOf": [
+                  {"type": "boolean"},
+                  {"type": "array", "minItems": 1, "items": {"type": "boolean"}}
+                ]
+              }
+            }
+          },
+          "action": {"enum": ["auto_route", "retry", "pause", "stop"]},
+          "max_occurrences": {"type": "integer", "minimum": 1}
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_transitions", "max_routes", "max_same_event"],
+      "properties": {
+        "max_transitions": {"type": "integer", "minimum": 1},
+        "max_routes": {"type": "integer", "minimum": 1},
+        "max_same_event": {"type": "integer", "minimum": 1}
+      }
+    }
+  },
+  "$defs": {
+    "stringOrArray": {
+      "oneOf": [
+        {"type": "string", "minLength": 1},
+        {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+      ]
+    }
+  }
+}
