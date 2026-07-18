@@ -82,7 +82,10 @@ def _parse_pathmanifest(plan_file):
             findings.append(f"Bad path token: {path}")
             continue
 
-        paths[path.lstrip("./")] = tag
+        # Remove only an explicit "./" prefix. str.lstrip("./") would also
+        # corrupt legitimate dot-prefixed paths such as .github/workflows/ci.yml.
+        normalized_path = path[2:] if path.startswith("./") else path
+        paths[normalized_path] = tag
 
     return paths, findings
 

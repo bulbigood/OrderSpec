@@ -22,6 +22,7 @@ framework_artifacts:
   - traceability.yml
   - tooling-protocol.md
   - agents-state.schema.json
+  - bootstrap-state.schema.json
 
 feature_artifacts:
   - spec.md

@@ -113,6 +113,20 @@
       "usage": "parse",
       "authority": "framework"
     },
+    "state.bootstrap": {
+      "path": ".orderspec/state/bootstrap.json",
+      "kind": "runtime_state",
+      "reason": "bootstrap initialization and refine comparison baseline",
+      "usage": "parse",
+      "authority": "runtime"
+    },
+    "schema.bootstrap_state": {
+      "path": ".orderspec/framework/schemas/bootstrap-state.schema.json",
+      "kind": "schema",
+      "reason": "bootstrap state validation schema",
+      "usage": "parse",
+      "authority": "framework"
+    },
     "schema.task_context": {
       "path": ".orderspec/framework/schemas/task-context.schema.json",
       "kind": "schema",
@@ -200,6 +214,14 @@
         },
         {
           "group": "runtime.agents"
+        },
+        {
+          "ref": "state.bootstrap"
+        }
+      ],
+      "required": [
+        {
+          "ref": "schema.bootstrap_state"
         }
       ]
     },

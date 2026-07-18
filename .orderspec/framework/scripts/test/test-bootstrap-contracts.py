@@ -440,16 +440,41 @@ else:
     bad(f"invalid gate profile accepted :: out={out!r} err={err!r}")
 
 
-# 16. inspect after init reports amend mode
+# 16. inspect after init reports Refine and migrates persisted lifecycle state
 reset_work()
 setup_package_json()
 setup_layered_dirs()
 rc, data, err = init_a()
 rc, data, err = run_boot_json("inspect", "--json")
-if rc == 0 and data.get("mode") == "amend" and data.get("missing_project_docs") == []:
-    ok("inspect after init reports amend mode")
+if (
+    rc == 0
+    and data.get("mode") == "refine"
+    and data.get("state_migration_required") is True
+    and data.get("missing_project_docs") == []
+):
+    ok("inspect after init defaults to Refine with legacy-state migration")
 else:
     bad(f"inspect after init wrong :: rc={rc} data={data} err={err!r}")
+
+rc, completed, err = run_boot_json("complete", "--json")
+rc2, inspected, err2 = run_boot_json("inspect", "--json")
+if (
+    rc == 0
+    and completed.get("ok") is True
+    and (WORK / ".orderspec/state/bootstrap.json").is_file()
+    and rc2 == 0
+    and inspected.get("state_source") == "state"
+    and inspected.get("state_migration_required") is False
+):
+    ok("complete persists bootstrap state used by subsequent Refine runs")
+else:
+    bad(f"bootstrap state persistence wrong :: complete={completed} inspect={inspected} err={err!r} {err2!r}")
+
+rc, audit, err = run_boot_json("audit", "--json")
+if rc == 0 and audit.get("mode") == "refine" and audit.get("required_semantic_checks"):
+    ok("audit emits deterministic Refine evidence")
+else:
+    bad(f"bootstrap audit wrong :: rc={rc} data={audit} err={err!r}")
 
 
 # 18. malformed package.json fails cleanly

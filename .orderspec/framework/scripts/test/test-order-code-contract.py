@@ -56,6 +56,18 @@ expect(
 )
 expect("task_progress.py mark" in code_prompt, "order.code delegates marker writes to deterministic script")
 expect(
+    "task_progress.py reconcile" in code_prompt and "ALREADY_COMPLETE" in code_prompt,
+    "order.code reconciles previously completed unchecked work from evidence",
+)
+expect(
+    "work_order.py rollback" in code_prompt and "Step 3.25: RESET Work Order" in code_prompt,
+    "order.code reset uses a bounded work-order baseline",
+)
+expect(
+    "workflow_feedback.py create" in code_prompt and "Persistent Routing Report" in code_prompt,
+    "order.code persists every upstream route",
+)
+expect(
     "task_progress.py assert-complete" in normalized_code_prompt
     and "return to Step 9" in normalized_code_prompt,
     "order.code deterministically rejects voluntary partial completion",
@@ -102,6 +114,16 @@ tasks_prompt = (FRAMEWORK / "prompts" / "order.tasks.md").read_text(encoding="ut
 tasks_template = (FRAMEWORK / "templates" / "tasks-template.md").read_text(encoding="utf-8")
 task_context_schema = json.loads(
     (FRAMEWORK / "schemas" / "task-context.schema.json").read_text(encoding="utf-8")
+)
+expect(
+    "task_refine.py begin" in tasks_prompt
+    and "task_refine.py validate" in tasks_prompt
+    and "Refine only" in tasks_prompt,
+    "order.tasks Refine protects existing progress without template regeneration",
+)
+expect(
+    "work_order.py capture" in tasks_prompt,
+    "order.tasks captures a reset baseline for each new work order",
 )
 expect(
     "mandatory for behavior-bearing support tasks" in tasks_prompt,

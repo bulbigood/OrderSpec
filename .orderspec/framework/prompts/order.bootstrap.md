@@ -3,7 +3,7 @@ orderspec:
   artifact: command_prompt
   command: order.bootstrap
   phase: bootstrap
-description: Create or amend four project-level contract documents — stack.md, architecture.md, conventions.md, and constitution.md. Infers stack and architecture from the repository on first run.
+description: Create or refine four project-level contract documents — stack.md, architecture.md, conventions.md, and constitution.md. Init infers a baseline; later runs audit framework, repository, and skill drift.
 ---
 
 ## Role
@@ -62,10 +62,19 @@ Complete Command Context Bootstrap before mode detection.
 Determine mode **before writing any managed file**. Read-only checks for the bootstrap script, existing project contracts, manifests, and repository structure are allowed:
 
 1. **Init** — one or more of the four documents are missing. Goal: create missing project contracts and ensure all four are present.
-2. **Amend** — all four exist, user requests a change to one or more.
-3. **Targeted amend** — `$ARGUMENTS` names a specific document and change (e.g., "add Redis to stack"). This mode is how `order.spec` calls bootstrap as a subagent.
+2. **Refine** — all four exist and no targeted change was requested. This is the
+   default after initialization. Audit project contracts against current
+   framework rules, current repository evidence, and installed skill bindings.
+3. **Amend** — all four exist and user requests a change to one or more.
+4. **Targeted amend** — `$ARGUMENTS` names a specific document and change (e.g., "add Redis to stack"). This mode is how `order.spec` calls bootstrap as a subagent.
 
 State the detected mode in one line before proceeding.
+
+Always run `bootstrap_contracts.py inspect --json`. Its persisted
+`.orderspec/state/bootstrap.json` flag is authoritative when present. For
+projects created before this state file existed, four complete contracts are a
+one-time migration signal: select Refine and write the state only after the
+full run succeeds.
 
 **No-overwrite rule**: In Init Mode, create only missing project contract documents. If a managed document already exists, preserve it exactly unless the user explicitly requested an amend for that document. Existing documents may be read and validated, but must not be replaced.
 
@@ -728,6 +737,76 @@ If emergency manual fallback was explicitly approved by the user, write only new
 
 </details>
 
+## Refine Mode
+
+Triggered by default when project contracts already exist and `$ARGUMENTS`
+does not request a targeted amendment. Refine is evidence-driven maintenance,
+not regeneration: preserve stable IDs, tombstones, governance choices, and
+unrelated contract text.
+
+### Step 1 — Deterministic drift audit
+
+Run:
+
+```bash
+python3 .orderspec/framework/scripts/bootstrap_contracts.py audit --json
+python3 .orderspec/framework/scripts/validate_tooling.py -C "$PWD" --json
+```
+
+The audit supplies framework-version drift, repository manifest/directory
+evidence, inferred stack candidates, contract validation, and fingerprints.
+`validate_tooling.py` supplies installed/missing/discovered skill evidence.
+Never infer skill availability from directory names or model memory.
+
+If an active feature is resolvable, also load project-contract feedback:
+
+```bash
+eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
+python3 .orderspec/framework/scripts/workflow_feedback.py list \
+  --feature-dir "$FEATURE_DIR" --target order.bootstrap
+```
+
+No active feature is not an error; skip feedback intake in that case.
+
+### Step 2 — Semantic comparison
+
+Compare, in this order:
+
+1. Current `orderspec-rules.md` requirements against `constitution.md`,
+   `stack.md`, `architecture.md`, and `conventions.md`. Framework rules win;
+   report a conflict before proposing a project-contract amendment.
+2. Current repository manifests and structure against stack and architecture.
+   Inspect only exact evidence needed to confirm audit candidates. Do not infer
+   brownfield conventions from broad code scans.
+3. Current stack rows against tooling skill bindings and deterministic tooling
+   validation. Flag obsolete bindings, missing required skills, and installed
+   skills unrelated to the current stack. Skill installation/removal still
+   follows the configured ask-user policy; Refine never changes it silently.
+
+Classify each item as `no drift`, `safe amendment`, `operator decision`, or
+`downstream routing`. Do not rewrite all contracts to modernize formatting.
+
+### Step 3 — Apply narrow amendments
+
+Apply only evidence-backed, operator-authorized changes using Amend Mode ID
+discipline. Changed/removed IDs keep their identity or become tombstones.
+Governance changes require explicit operator input. Validate after edits and
+run agent sync so prompt/skill registrations reflect the current framework.
+
+### Step 4 — Persist successful completion
+
+After contract validation, tooling validation, agent sync, and any approved
+feedback repair succeed, run:
+
+```bash
+python3 .orderspec/framework/scripts/bootstrap_contracts.py complete --json
+```
+
+This atomically updates `.orderspec/state/bootstrap.json`. Consume addressed
+`order.bootstrap` workflow feedback only after `complete` succeeds. Report
+framework drift, repository drift, skill suitability, amendments, unresolved
+operator decisions, and downstream routes.
+
 ## Amend Mode
 
 Triggered when all four documents exist and the user requests a change.
@@ -864,10 +943,21 @@ Constitution principles use named headings (I., II., III.), not numeric IDs.
 
 No operator-defined post-execution extension phases are supported in the current OrderSpec core.
 
+For every successful top-level Init, Refine, or Amend run, persist completion
+only after all required validation/sync phases finish:
+
+```bash
+python3 .orderspec/framework/scripts/bootstrap_contracts.py complete --json
+```
+
+Targeted amend subagent calls do not finalize the whole bootstrap lifecycle;
+the parent/orchestrator owns the later top-level completion.
+
 ## Done When
 
 - [ ] Command context resolved via `command_context.py` and every `to_read` file was read
 - [ ] Mode detected and stated
+- [ ] Existing initialized project with no targeted request selected Refine
 - [ ] Init Mode: `.orderspec/framework/scripts/bootstrap_contracts.py inspect --json` was run
 - [ ] Init Mode: required gate question was asked when `requires_gate_question` was true
 - [ ] Init Mode: `.orderspec/framework/scripts/bootstrap_contracts.py init ... --json` was run
@@ -881,4 +971,6 @@ No operator-defined post-execution extension phases are supported in the current
 - [ ] Agents Discovery & Sync Phase completed: detected agents, asked user, synced prompts and skills
 - [ ] External Rules Integration Phase completed: read rule files, offered integration into conventions.md
 - [ ] `.orderspec/state/agents.json` exists and is valid
+- [ ] Successful top-level run atomically updated `.orderspec/state/bootstrap.json`
+- [ ] Refine compared project contracts with framework rules, repository evidence, and skill bindings
 - [ ] Amend Mode: agents re-synced after contract changes

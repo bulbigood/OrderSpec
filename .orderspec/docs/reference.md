@@ -33,7 +33,14 @@ python3 .orderspec/framework/scripts/command_context.py resolve order.bootstrap 
 
 # Bootstrap contracts
 python3 .orderspec/framework/scripts/bootstrap_contracts.py inspect --json
+python3 .orderspec/framework/scripts/bootstrap_contracts.py audit --json
 python3 .orderspec/framework/scripts/bootstrap_contracts.py validate --json
+python3 .orderspec/framework/scripts/bootstrap_contracts.py complete --json
+
+# Work-order state and downstream feedback
+python3 .orderspec/framework/scripts/task_progress.py validate --tasks <feature>/tasks.md
+python3 .orderspec/framework/scripts/work_order.py rollback --feature-dir <feature>
+python3 .orderspec/framework/scripts/workflow_feedback.py list --feature-dir <feature> --target order.tasks
 
 # Multi-agent sync
 python3 .orderspec/framework/scripts/agents_sync.py detect --json

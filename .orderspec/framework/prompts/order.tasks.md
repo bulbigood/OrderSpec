@@ -28,7 +28,7 @@ baseline.
 
 Core principles:
 
-- **Disposable & derived**: regenerated freely; overwrite without preserving prior content. You make NO design decisions — every choice already lives in `plan.md`. You only compose a spec ID with a file path and sequence the result. Invent nothing.
+- **Disposable & derived, but progress-safe**: a new work order may be regenerated from scratch. Refine is a surgical repair of the current work order and MUST preserve completed tasks, their IDs, their task-context, and unrelated content. You make NO design decisions — every choice already lives in `plan.md`.
 - **Weak-LLM-proof**: each task is executable without re-reading the spec — it carries its file path and spec IDs, while `/order.code` resolves those IDs into exact contract excerpts before execution.
 - **Sequential by default**: structure is **Phases → Tasks**. Phases are hard sequential barriers; within a phase, tasks run top-to-bottom and that order MUST be correct on its own. `[P]` parallelism is an OPTIONAL annotation layered on top — never a precondition for correctness.
 - **Coverage is proven, not asserted**: you do NOT hand-build, hand-count, or hand-fill any traceability matrix. `traceability.py extract-trace` projects coverage from your task lines and is the SOLE arbiter of completeness. Your job is correct task lines; the tool decides if they cover everything.
@@ -95,11 +95,21 @@ test -e "$SELF_REPORT" && echo "SELF_REPORT_PRESENT" || echo "SELF_REPORT_ABSENT
 
 If `SELF_REPORT_PRESENT`, read it before mode selection.
 
+Also inspect downstream workflow feedback before mode selection:
+
+```bash
+python3 .orderspec/framework/scripts/workflow_feedback.py list \
+  --feature-dir "$FEATURE_DIR" --target order.tasks
+```
+
 Determine mode before writing any file. State the mode in chat.
 
-1.  **Regenerate** — active `plan.md` exists, and `tasks.md` needs to be recreated.
-2.  **Refine** — active `tasks.md` exists and either `$ARGUMENTS` requests specific changes, or the prior `tasks-report.md` has a `⛔ BLOCK` or `🔀 ROUTING` finding targeting `/order.tasks`. A blocking self-gate selects Refine even when `$ARGUMENTS` is empty.
+1.  **Regenerate** — `tasks.md` is absent, or `$ARGUMENTS` explicitly contains `--force` and requests a new work order. This discards task design only; if any task is `[X]`, STOP and require `/order.code --reset` first.
+2.  **Refine** — active `tasks.md` exists and either `$ARGUMENTS` requests specific changes, the prior `tasks-report.md` has a `⛔ BLOCK` or `🔀 ROUTING` finding targeting `/order.tasks`, or open workflow feedback targets `order.tasks`. A blocking self-gate or open feedback selects Refine even when `$ARGUMENTS` is empty.
 3.  **Refresh** — `tasks.md` already exists and `$ARGUMENTS` is empty → STOP:
+
+A blocking self-gate selects Refine even when `$ARGUMENTS` is empty. Open
+workflow feedback has the same effect.
 
 ```text
 TASKS_STOPPED: tasks.md already exists
@@ -170,14 +180,34 @@ Use self-gate result read in Step 3. Do not perform a second check.
 -   **PRESENT (✅ PASS)** → Ignore report; proceed with `$ARGUMENTS`.
 -   **PRESENT (⛔ BLOCK / 🔀 ROUTING)** → This is your fix-list. Address every finding targeting `/order.tasks`. Route findings for other commands. Treat `$ARGUMENTS` as additional guidance, not a replacement.
 
+Use the workflow feedback result already loaded in Step 3. Every open item is
+additional mandatory refine input. Do not consume it yet.
+
 ### Step 6: Setup Tasks Artifact
 
-Initialize the tasks file from the template.
+Initialize a new work order, or protect the existing file before Refine.
 
 ```bash
-python3 .orderspec/framework/scripts/setup.py tasks --json --refresh-template > /dev/null
 eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 ```
+
+- **Regenerate only**:
+  ```bash
+  python3 .orderspec/framework/scripts/setup.py tasks --json --refresh-template > /dev/null
+  ```
+- **Refine only**: MUST NOT pass `--refresh-template`, copy the template, rewrite
+  the whole file, renumber tasks, or clear any checkbox. Start the transactional
+  guard before editing:
+  ```bash
+  python3 .orderspec/framework/scripts/setup.py tasks --json > /dev/null
+  python3 .orderspec/framework/scripts/task_refine.py begin \
+    --tasks "$FEATURE_DIR/tasks.md" \
+    --snapshot "$FEATURE_DIR/.state/tasks-refine-snapshot.json"
+  ```
+  Edit only lines and task-context entries required by the findings. Previously
+  completed task lines and their task-context entries are immutable. If the
+  correct fix would change completed work, STOP and route to `/order.code --reset`
+  followed by a new work order.
 
 ### Step 7: Load Inputs
 
@@ -259,7 +289,9 @@ This is ordering, not coverage bookkeeping — coverage is the tool's job in Ste
 
 ### Step 9: Write `tasks.md`
 
-Rewrite `$TASKS_FILE` (which was initialized from `tasks-template.md` in Step 6).
+In Regenerate, rewrite `$TASKS_FILE` initialized from the template. In Refine,
+apply a minimal patch to the existing file; never reconstruct it from the
+template or from memory.
 
 **Phase mapping (E-M-C)** — include items ONLY if applicable; never invent:
 
@@ -459,6 +491,29 @@ If either command exits non-zero, stop and route to `/order.tasks` or
 `/order.spec` as reported. Do not repair the block from `/order.code` or
 bypass missing read files or contract IDs.
 
+In Refine, run the protection check after all edits and before consuming any
+report. On failure the script restores the exact pre-refine tasks.md:
+
+```bash
+python3 .orderspec/framework/scripts/task_refine.py validate \
+  --tasks "$FEATURE_DIR/tasks.md" \
+  --snapshot "$FEATURE_DIR/.state/tasks-refine-snapshot.json"
+```
+
+In Regenerate, attempt to capture the clean Git-backed work-order baseline used
+by the safe reset mode. Capture succeeds only when Git is available, planned
+paths are clean, `[NEW]` paths are absent, and `[MOD]/[DEL]` paths are tracked.
+
+```bash
+python3 .orderspec/framework/scripts/work_order.py capture \
+  --feature-dir "$FEATURE_DIR" --replace
+```
+
+Capture failure does not invalidate tasks.md or block implementation; record
+the exact reason and report `/order.code --reset` as unavailable for this work
+order. Never weaken capture checks or create an unsafe baseline to clear the
+warning.
+
 Blocking findings (`severity: HIGH` or `CRITICAL`) must be fixed. Fix the data in `tasks.md` or `mechanisms.tsv` and re-run validation. Do not maintain a separate list of checks; trust the script output.
 
 ### Step 12: Update Active Feature State
@@ -481,6 +536,14 @@ If a BLOCK/ROUTING `tasks-report.md` was used in Step 5, mark it consumed.
 ```bash
 eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 python3 .orderspec/framework/scripts/traceability.py mark-consumed --report "$FEATURE_DIR/tasks-report.md"
+```
+
+After successful validation, consume each open `order.tasks` workflow feedback
+item that this run addressed:
+
+```bash
+python3 .orderspec/framework/scripts/workflow_feedback.py consume \
+  --feature-dir "$FEATURE_DIR" --id "FB-NNN" --consumer order.tasks
 ```
 
 ---
@@ -507,7 +570,7 @@ Report to chat:
 - [ ] Feature paths resolved; `eval` used for shell vars
 - [ ] Upstream gate respected: guard returned `ok`/`advisory`/`forced` (not `halt`/`stop`/`error`); on `forced`, a `--force` warning was stamped atop the artifact; on `advisory`, user was warned in chat
 - [ ] Prior gate report consumed (if present): a ⛔/🔀 `tasks-report.md` had every `/order.tasks`-owned finding addressed and listed; upstream-owned findings were routed/STOPped, not silently patched. ✅ PASS or absent → N/A
-- [ ] `tasks.md` generated from current template in E-M-C order with sequential IDs and pipe-delimited task lines (`T### [P] [US] | path | refs? | gloss`)
+- [ ] Regenerate used the current template; Refine used `task_refine.py` and preserved every completed task/context entry
 - [ ] Refs are OPTIONAL (infra tasks carry empty refs), comma-joined with NO spaces when present, each declared ref's mechanism lists this task's path in `primary_files` (no filler/parked refs)
 - [ ] Path field is a raw `plan.md` path with NO backticks
 - [ ] Coverage proven by tool: `extract-trace` exited 0 (no uncovered direct, no tasked documented, no dangling delegated, no cap/duplicate violation)
@@ -526,4 +589,6 @@ Report to chat:
 - [ ] `task_contract_context.py validate` passed; every task ref resolves to exact spec excerpts and phase context
 - [ ] Every behavior-bearing support task has minimal `contract_refs`; cross-boundary prerequisites are established before consumers
 - [ ] Active feature status updated to `tasks`
+- [ ] New work order baseline captured, or reset unavailability reported exactly; Refine did not replace an in-progress baseline
+- [ ] Addressed persistent workflow feedback consumed only after validation
 - [ ] Completion Report provided, including manual/orchestrator recommendation to run `/order.tasks-check`

@@ -65,6 +65,7 @@ Runtime state lives under:
 - `.orderspec/state/`
   - `agents.json` — enabled agents and sync state (see Multi-Agent Adapter Architecture)
   - `active-feature.json` — current active feature
+  - `bootstrap.json` — successful bootstrap/refine baseline and framework version
   - `tooling-detection.json` — runtime tool availability
 
 Project contracts live under `.orderspec/contracts/`:
@@ -103,7 +104,9 @@ Plan/work-order baseline rules:
   `[NEW]`, `[MOD]`, and `[DEL]` tags are transition intent, not assertions that
   must remain true after implementation starts.
 - Once `/order.tasks` derives a work order, `plan.md` and task content are
-  frozen for `/order.code`, including resume runs. Existing `[NEW]` paths and
+  frozen for `/order.code`, including resume runs. `/order.tasks` Refine may
+  repair only unchecked content and MUST preserve every completed task line,
+  ID, checkbox, and task-context entry through `task_refine.py`. Existing `[NEW]` paths and
   absent `[DEL]` paths may be expected effects of completed or interrupted
   tasks.
 - Expected application of a pathmanifest transition MUST NOT trigger
@@ -120,6 +123,9 @@ Execution marker rules:
 - `/order.code` owns execution progress for the current run, but MUST change
   only one checkbox at a time through `.orderspec/framework/scripts/task_progress.py`.
 - A worker or coordinator MUST NOT hand-edit `[X]` markers.
+- Previously completed but unchecked work may be marked only through
+  `task_progress.py reconcile`, in order, with exact observed-state evidence,
+  positive verification, and no claimed writes.
 - A failed, blocked, or incomplete task remains unchecked.
 - `tasks.md` is the first feature artifact loaded by `/order.code`; `plan.md`
   follows. Already loaded feature artifacts are reused, not reopened later.
@@ -129,6 +135,14 @@ Execution marker rules:
   `task_progress.py assert-complete`. An incomplete result requires continued
   execution from `first_unchecked`; it is not a voluntary resume boundary.
 - `VERIFY:` and `GATE:` tasks are read-only and report no changed files.
+- `/order.code --reset` is the only bulk marker reset. When available, it MUST use the captured
+  work-order baseline, preview exact path actions, obtain operator approval,
+  restore only pathmanifest paths, and clear markers only after full rollback.
+  Baseline capture failure disables reset for that work order but does not
+  invalidate tasks or block normal implementation.
+- Every `/order.code` stop routed upstream MUST create typed persistent feedback
+  under the feature `.state/feedback/`; owner commands load open feedback
+  automatically and consume it only after successful validation.
 
 ## 4. Frontmatter Rule
 

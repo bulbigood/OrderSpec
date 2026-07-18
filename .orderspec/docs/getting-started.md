@@ -92,7 +92,7 @@ No package manager, no `uv`, no installer, no framework daemon.
 
 ```text
 1. Command Context Resolution (via command_context.py)
-2. Mode Detection (Init / Amend / Targeted Amend)
+2. Mode Detection (Init / Refine / Amend / Targeted Amend)
 3. Deterministic Bootstrap Script (bootstrap_contracts.py)
 4. Gate Capabilities Question
 5. Agents Discovery & Sync Phase
@@ -100,6 +100,11 @@ No package manager, no `uv`, no installer, no framework daemon.
 7. External Rules Integration Phase
 8. Report
 ```
+
+After the first successful run, `/order.bootstrap` defaults to Refine. It audits
+project contracts against current framework rules and repository evidence, and
+checks whether installed skill bindings still match the project stack. The
+successful baseline is stored in `.orderspec/state/bootstrap.json`.
 
 **Agents Discovery & Sync Phase** detects project markers, asks the operator which to enable, and synchronizes prompts and skills configuration. For Codex, it renders command prompts as repository skills in `.agents/skills/`.
 

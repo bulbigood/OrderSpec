@@ -91,11 +91,21 @@ test -e "$SELF_REPORT" && echo "SELF_REPORT_PRESENT" || echo "SELF_REPORT_ABSENT
 
 If `SELF_REPORT_PRESENT`, read it before mode selection.
 
+Inspect persistent downstream feedback before mode selection:
+
+```bash
+python3 .orderspec/framework/scripts/workflow_feedback.py list \
+  --feature-dir "$FEATURE_DIR" --target order.plan
+```
+
 Determine mode before writing any file. State the mode in chat.
 
 1.  **Regenerate** — active `spec.md` exists, and `plan.md` needs to be recreated.
-2.  **Refine** — active `plan.md` exists and either `$ARGUMENTS` requests specific changes, or the prior `plan-report.md` has a `⛔ BLOCK` or `🔀 ROUTING` finding targeting `/order.plan`. A blocking self-gate selects Refine even when `$ARGUMENTS` is empty.
+2.  **Refine** — active `plan.md` exists and either `$ARGUMENTS` requests specific changes, the prior `plan-report.md` has a `⛔ BLOCK` or `🔀 ROUTING` finding targeting `/order.plan`, or open workflow feedback targets `order.plan`. A blocking self-gate or open feedback selects Refine even when `$ARGUMENTS` is empty.
 3.  **Refresh** — `plan.md` already exists and `$ARGUMENTS` is empty → STOP:
+
+A blocking self-gate selects Refine even when `$ARGUMENTS` is empty. Open
+workflow feedback has the same effect.
 
 ```text
 PLAN_STOPPED: plan.md already exists
@@ -116,10 +126,11 @@ PLAN_STOPPED: implementation baseline is active
   Continue with /order.code --resume, or describe the actual mapping defect.
 ```
 
-A specific, evidenced mapping defect may be refined. Report that changing the
-plan invalidates `tasks.md`; `/order.plan-check`, `/order.tasks --force`, and
-`/order.tasks-check` are required before implementation continues. Never absorb
-partial implementation into `[NEW]` to `[MOD]` relabeling as the fix itself.
+Even a specific mapping defect MUST NOT change `plan.md` while any task is
+`[X]`: changing the plan would invalidate the safe rollback baseline. STOP and
+require `/order.code --reset` first. After reset, refine the plan, then run
+`/order.plan-check`, `/order.tasks --force`, and `/order.tasks-check`. Never absorb
+partial implementation into `[NEW]` to `[MOD]` relabeling.
 
 ### Step 4: Upstream Gate Guard
 
@@ -160,6 +171,9 @@ Use self-gate result read in Step 3. Do not perform a second check.
 -   **ABSENT** → Proceed.
 -   **PRESENT (✅ PASS)** → Ignore report; proceed with `$ARGUMENTS`.
 -   **PRESENT (⛔ BLOCK / 🔀 ROUTING)** → This is your fix-list. Address every finding targeting `/order.plan`. Route findings for other commands. Treat `$ARGUMENTS` as additional guidance, not a replacement.
+
+Treat every open `order.plan` workflow feedback item loaded in Step 3 as an
+additional mandatory fix-list item. Do not consume it yet.
 
 ### Step 6: Tooling Validation
 
@@ -400,6 +414,13 @@ eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
 python3 .orderspec/framework/scripts/traceability.py mark-consumed --report "$FEATURE_DIR/plan-report.md"
 ```
 
+After successful plan validation, consume each addressed workflow feedback item:
+
+```bash
+python3 .orderspec/framework/scripts/workflow_feedback.py consume \
+  --feature-dir "$FEATURE_DIR" --id "FB-NNN" --consumer order.plan
+```
+
 ---
 
 ## Completion Report
@@ -422,6 +443,7 @@ Report to chat:
 - [ ] Upstream gate respected: exit 64 reported as STOP; advisory distinguished from ok
 - [ ] `plan.md` regenerated from current template
 - [ ] Prior `plan-report.md` consumed if present
+- [ ] Open `order.plan` workflow feedback loaded; addressed items consumed only after validation
 - [ ] Scope Lock enforced: no invented requirements
 - [ ] Files listed in `Verified Against`
 - [ ] Existing project mechanisms reviewed; every parallel mechanism has a concrete non-reuse justification

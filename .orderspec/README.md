@@ -75,6 +75,13 @@ refs to exact `spec.md` ID excerpts, `mechanisms.tsv` rows, and story-phase
 Goal/Verification context. Workers receive this contract context in their
 packet and do not infer requirements from task glosses or repository scans.
 
+`/order.tasks` Refine patches the existing work order instead of regenerating
+it. Completed task lines and context are mechanically protected. `/order.code`
+can reconcile already-satisfied unchecked tasks from positive evidence, and
+persists upstream defect feedback for the owning stage. When a safe Git-backed
+baseline was captured, `/order.code --reset` previews and rolls back only
+planned paths before clearing progress markers.
+
 Each phase can be followed by an optional verification gate (`/order.spec-check`, `/order.plan-check`, etc.) that checks the previous artifact before you proceed.
 
 ## Why OrderSpec exists

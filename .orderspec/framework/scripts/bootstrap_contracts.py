@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
+import os
 import re
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +35,8 @@ PROJECT_DOCS = {
 }
 
 TOOLING_CONFIG_PATH = Path(".orderspec/config/tooling.json")
+BOOTSTRAP_STATE_PATH = Path(".orderspec/state/bootstrap.json")
+ORDERSPEC_META_PATH = Path(".orderspec/orderspec.json")
 
 KEY_NODE_PACKAGES = {
     "express": ("Express", "Web framework", "HTTP API framework"),
@@ -116,6 +121,60 @@ def now_iso() -> str:
 
 def today() -> str:
     return dt.date.today().isoformat()
+
+
+def file_sha256(path: Path) -> str | None:
+    return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
+
+
+def framework_version() -> str:
+    try:
+        value = json.loads(ORDERSPEC_META_PATH.read_text(encoding="utf-8"))
+        return str(value.get("framework_version") or "unknown")
+    except (OSError, json.JSONDecodeError):
+        return "unknown"
+
+
+def load_bootstrap_state() -> dict[str, Any]:
+    try:
+        value = json.loads(BOOTSTRAP_STATE_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def current_fingerprints() -> dict[str, str | None]:
+    return {
+        **{name: file_sha256(path) for name, path in PROJECT_DOCS.items()},
+        "tooling": file_sha256(TOOLING_CONFIG_PATH),
+    }
+
+
+def write_bootstrap_state() -> dict[str, Any]:
+    payload = {
+        "version": 1,
+        "initialized": True,
+        "completed_at": now_iso(),
+        "framework_version": framework_version(),
+        "manifest": detect_manifest(),
+        "fingerprints": current_fingerprints(),
+    }
+    BOOTSTRAP_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(
+        prefix=f".{BOOTSTRAP_STATE_PATH.name}.",
+        dir=str(BOOTSTRAP_STATE_PATH.parent),
+        text=True,
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_name, BOOTSTRAP_STATE_PATH)
+    finally:
+        Path(temp_name).unlink(missing_ok=True)
+    return payload
 
 
 def read_json(path: Path) -> Any:
@@ -805,9 +864,17 @@ def validate_created_files() -> list[str]:
 def inspect_command(args: argparse.Namespace) -> int:
     manifest = detect_manifest()
     missing_docs = missing_project_docs()
+    state = load_bootstrap_state()
+    explicit_state = state.get("initialized") is True
+    inferred_legacy_state = not missing_docs and not explicit_state
 
     result = {
-        "mode": "init" if missing_docs else "amend",
+        "mode": "init" if missing_docs else "refine",
+        "initialized": explicit_state or inferred_legacy_state,
+        "state_source": "state" if explicit_state else ("existing_contracts" if inferred_legacy_state else "none"),
+        "state_migration_required": inferred_legacy_state,
+        "last_framework_version": state.get("framework_version"),
+        "current_framework_version": framework_version(),
         "missing_project_docs": missing_docs,
         "manifest": manifest,
         "project_name": detect_project_name(),
@@ -816,6 +883,89 @@ def inspect_command(args: argparse.Namespace) -> int:
     }
 
     print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 0
+
+
+def inferred_stack_rows() -> list[dict[str, str]]:
+    manifest = detect_manifest()
+    if manifest == "package.json":
+        return infer_node_stack()
+    if manifest == "pyproject.toml":
+        return infer_python_stack()
+    if manifest == "go.mod":
+        return infer_go_stack()
+    if manifest == "Cargo.toml":
+        return infer_rust_stack()
+    if manifest == "pom.xml":
+        return infer_java_stack()
+    return []
+
+
+def audit_command(args: argparse.Namespace) -> int:
+    """Emit deterministic evidence for semantic bootstrap Refine mode."""
+    missing = missing_project_docs()
+    if missing:
+        print(json.dumps({"ok": False, "error": "project_contracts_missing", "missing": missing}, indent=2))
+        return 2
+    state = load_bootstrap_state()
+    stack_text = PROJECT_DOCS["stack"].read_text(encoding="utf-8")
+    try:
+        inferred = inferred_stack_rows()
+    except Exception as exc:
+        print(
+            json.dumps(
+                {"ok": False, "error": "repository_manifest_invalid", "details": str(exc)},
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
+        return 2
+    missing_stack_candidates = [
+        row for row in inferred if str(row.get("technology", "")).lower() not in stack_text.lower()
+    ]
+    previous = state.get("fingerprints", {}) if isinstance(state.get("fingerprints"), dict) else {}
+    current = current_fingerprints()
+    changed_contracts = [name for name in PROJECT_DOCS if previous.get(name) not in (None, current.get(name))]
+    result = {
+        "ok": True,
+        "mode": "refine",
+        "framework": {
+            "previous_version": state.get("framework_version"),
+            "current_version": framework_version(),
+            "changed": state.get("framework_version") not in (None, framework_version()),
+        },
+        "repository": {
+            "manifest": detect_manifest(),
+            "top_level_directories": sorted(detect_dirs()),
+            "inferred_stack": inferred,
+            "missing_stack_candidates": missing_stack_candidates,
+        },
+        "contracts": {
+            "validation_errors": validate_created_files(),
+            "changed_since_last_bootstrap": changed_contracts,
+            "fingerprints": current,
+        },
+        "tooling": {
+            "config_exists": TOOLING_CONFIG_PATH.is_file(),
+            "requires_validate_tooling": True,
+        },
+        "required_semantic_checks": [
+            "project contracts against current framework rules",
+            "stack and architecture against current repository evidence",
+            "installed skill bindings against the current project stack",
+        ],
+    }
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 0 if not result["contracts"]["validation_errors"] else 1
+
+
+def complete_command(args: argparse.Namespace) -> int:
+    errors = validate_created_files()
+    if errors:
+        print(json.dumps({"ok": False, "validation_errors": errors}, indent=2, ensure_ascii=False))
+        return 1
+    state = write_bootstrap_state()
+    print(json.dumps({"ok": True, "state_file": str(BOOTSTRAP_STATE_PATH), "state": state}, indent=2, ensure_ascii=False))
     return 0
 
 
@@ -925,6 +1075,12 @@ def main() -> int:
     validate_parser = sub.add_parser("validate")
     validate_parser.add_argument("--json", action="store_true")
 
+    audit_parser = sub.add_parser("audit")
+    audit_parser.add_argument("--json", action="store_true")
+
+    complete_parser = sub.add_parser("complete")
+    complete_parser.add_argument("--json", action="store_true")
+
     args = parser.parse_args()
 
     if args.command == "inspect":
@@ -933,6 +1089,10 @@ def main() -> int:
         return init_command(args)
     if args.command == "validate":
         return validate_command(args)
+    if args.command == "audit":
+        return audit_command(args)
+    if args.command == "complete":
+        return complete_command(args)
 
     raise SystemExit(f"unknown command: {args.command}")
 

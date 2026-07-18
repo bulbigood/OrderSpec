@@ -14,10 +14,20 @@ The key insight:
 
 > **`plan.md` depends on repository state at planning time; `spec.md` does not.**
 
-During implementation, `plan.md` and `tasks.md` content remain frozen. Task
-checkboxes are execution progress, not task design: `/order.code` may mark one
-successful task at a time through `task_progress.py`, while `/order.plan` and
-`/order.tasks` remain owners of their artifact content.
+During implementation, `plan.md` and completed task content remain frozen. Task
+checkboxes are execution progress, not task design: `/order.code` marks or
+reconciles one successful task at a time through `task_progress.py`.
+`/order.tasks` Refine is surgical: a deterministic guard restores the original
+file if any completed task or its worker context changes.
+
+Each new work order attempts to capture a Git-backed baseline for every
+pathmanifest path. `/order.code --reset` is available only when capture
+succeeded; it previews and restores that bounded set, then clears checkboxes
+after rollback succeeds. Broad working-tree cleanup is never used.
+
+When code execution discovers an upstream defect, it persists a typed feedback
+report in the feature `.state/feedback/`. The owning author command loads it on
+the next run and consumes it only after the repaired artifact validates.
 
 A spec is a contract about behavior. It should survive refactors, renames, and merges.
 
@@ -175,11 +185,13 @@ interpret OrderSpec Markdown contracts.
     │   └── <feature>/
     │       ├── spec.md
     │       ├── plan.md
-    │       └── tasks.md
+    │       ├── tasks.md
+    │       └── .state/                    ← mechanisms, work-order baseline, feedback
     ├── config/
     │   └── tooling.json
     ├── state/
     │   ├── agents.json
+    │   ├── bootstrap.json
     │   ├── tooling-detection.json
     │   └── active-feature.json
     ├── skills/                            ← project skills (single source of truth)
@@ -213,6 +225,7 @@ interpret OrderSpec Markdown contracts.
 | `.orderspec/config/tooling.json` | Configuration | Project/operator policy for documentation lookup and skill usage. |
 | `.orderspec/state/tooling-detection.json` | Runtime state | Generated detection result for currently available tools such as Context7 or find-skills. |
 | `.orderspec/state/agents.json` | Runtime state | Multi-agent configuration: enabled agents, sync state, last sync timestamp. |
+| `.orderspec/state/bootstrap.json` | Runtime state | Initialization flag, last successful framework version, and Refine comparison fingerprints. |
 
 These files live in different directories on purpose:
 

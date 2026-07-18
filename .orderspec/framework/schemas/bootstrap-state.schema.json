@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "orderspec://schemas/bootstrap-state.schema.json",
+  "title": "OrderSpec Bootstrap State",
+  "description": "Persisted completion and comparison baseline for /order.bootstrap Refine mode.",
+  "type": "object",
+  "required": ["version", "initialized", "completed_at", "framework_version", "manifest", "fingerprints"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {"const": 1},
+    "initialized": {"const": true},
+    "completed_at": {"type": "string", "minLength": 1},
+    "framework_version": {"type": "string", "minLength": 1},
+    "manifest": {"type": ["string", "null"]},
+    "fingerprints": {
+      "type": "object",
+      "required": ["stack", "architecture", "conventions", "constitution", "tooling"],
+      "additionalProperties": false,
+      "properties": {
+        "stack": {"type": ["string", "null"]},
+        "architecture": {"type": ["string", "null"]},
+        "conventions": {"type": ["string", "null"]},
+        "constitution": {"type": ["string", "null"]},
+        "tooling": {"type": ["string", "null"]}
+      }
+    }
+  }
+}

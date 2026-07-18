@@ -162,4 +162,31 @@ with tempfile.TemporaryDirectory(prefix="orderspec-task-progress-") as temp:
     rc, data = run("assert-complete", "--tasks", str(tasks))
     expect(rc == 0 and data["unchecked"] == 0, "completion guard accepts all tasks marked")
 
+with tempfile.TemporaryDirectory(prefix="orderspec-task-reconcile-") as temp:
+    tasks = Path(temp) / "tasks.md"
+    tasks.write_text(
+        "# Tasks\n\n## Phase 1\n\n"
+        "- [ ] T001 | src/existing.py | REQ-001 | add implementation\n"
+        "- [X] T002 | src/second.py | REQ-002 | second implementation\n",
+        encoding="utf-8",
+    )
+    reconciliation = {
+        "task_id": "T001",
+        "status": "ALREADY_COMPLETE",
+        "changed_files": [],
+        "verification": {"status": "PASS", "evidence": "targeted test passed"},
+        "observed_state": "required function and error branch are present",
+        "deviation": None,
+    }
+    invalid_reconciliation = dict(reconciliation, observed_state="")
+    rc, data = run(
+        "reconcile", "--tasks", str(tasks), input_text=json.dumps(invalid_reconciliation)
+    )
+    expect(
+        rc != 0 and data.get("terminal") is True and "- [ ] T001" in tasks.read_text(encoding="utf-8"),
+        "reconcile rejects missing observed-state evidence",
+    )
+    rc, data = run("reconcile", "--tasks", str(tasks), input_text=json.dumps(reconciliation))
+    expect(rc == 0 and data["transition"] == "reconciled", "reconcile marks pre-existing verified work")
+
 print("All task-progress tests passed")

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Deterministic task state checks and completion marking for /order.code.
+"""Deterministic task state transitions for /order.code.
 
 The coordinator owns worker result interpretation. This script owns the narrow
-state transition from one unchecked task to `[X]` after a successful result and
-the terminal assertion that no unchecked tasks remain.
+state transition from one unchecked task to `[X]` after a successful result,
+reconciliation of work completed before the current run, and the terminal
+assertion that no unchecked tasks remain. Bulk reset belongs exclusively to
+the transactional work_order.py rollback.
 """
 
 from __future__ import annotations
@@ -223,6 +225,33 @@ def validate_success_result(result: dict[str, Any], record: dict[str, Any]) -> s
     return None
 
 
+def validate_reconcile_result(result: dict[str, Any], record: dict[str, Any]) -> str | None:
+    """Validate evidence for an already-satisfied unchecked task.
+
+    Reconciliation is deliberately stricter than an ordinary worker result:
+    it may report no writes, but it must include positive verification and a
+    concrete observation. File existence alone is not completion evidence.
+    """
+    if result.get("task_id") != record["task_id"]:
+        return "reconciliation task_id does not match target task"
+    if result.get("status") != "ALREADY_COMPLETE":
+        return "reconciliation status must be ALREADY_COMPLETE"
+    if result.get("changed_files") != []:
+        return "reconciliation must report changed_files: []"
+    verification = result.get("verification")
+    if not isinstance(verification, dict) or verification.get("status") != "PASS":
+        return "reconciliation requires verification.status PASS"
+    evidence = verification.get("evidence")
+    if not isinstance(evidence, str) or not evidence.strip():
+        return "reconciliation verification evidence is empty"
+    observed_state = result.get("observed_state")
+    if not isinstance(observed_state, str) or not observed_state.strip():
+        return "reconciliation observed_state is empty"
+    if result.get("deviation") not in (None, ""):
+        return "reconciliation contains a deviation"
+    return None
+
+
 def atomic_replace(path: Path, content: str) -> None:
     mode = stat.S_IMODE(path.stat().st_mode)
     fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent), text=True)
@@ -238,16 +267,10 @@ def atomic_replace(path: Path, content: str) -> None:
         temp_path.unlink(missing_ok=True)
 
 
-def cmd_mark(args: argparse.Namespace) -> int:
-    tasks_path = Path(args.tasks)
+def update_one(tasks_path: Path, result: dict[str, Any], *, reconcile: bool) -> int:
     records, errors = parse_tasks(tasks_path)
     if errors:
         return fail("; ".join(errors), code="invalid_tasks_file")
-
-    result, result_error = load_result(args)
-    if result_error:
-        return fail(result_error, code="invalid_worker_result")
-    assert result is not None
 
     task_id = result.get("task_id")
     if not isinstance(task_id, str) or not TASK_ID_RE.match(task_id):
@@ -276,7 +299,11 @@ def cmd_mark(args: argparse.Namespace) -> int:
                 terminal=True,
             )
 
-    validation_error = validate_success_result(result, record)
+    validation_error = (
+        validate_reconcile_result(result, record)
+        if reconcile
+        else validate_success_result(result, record)
+    )
     if validation_error:
         return fail(
             validation_error,
@@ -305,11 +332,28 @@ def cmd_mark(args: argparse.Namespace) -> int:
             "ok": True,
             "task_id": task_id,
             "status": "X",
-            "tasks_file": args.tasks,
+            "transition": "reconciled" if reconcile else "implemented",
+            "tasks_file": str(tasks_path),
             "line_number": record["line_number"],
         }
     )
     return 0
+
+
+def cmd_mark(args: argparse.Namespace) -> int:
+    result, result_error = load_result(args)
+    if result_error:
+        return fail(result_error, code="invalid_worker_result")
+    assert result is not None
+    return update_one(Path(args.tasks), result, reconcile=False)
+
+
+def cmd_reconcile(args: argparse.Namespace) -> int:
+    result, result_error = load_result(args)
+    if result_error:
+        return fail(result_error, code="invalid_reconciliation_result")
+    assert result is not None
+    return update_one(Path(args.tasks), result, reconcile=True)
 
 
 def main() -> int:
@@ -330,6 +374,13 @@ def main() -> int:
     mark.add_argument("--tasks", required=True)
     mark.add_argument("--result-file", help="read worker JSON from file; stdin is used when omitted")
     mark.set_defaults(handler=cmd_mark)
+
+    reconcile = subparsers.add_parser(
+        "reconcile", help="mark one previously completed task [X] from positive evidence"
+    )
+    reconcile.add_argument("--tasks", required=True)
+    reconcile.add_argument("--result-file", help="read reconciliation JSON from file; stdin is used when omitted")
+    reconcile.set_defaults(handler=cmd_reconcile)
 
     args = parser.parse_args()
     return args.handler(args)

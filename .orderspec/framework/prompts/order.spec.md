@@ -242,6 +242,17 @@ If present:
   3. List upstream/downstream-owned findings in the completion report.
   4. Treat `$ARGUMENTS` as additional guidance, not a replacement for the report.
 
+Also load persistent downstream feedback for the resolved feature:
+
+```bash
+python3 .orderspec/framework/scripts/workflow_feedback.py list \
+  --feature-dir "<feature-directory>" --target order.spec
+```
+
+Open feedback is authoritative Refine input and selects Refine when
+`$ARGUMENTS` is empty. Do not consume feedback until the changed spec passes
+ID projection and mechanical validation.
+
 ### Mode selection
 
 Determine mode now, before writing any managed file. State selected mode in one
@@ -261,6 +272,13 @@ If a BLOCK/ROUTING REQUIRED report was used to modify `spec.md`, then after succ
 - `/order.spec-check` is required for a fresh verdict.
 
 Do not add a changelog row merely for report consumption. Changelog records actual contract changes only.
+
+After successful validation, consume each addressed feedback item:
+
+```bash
+python3 .orderspec/framework/scripts/workflow_feedback.py consume \
+  --feature-dir "<feature-directory>" --id "FB-NNN" --consumer order.spec
+```
 
 ## Project Contracts and §6
 
@@ -954,4 +972,5 @@ Include:
 - [ ] `traceability.py validate --stage spec --json` succeeded or residual findings were reported
 - [ ] Active feature state updated via `active_feature.py set`
 - [ ] Refine/decompose downstream impact reported
+- [ ] Open `order.spec` workflow feedback loaded; addressed items consumed only after validation
 - [ ] Completion report emitted to chat

@@ -32,7 +32,8 @@ You **MUST** consider the user input before proceeding (if not empty).
   never redo or "improve". A re-run continues from the first unchecked task.
   Resumability preserves work after an evidenced stop or external interruption;
   it is not permission to choose a batch size or end a healthy `LOCAL_ALL` run.
-  Never remove `[X]` markers.
+  Never remove `[X]` markers during implementation. The isolated RESET mode is
+  the only exception and clears them only after a successful path-scoped rollback.
 - **No silent deviations**: if a task cannot be executed as written (missing path, contradiction with `plan.md`, broken dependency), apply the Deviation Rule below — do not improvise.
 
 ### Frozen Baseline and Pathmanifest Semantics
@@ -114,7 +115,9 @@ Determine execution strategy before writing any file. State the selected mode in
 
 Execution modes:
 
-1. **DELEGATED** — explicitly requested delegation and runtime explicitly
+1. **RESET** — `$ARGUMENTS` contains `--reset`. Preview and, after explicit
+   operator approval, roll back the frozen work order. Execute no task.
+2. **DELEGATED** — explicitly requested delegation and runtime explicitly
    exposes sub-agent dispatch and wait. Dispatch every unchecked task according
    to Step 9.
 2. **LOCAL_PHASE** — `$ARGUMENTS` contains `--phase`. Coordinator executes
@@ -132,6 +135,8 @@ Additional controls:
   available.
 - **`--phase`** — select `LOCAL_PHASE`.
 - **`--all`** — compatibility alias for default `LOCAL_ALL`.
+- **`--reset`** — isolated destructive recovery mode. It is incompatible with
+  `--phase`, `--delegated`, `--local`, and implementation in the same run.
 - **Explicit natural-language local constraint** — instructions such as “do not
   use sub-agents”, “without delegation”, “single agent”, or requiring all work
   to remain in one/single agent session are equivalent to `--local`, including
@@ -143,17 +148,48 @@ Additional controls:
 Mode precedence:
 
 1. Resolve command context and paths.
-2. Parse explicit user execution constraints before capability detection.
-3. If local execution is requested, select `LOCAL_ALL`. Do not inspect dispatch
+2. If `--reset` is present, reject conflicting mode flags, select `RESET`, and
+   execute Step 3.25. Do not run upstream gates, tooling validation, worker
+   resolution, or implementation.
+3. Parse explicit user execution constraints before capability detection.
+4. If local execution is requested, select `LOCAL_ALL`. Do not inspect dispatch
    capability or resolve a worker.
-4. If `--phase` is present, select `LOCAL_PHASE`. Do not inspect dispatch
+5. If `--phase` is present, select `LOCAL_PHASE`. Do not inspect dispatch
    capability or resolve a worker.
-5. If `--delegated` is present, detect actual dispatch capability in the current
+6. If `--delegated` is present, detect actual dispatch capability in the current
    runtime; do not infer it from `agents.json` or adapter detection. Select
    `DELEGATED` only when dispatch is available; otherwise select `LOCAL_ALL`.
-6. Otherwise select `LOCAL_ALL`.
-7. State mode before the first task mutation. User prohibition of delegation
+7. Otherwise select `LOCAL_ALL`.
+8. State mode before the first task mutation. User prohibition of delegation
    always overrides runtime capability and worker defaults.
+
+### Step 3.25: RESET Work Order
+
+RESET uses the baseline captured by `/order.tasks`; it does not infer ownership
+from the current Git diff and never touches a path outside the frozen
+pathmanifest. First preview:
+
+```bash
+python3 .orderspec/framework/scripts/work_order.py rollback \
+  --feature-dir "$FEATURE_DIR"
+```
+
+Show every `delete`/`restore` action and ask for explicit approval. If approval
+is refused, stop without writes. If approved, run exactly:
+
+```bash
+python3 .orderspec/framework/scripts/work_order.py rollback \
+  --feature-dir "$FEATURE_DIR" --apply
+```
+
+The script restores code first and clears all `[X]` markers only after the
+rollback succeeds. It reads immutable Git blobs but runs no Git write command.
+If the baseline is absent, `plan.md` changed, a planned path was dirty when the
+work order was created, or a target is now a directory/special file, STOP:
+`CODE_RESET_BLOCKED: safe baseline unavailable`. Never fall back to broad
+`git restore`, `git clean`, checkout, or deletion inferred from task prose.
+After success, report restored/deleted paths and end the command. A later
+`/order.code` starts from the first unchecked task.
 
 ### Step 3.5: Worker Resolution
 
@@ -373,7 +409,9 @@ Run phases strictly in order (hard sequential barriers). Within a phase, execute
 
 #### The Loop
 
-1. Skip tasks already marked `[X]` (resume support — never redo).
+1. Skip tasks already marked `[X]` (resume support — never redo). For the first
+   unchecked task, inspect its exact resolved deliverable before writing. If it
+   was completed before this run, use Reconciliation below.
 2. Build the next execution unit from the current phase: one unchecked task, or one adjacent `[P]` group proven safe by the parallelism rules below.
 3. In `DELEGATED`, dispatch every task in the execution unit to its own sub-agent. In `LOCAL_PHASE` and `LOCAL_ALL`, execute the same task packet in the coordinator.
 4. Wait for the result, inspect allowed changes, run declared verification, then call `task_progress.py mark` with the worker result. Continue only after the marker script marks that exact task `[X]`.
@@ -473,6 +511,39 @@ task unchecked and stop at that task with a precise route.
   and pre-existing baseline defects to the user with exact evidence.
 - **Infra tasks** (barrels, fixtures, route wiring): carry EMPTY refs by design — execute the wiring/registration, no coverage expected.
 
+#### Reconciliation of Previously Completed Work
+
+An unchecked task may already be satisfied because work predates tasks.md or a
+prior run stopped after writing code but before marking progress. File presence
+alone is insufficient. Resolve the normal bounded task packet, inspect the exact
+required state, and run the task's applicable verification. If both the complete
+deliverable and positive verification are observed without any write in this
+run, create this evidence object:
+
+```json
+{
+  "task_id": "T###",
+  "status": "ALREADY_COMPLETE",
+  "changed_files": [],
+  "verification": {"status": "PASS", "evidence": "exact command/result"},
+  "observed_state": "concise exact deliverable evidence",
+  "deviation": null
+}
+```
+
+Then mark it only through:
+
+```bash
+python3 .orderspec/framework/scripts/task_progress.py reconcile \
+  --tasks "$FEATURE_DIR/tasks.md" --result-file "$RESULT_FILE"
+```
+
+Reconciliation obeys task order and cannot bypass a prior unchecked task. If
+verification is unavailable, ambiguous, green only because a different
+unplanned implementation exists, or reveals a deviation, leave the task
+unchecked and follow the normal stop/routing rule. Never claim a changed path
+to force ordinary `mark` to accept pre-existing work.
+
 #### Checkpoint / STOP & VALIDATE (end of each story phase)
 
 - `order.tasks` represents a checkpoint as prose, not a task. Read the current
@@ -519,6 +590,29 @@ read-only check from `plan.md` when constitution capabilities permit it.
 | Checkpoint | Stay in current story phase; fix forward; re-verify |
 | GATE | HALT everything; Contract phase is forbidden until GATE passes |
 | Environment prerequisite | Stop current task; ask approval for exact recovery; rerun check; resume only after pass |
+
+#### Persistent Routing Report (required before every upstream route)
+
+Whenever `/order.code` stops and routes a defect to `/order.tasks`,
+`/order.plan`, `/order.spec`, or `/order.bootstrap`, persist the diagnosis
+before returning:
+
+```bash
+python3 .orderspec/framework/scripts/workflow_feedback.py create \
+  --feature-dir "$FEATURE_DIR" \
+  --input-file "$FEEDBACK_INPUT_FILE"
+```
+
+`FEEDBACK_INPUT_FILE` contains exactly one JSON object with `source`, `target`,
+`category`, `location`, `summary`, `evidence`, and `requested_change`. Using a
+JSON file preserves exact multiline evidence and avoids shell interpolation.
+
+Select the actual owner and category (`task_decomposition`, `plan_mapping`,
+`contract`, or `project_contract`). The emitted JSON report under
+`$FEATURE_DIR/.state/feedback/` is the durable handoff; chat text alone is not
+sufficient. Do not overwrite gate reports or pretend to invoke another slash
+command. The target author command automatically loads its open feedback and
+normal gate verification remains an independent later step.
 
 #### Deviation Rule
 
@@ -635,6 +729,7 @@ Report to chat:
 - **Coverage check**: `check-mechanisms` exit code (MUST be 0); one-line summary if defects found.
 - **Verification**: checkpoint results per story; GATE result; final test command output summary (pass/fail counts).
 - **Deviation blockers**: rejected task ID/result and routing target, or "none".
+- **Workflow feedback**: IDs/paths of persistent upstream reports created, or "none".
 - **Environment blockers**: prerequisite, observed failure, user-approved recovery or fallback, and outcome (or "none").
 - **Library Documentation Evidence**: for each library-specific claim, cite the evidence source (skill name, docs source name, or user-provided reference). If a required source was unavailable, record that and the fallback applied.
 - **If halted early**: exact stopping point (phase/task), named STOP/HALT rule,
@@ -649,7 +744,8 @@ Report to chat:
 
 - [ ] Command context resolved via `command_context.py`
 - [ ] Every `to_read` file was read and interpreted by `usage`
-- [ ] Execution mode detected and stated (`DELEGATED` / `LOCAL_PHASE` / `LOCAL_ALL`); `RESUME` and `--force` recorded separately
+- [ ] Execution mode detected and stated (`RESET` / `DELEGATED` / `LOCAL_PHASE` / `LOCAL_ALL`); `RESUME` and `--force` recorded separately
+- [ ] RESET, when selected, used baseline preview + approval + atomic path-scoped rollback and then stopped
 - [ ] Worker request resolved through `sub-agent-rules.md`; delegated worker inspected and ready, or local fallback used without configuration
 - [ ] Feature paths resolved; `eval` used for shell vars
 - [ ] Upstream gate respected: guard returned `ok`/`advisory`/`forced` (not `halt`/`stop`/`error`); on `forced`, a `--force` warning was recorded in the completion report; on `advisory`, user was warned in chat
@@ -668,5 +764,7 @@ Report to chat:
 - [ ] Resume treated applied `[NEW]`/`[DEL]` transitions as expected work-order state; no plan-authoring current-state check was run
 - [ ] `check-mechanisms` exited 0 (no coverage defects); defects routed to `/order.tasks` or `/order.spec`, not silently patched
 - [ ] Deviations stopped and routed; no rejected result was rewritten or retried
+- [ ] Already-completed unchecked tasks used `task_progress.py reconcile` with PASS evidence and no fabricated changes
+- [ ] Every upstream route persisted a typed workflow feedback report before stopping
 - [ ] Active feature status updated to `implementing`
 - [ ] Completion Report provided, including Library Documentation Evidence and manual/orchestrator recommendation to run `/order.code-check`
