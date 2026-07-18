@@ -924,10 +924,48 @@ rc, data, err = run_sync_json(
 )
 requested = data.get("requested", {})
 if (rc == 0 and requested.get("configured") and requested.get("valid")
-        and requested.get("source") == "custom" and requested.get("model") == "test-weak-model"):
+        and requested.get("source") == "custom" and requested.get("model") == "test-weak-model"
+        and requested.get("reasoning_effort") == "low"
+        and requested.get("configuration_ready") is True):
     ok("Codex sub-agents — custom worker validates successfully")
 else:
     bad(f"Codex custom worker inspection :: rc={rc} data={data} err={err!r}")
+
+rc, data, err = run_sync_json(
+    "subagents", "validate-orderspec", "--agent", "codex", "--json"
+)
+if (rc == 0 and data.get("ready") is True
+        and data.get("required_roles") == ["orderspec.worker.weak"]
+        and data.get("workers", [{}])[0].get("reasoning_effort") == "low"):
+    ok("Codex OrderSpec readiness receipt requires the active worker")
+else:
+    bad(f"Codex readiness receipt :: rc={rc} data={data} err={err!r}")
+
+weak_content = read(agent_file)
+write(
+    WORK / ".codex" / "agents" / "orderspec-worker-strong.toml",
+    weak_content.replace("orderspec.worker.weak", "orderspec.worker.strong").replace(
+        'model_reasoning_effort = "low"\n', ""
+    ),
+)
+rc, data, err = run_sync_json(
+    "subagents", "inspect", "--agent", "codex", "--name", "orderspec.worker.strong", "--json"
+)
+if (rc == 0 and data.get("status") == "invalid"
+        and "explicit model_reasoning_effort" in " ".join(data.get("requested", {}).get("errors", []))):
+    ok("Codex OrderSpec roles — explicit reasoning effort is mandatory")
+else:
+    bad(f"Codex missing reasoning accepted :: rc={rc} data={data} err={err!r}")
+
+rc, data, err = run_sync_json(
+    "subagents", "configure", "--agent", "codex", "--name", "orderspec.worker.medium",
+    "--reasoning", "medium", "--model", "test-medium-model",
+    "--developer-instructions", "arbitrary", "--json"
+)
+if rc == 0 and data.get("status") == "error" and "framework-owned" in data.get("details", ""):
+    ok("Codex OrderSpec roles — arbitrary developer instructions rejected")
+else:
+    bad(f"Codex arbitrary instructions accepted :: rc={rc} data={data} err={err!r}")
 
 
 # 43a. OrderSpec roles reject inherited model selection
@@ -972,7 +1010,7 @@ else:
     bad(f"Codex non-interactive ensure :: rc={rc} data={data} err={err!r}")
 
 
-# 46. Bootstrap delivery injects AI-selected, operator-approved three-role setup
+# 46. Bootstrap delivery injects the AI-selected, operator-approved active role
 reset_work()
 setup_prompts_source({
     "order.bootstrap.md": (
@@ -986,13 +1024,14 @@ rc, data, err = run_sync_json("sync", "--agents", "codex", "--json")
 bootstrap_skill = WORK / ".agents" / "skills" / "order-bootstrap" / "SKILL.md"
 content = read(bootstrap_skill) if bootstrap_skill.exists() else ""
 if (rc == 0
-        and all(role in content for role in (
-            "orderspec.worker.weak", "orderspec.worker.medium", "orderspec.worker.strong"
-        ))
-        and "current model knowledge/documentation" in content
+        and "orderspec.worker.weak" in content
+        and "medium/strong roles are not provisioned" in content
+        and "current model knowledge" in content
+        and "model_reasoning_effort" in content
         and "operator confirmation" in content
+        and "validate-orderspec" in content
         and "ORDERSPEC:ADAPTER_SUBAGENT_RULES" not in content):
-    ok("Codex bootstrap injects three AI-selected, operator-approved worker roles")
+    ok("Codex bootstrap injects one required AI-selected, operator-approved worker role")
 else:
     bad(f"Codex bootstrap worker provisioning was not injected :: rc={rc} content={content!r} err={err!r}")
 

@@ -1,0 +1,80 @@
+{
+  "protocol_version": 1,
+  "instructions": [
+    "Execute exactly one supplied task. Do not plan, redesign, review unrelated code, or broaden scope.",
+    "Read only task.task_context.to_read, task.contract_context, and task.inline_context.",
+    "Treat task.contract_context.spec_excerpts as the exact contract for referenced specification IDs.",
+    "Modify only task.task_context.write_paths. Do not edit task checkboxes or framework state.",
+    "Do not infer missing requirements, choose architecture, create stubs, or fix unrelated defects.",
+    "If required context is missing or a required write falls outside write_paths, stop without guessing and return BLOCKED or NEEDS_CONTEXT.",
+    "Return exactly one JSON object matching result_schema. Do not return prose or chain-of-thought and do not claim success without observable evidence."
+  ],
+  "capabilities": {
+    "network": false,
+    "package_installation": false,
+    "git_mutation": false,
+    "environment_mutation": false,
+    "subagent_dispatch": false,
+    "unrelated_commands": false
+  },
+  "result_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "task_id",
+      "status",
+      "changed_files",
+      "verification",
+      "deviation"
+    ],
+    "properties": {
+      "task_id": {
+        "type": "string",
+        "pattern": "^T[0-9]{3}$"
+      },
+      "status": {
+        "enum": [
+          "SUCCESS",
+          "FAILED",
+          "BLOCKED",
+          "NEEDS_CONTEXT"
+        ]
+      },
+      "changed_files": {
+        "type": "array",
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "verification": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "evidence"
+        ],
+        "properties": {
+          "status": {
+            "enum": [
+              "PASS",
+              "FAIL",
+              "NOT_RUN"
+            ]
+          },
+          "evidence": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "deviation": {
+        "type": [
+          "null",
+          "string"
+        ]
+      }
+    }
+  }
+}

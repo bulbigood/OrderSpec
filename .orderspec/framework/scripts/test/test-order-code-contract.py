@@ -20,13 +20,15 @@ resources = manifest["resources"]
 code_required = manifest["commands"]["order.code"]["required"]
 
 expect("protocol.sub_agent_execution" in resources, "sub-agent protocol is a manifest resource")
+expect("protocol.worker_execution" in resources, "canonical worker protocol is a manifest resource")
+expect("schema.worker_envelope" in resources, "worker envelope schema is a manifest resource")
 expect(
     any(item.get("ref") == "protocol.sub_agent_execution" for item in code_required),
     "order.code requires sub-agent protocol",
 )
 expect(
-    any(item.get("ref") == "schema.task_context" for item in code_required),
-    "order.code requires task context schema",
+    not any(item.get("ref") == "schema.task_context" for item in code_required),
+    "order.code leaves task-context validation to the deterministic workflow",
 )
 expect(
     manifest["commands"]["order.code"]["feature_context"] == {
@@ -103,11 +105,16 @@ expect(
     "order.code preserves plan baseline during resume",
 )
 expect(
-    "task packet omits it: `/order.tasks`" in code_prompt
+    "task envelope omits it: `/order.tasks`" in code_prompt
     and "physical mapping is absent or wrong: `/order.plan`" in code_prompt,
     "order.code routes task and plan defects separately",
 )
 expect("code_workflow.py preflight" in code_prompt, "order.code delegates mechanical preflight")
+expect(
+    "attempt-begin" in code_prompt and "attempt-finish" in code_prompt
+    and "worker_envelopes" in code_prompt and "verbatim" in code_prompt,
+    "order.code dispatches a snapshotted self-contained envelope verbatim",
+)
 expect("tooling-protocol.md" not in code_prompt, "order.code contains no dead tooling branch")
 expect("Mark Gate Report Consumed" not in code_prompt, "order.code does not consume tasks gate reports")
 
@@ -175,12 +182,33 @@ expect("task_context" in protocol and "to_read" in protocol, "protocol consumes 
 expect("MUST be copied verbatim" in protocol, "protocol forbids coordinator whitelist edits")
 expect("contract_context" in protocol and "task_contract_context.py" in protocol, "protocol carries exact contract context")
 expect("NEEDS_CONTEXT" in protocol and "changed_files" in protocol, "protocol defines bounded worker result")
+expect(
+    "worker-execution.json" in protocol and "MUST NOT restate or translate" in protocol,
+    "protocol delegates worker-only rules to the canonical envelope",
+)
+
+worker_protocol = json.loads(
+    (FRAMEWORK / "protocols" / "worker-execution.json").read_text(encoding="utf-8")
+)
+worker_schema = json.loads(
+    (FRAMEWORK / "schemas" / "worker-envelope.schema.json").read_text(encoding="utf-8")
+)
+expect(worker_protocol["protocol_version"] == 1, "worker protocol is explicitly versioned")
+expect(
+    worker_schema["properties"]["protocol_version"]["const"] == 1,
+    "worker envelope schema pins the protocol version",
+)
+expect(
+    all(value is False for value in worker_protocol["capabilities"].values()),
+    "worker envelope capabilities are default-deny",
+)
 
 codex_adapter = (FRAMEWORK / "adapters" / "codex.py").read_text(encoding="utf-8")
 expect(
     "ORDERSPEC:ADAPTER_SUBAGENT_RULES" in code_prompt
     and "orderspec.worker.weak" in codex_adapter
-    and "built-in `worker`" in codex_adapter,
+    and "built-in `worker`" in codex_adapter
+    and "configuration_ready" in codex_adapter,
     "order.code receives exact Codex weak-worker selection from its adapter",
 )
 

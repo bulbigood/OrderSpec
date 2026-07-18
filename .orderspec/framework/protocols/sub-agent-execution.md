@@ -9,13 +9,13 @@ orderspec:
 ## Purpose
 
 This protocol defines the boundary between `/order.code` coordinator and one
-task worker. It is framework procedure for the coordinator. The worker receives
-the rendered task packet and resolver output. Files absent from that output are
-unavailable to the worker.
+task worker. It is framework procedure for the coordinator. `code_workflow.py`
+renders a self-contained, schema-versioned `worker_envelope`; the coordinator
+passes that envelope verbatim. Files absent from it are unavailable to the worker.
 
 ## Coordinator contract
 
-Coordinator MUST prepare one packet per task. Packet fields:
+The deterministic renderer prepares one envelope per task. Its task fields are:
 
 ```yaml
 task_id: T###
@@ -29,11 +29,12 @@ task_context:
 contract_context:
   resolver: python3 .orderspec/framework/scripts/task_contract_context.py resolve --feature-dir "$FEATURE_DIR" --task-id "$TASK_ID" --json
   output: exact resolver output, copied verbatim
-context:
-  - short excerpt or fact prepared by coordinator
+inline_context:
+  - renderer-supplied short excerpt or fact
 verification:
-  command: exact command, or null
-  expected: observable success condition
+  required: true|false
+  source: task_line
+  expected: observable result rule
 stop_conditions:
   - missing required context
   - task contradicts supplied context
@@ -42,8 +43,8 @@ stop_conditions:
 
 Rules:
 
-- `task_context.to_read` MUST be copied verbatim from `task_context.py` output.
-  Coordinator MUST NOT add, remove, reorder, or manually recreate entries.
+- `task_context.to_read` MUST be copied verbatim from resolver output. The
+  coordinator MUST NOT add, remove, reorder, or manually recreate entries.
 - `task_context.write_paths` MUST be copied verbatim from resolver output. A
   task requiring another write path is a task decomposition or plan defect, not
   worker discretion.
@@ -52,12 +53,12 @@ Rules:
   exact `spec.md` excerpts, mechanism rows, and current phase Goal/Verification.
 - Coordinator/local executor MUST NOT open or search full `spec.md` to augment
   resolved excerpts unless `task_context.to_read` explicitly lists it.
-- Coordinator MUST prepare only the minimum relevant inline excerpts in
-  `context`; excerpts are not permission to open additional files.
+- `inline_context` is renderer-owned and contains only minimum relevant facts;
+  the coordinator MUST NOT amend it.
 - Worker MUST receive literal file paths only. Directories, globs, and
   repository-wide searches are invalid.
-- `verification.command` is allowed only when the command is declared by the
-  task/plan and permitted by project governance.
+- Verification is allowed only when declared by the task/plan and permitted by
+  project governance; its exact command remains in `task_line`.
 - Environment recovery belongs to the coordinator. A worker that encounters
   an unavailable runtime prerequisite MUST return `BLOCKED`; it MUST NOT ask
   for approval or mutate the environment.
@@ -66,9 +67,11 @@ Rules:
 
 ## Worker contract
 
-Worker is a literal executor, not a planner, reviewer, or reasoner.
+Worker behavior, default-deny capabilities, and result schema are carried inside
+the canonical envelope from `protocols/worker-execution.json`. The coordinator
+MUST NOT restate or translate them.
 
-- Read only `task_context.to_read`, `contract_context`, and inline `context`.
+- Read only `task_context.to_read`, `contract_context`, and `inline_context`.
 - Treat `contract_context.spec_excerpts` as the exact contract for every
   referenced spec ID. Do not invent missing requirements or replace excerpts
   with memory or paraphrase.
@@ -115,10 +118,11 @@ never changes `[X]` markers.
 
 For each task, coordinator MUST:
 
-1. Build packet from the exact task line and explicitly read context.
-2. Dispatch packet in `DELEGATED`, or execute the same packet locally in
+1. Resolve the next envelope from the exact task line and context.
+2. Start an attempt snapshot and dispatch its verbatim envelope in `DELEGATED`,
+   or execute the same envelope locally in
    `LOCAL_PHASE`/`LOCAL_ALL`.
-3. Parse the result and inspect the allowed diff only.
+3. Finish the attempt; the script validates observed changes against the result.
 4. Run declared verification and capture its observable result.
 5. Call the deterministic task-state script to mark that exact task `[X]`.
 6. Continue only after the marker script succeeds.
@@ -128,7 +132,7 @@ stop before the next task. Preserve the task unchecked and report the exact
 task ID and stopping reason.
 
 `changed_files` MUST describe observed task-local filesystem changes, not the
-worker's intended changes. Coordinator MUST compare task-start and task-end
-state before calling the marker. It MUST NOT add the allowed path, remove a
+worker's intended changes. The attempt script compares task-start and task-end
+state before marking. The coordinator MUST NOT add an allowed path, remove a
 forbidden path, clear `deviation`, or otherwise edit and retry a rejected
-result. Marker rejection is terminal for the current run.
+result. Attempt or marker rejection is terminal for the current run.

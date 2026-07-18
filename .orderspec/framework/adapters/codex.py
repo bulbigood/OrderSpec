@@ -47,23 +47,29 @@ class CodexAdapter(AgentAdapter):
         "orderspec.worker.medium",
         "orderspec.worker.strong",
     )
+    REQUIRED_ORDERSPEC_WORKERS = ("orderspec.worker.weak",)
+    ORDERSPEC_WORKER_INSTRUCTIONS = (
+        "OrderSpec worker protocol version 1. Execute exactly one worker_envelope "
+        "from the coordinator, obey its default-deny capabilities and exact read/write "
+        "bounds, never start another worker, and return only the required JSON result."
+    )
 
     def subagent_rules(self, command: str) -> str:
         if command == "order.bootstrap":
             return """## Codex worker provisioning (adapter-owned)
 
 Codex project workers are native TOML definitions under `.codex/agents/`.
-After approved-agent sync, bootstrap owns these three stable OrderSpec roles:
+Current OrderSpec execution requires only `orderspec.worker.weak`. The reserved
+medium/strong roles are not provisioned until a deterministic framework consumer
+uses them.
 
-- `orderspec.worker.weak` — cheapest current model that can reliably execute one bounded task packet;
-- `orderspec.worker.medium` — balanced model for broader semantic work;
-- `orderspec.worker.strong` — strongest available model for exceptional complexity.
-
-Inspect all three through `agents_sync.py subagents inspect --agent codex --name <role> --json`.
-If any role is absent, invalid, or no longer an appropriate current candidate,
-use the runtime's current model knowledge/documentation to propose an exact
-`model` and `model_reasoning_effort` for every role. Show the three mappings and
-brief cost/capability rationale, then obtain one explicit operator confirmation.
+Inspect the required role through `agents_sync.py subagents inspect --agent codex
+--name orderspec.worker.weak --json`. If it is absent, invalid, or no longer an
+appropriate current candidate, use the runtime's current model knowledge or
+documentation to propose an exact `model` and `model_reasoning_effort`. Reliability
+for bounded envelope execution is the first criterion; cost is secondary. Show the
+mapping and brief capability/cost rationale, and confirm that the selected effort is
+supported by that model in the current runtime. Then obtain explicit operator confirmation.
 Do not let a script choose models and do not use inherited or built-in workers
 for these roles. After confirmation, create/update each role only through:
 
@@ -73,9 +79,9 @@ python3 .orderspec/framework/scripts/agents_sync.py subagents configure \\
   --reasoning <level> --scope project [--overwrite] --json
 ```
 
-Re-inspect every role. Bootstrap may complete only when each is a valid custom
-worker with an explicit model. Never overwrite an existing role before showing
-the proposed replacement and receiving confirmation."""
+Then run `agents_sync.py subagents validate-orderspec --agent codex --json`.
+Bootstrap may complete only when it reports `ready: true`. Never overwrite an
+existing role before showing the proposed replacement and receiving confirmation."""
         if command == "order.code":
             return """## Codex worker selection (adapter-owned)
 
@@ -88,13 +94,15 @@ python3 .orderspec/framework/scripts/agents_sync.py subagents inspect \\
   --agent codex --name orderspec.worker.weak --scope project --json
 ```
 
-Continue only when it reports `configured: true`, `valid: true`,
-`source: custom`, and a non-empty explicit `model`. Dispatch with the runtime
+Continue only when it reports `configuration_ready: true`, `source: custom`,
+an explicit `model`, and an explicit `reasoning_effort`. Dispatch with the runtime
 agent type/name `orderspec.worker.weak` for every task in this command. Never
 substitute Codex's built-in `worker`, inherit the coordinator model, create a
 worker from `/order.code`, or silently select medium/strong. If the role is
 missing or invalid, stop before task writes and route to `/order.bootstrap`.
-If runtime dispatch/wait is unavailable, use the documented local fallback."""
+If the runtime rejects the configured model/effort or dispatch/wait is unavailable,
+stop before task writes and use the documented local fallback; do not treat TOML
+inspection as proof of runtime availability."""
         return super().subagent_rules(command)
 
     def _hash_file(self, filepath: str) -> Optional[str]:
@@ -185,6 +193,7 @@ If runtime dispatch/wait is unavailable, use the documented local fallback."""
             "reasoning_efforts": sorted(self.REASONING_EFFORTS),
             "name_source_of_truth": "name field in TOML",
             "orderspec_roles": list(self.ORDERSPEC_WORKERS),
+            "required_orderspec_roles": list(self.REQUIRED_ORDERSPEC_WORKERS),
             "provisioning_owner": "order.bootstrap",
             "current_framework_worker": "orderspec.worker.weak",
         }
@@ -238,6 +247,10 @@ If runtime dispatch/wait is unavailable, use the documented local fallback."""
             model = data.get("model")
             if not isinstance(model, str) or not model.strip():
                 errors.append("OrderSpec worker roles require an explicit non-empty model")
+            if not isinstance(reasoning, str) or not reasoning:
+                errors.append("OrderSpec worker roles require explicit model_reasoning_effort")
+            if data.get("developer_instructions") != self.ORDERSPEC_WORKER_INSTRUCTIONS:
+                errors.append("OrderSpec worker developer_instructions do not match protocol version 1")
 
         return errors
 
@@ -336,6 +349,7 @@ If runtime dispatch/wait is unavailable, use the documented local fallback."""
                     "reasoning_effort": entry.get("model_reasoning_effort"),
                     "model": entry.get("model"),
                     "errors": entry.get("errors", []),
+                    "configuration_ready": bool(valid_matches) and len(custom_matches) == 1,
                 }
             elif builtin_matches:
                 result["requested"] = {
@@ -423,6 +437,12 @@ If runtime dispatch/wait is unavailable, use the documented local fallback."""
                 "by the local AI agent and approved by the operator"
             )
             return result
+        if name in self.ORDERSPEC_WORKERS and developer_instructions not in {
+            None,
+            self.ORDERSPEC_WORKER_INSTRUCTIONS,
+        }:
+            result["details"] = "OrderSpec worker instructions are framework-owned"
+            return result
 
         filename = self._safe_agent_filename(name)
         if filename is None:
@@ -456,11 +476,7 @@ If runtime dispatch/wait is unavailable, use the documented local fallback."""
             name,
             "Executes one bounded worker task for an OrderSpec command or skill.",
         )
-        developer_instructions = developer_instructions or (
-            "You are an OrderSpec worker. Execute exactly one bounded task packet "
-            "from the coordinator, use only supplied context and write paths, "
-            "do not start another worker, and return the required structured result."
-        )
+        developer_instructions = developer_instructions or self.ORDERSPEC_WORKER_INSTRUCTIONS
         if not isinstance(description, str) or not description.strip():
             result["details"] = "description must be a non-empty string"
             return result

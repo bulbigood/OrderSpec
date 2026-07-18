@@ -166,10 +166,12 @@ Config and state are data.
 
 The internal command context manifest is framework input for the resolver, not something runtime agents should interpret directly.
 
-For `/order.code`, the resolver also supplies the sub-agent execution protocol.
-The coordinator reads feature artifacts and passes workers only explicit task
-packets with finite read/write paths. Workers do not scan the repository or
-interpret OrderSpec Markdown contracts.
+For `/order.code`, the resolver also supplies the coordinator-side sub-agent
+execution protocol. `code_workflow.py` renders a self-contained worker envelope
+with finite read/write paths, exact contract excerpts, default-deny capabilities,
+and the result schema. The coordinator passes it verbatim. Workers do not scan
+the repository or interpret OrderSpec Markdown contracts. Attempt snapshots
+deterministically reject undeclared writes and inaccurate `changed_files`.
 
 `code_workflow.py` is the implementation state-machine boundary: it performs
 preflight, chooses the next legal task unit, constructs packets through the

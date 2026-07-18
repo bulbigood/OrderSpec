@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "orderspec://schemas/worker-envelope.schema.json",
+  "title": "OrderSpec Worker Envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol_version", "instructions", "capabilities", "task", "result_schema"],
+  "properties": {
+    "protocol_version": {"type": "integer", "const": 1},
+    "instructions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["network", "package_installation", "git_mutation", "environment_mutation", "subagent_dispatch", "unrelated_commands"],
+      "properties": {
+        "network": {"const": false},
+        "package_installation": {"const": false},
+        "git_mutation": {"const": false},
+        "environment_mutation": {"const": false},
+        "subagent_dispatch": {"const": false},
+        "unrelated_commands": {"const": false}
+      }
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_id", "phase", "task_line", "objective", "task_context", "contract_context", "inline_context", "verification", "read_only", "stop_conditions"],
+      "properties": {
+        "task_id": {"type": "string", "pattern": "^T[0-9]{3}$"},
+        "phase": {"type": ["string", "null"]},
+        "task_line": {"type": "string", "minLength": 1},
+        "objective": {"type": "string", "minLength": 1},
+        "task_context": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["to_read", "write_paths", "target_state"],
+          "properties": {
+            "to_read": {"type": "array"},
+            "write_paths": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+            "target_state": {"enum": ["new", "mod", "del", "none"]}
+          }
+        },
+        "contract_context": {"type": "object"},
+        "inline_context": {"type": "array", "items": {"type": "string"}},
+        "verification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required", "source", "expected"],
+          "properties": {
+            "required": {"type": "boolean"},
+            "source": {"const": "task_line"},
+            "expected": {"type": "string", "minLength": 1}
+          }
+        },
+        "read_only": {"type": "boolean"},
+        "stop_conditions": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+      }
+    },
+    "result_schema": {"type": "object"}
+  }
+}

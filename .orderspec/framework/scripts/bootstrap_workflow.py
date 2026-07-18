@@ -81,10 +81,57 @@ def next_phase(args: argparse.Namespace) -> int:
     if completed != expected_prefix:
         emit({"ok": False, "error": "phases must complete in declared order", "expected_prefix": expected_prefix})
         return 64
+    receipts = []
+    if "agents" in completed:
+        root = Path(args.directory).resolve()
+        state_path = root / ".orderspec/state/agents.json"
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            enabled_agents = state["enabled_agents"]
+            if not isinstance(enabled_agents, list):
+                raise ValueError("enabled_agents must be an array")
+        except (OSError, UnicodeError, json.JSONDecodeError, KeyError, ValueError) as exc:
+            emit({"ok": False, "error": "agents_phase_unverified", "details": str(exc)})
+            return 2
+        validation_script = root / ".orderspec/framework/scripts/agents_sync.py"
+        for agent_id in enabled_agents:
+            process = subprocess.run(
+                [
+                    sys.executable,
+                    str(validation_script),
+                    "subagents",
+                    "validate-orderspec",
+                    "--agent",
+                    agent_id,
+                    "--json",
+                ],
+                cwd=root,
+                text=True,
+                capture_output=True,
+            )
+            try:
+                receipt = json.loads(process.stdout)
+            except json.JSONDecodeError:
+                emit({
+                    "ok": False,
+                    "error": "agents_phase_unverified",
+                    "agent": agent_id,
+                    "details": process.stderr or process.stdout,
+                })
+                return 2
+            receipts.append(receipt)
+            if process.returncode != 0 or not receipt.get("ready"):
+                emit({
+                    "ok": False,
+                    "error": "agents_phase_unverified",
+                    "agent": agent_id,
+                    "receipt": receipt,
+                })
+                return 2
     if len(completed) == len(phases):
-        emit({"ok": True, "mode": args.mode, "status": "ready_to_finalize", "next_phase": None})
+        emit({"ok": True, "mode": args.mode, "status": "ready_to_finalize", "next_phase": None, "agent_receipts": receipts})
     else:
-        emit({"ok": True, "mode": args.mode, "status": "in_progress", "next_phase": phases[len(completed)]})
+        emit({"ok": True, "mode": args.mode, "status": "in_progress", "next_phase": phases[len(completed)], "agent_receipts": receipts})
     return 0
 
 

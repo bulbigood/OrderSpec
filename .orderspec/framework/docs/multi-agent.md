@@ -72,13 +72,20 @@ python3 .orderspec/framework/scripts/agents_sync.py subagents configure \
   --json
 ```
 
-For Codex, bootstrap manages `orderspec.worker.weak`,
-`orderspec.worker.medium`, and `orderspec.worker.strong`. Each is a
-project-scoped custom definition with an explicit current model selected by the
-local AI agent and approved by the operator. Current OrderSpec prompts dispatch
-only `orderspec.worker.weak` during `/order.code`; they never fall back to the
-built-in `worker` or inherit the coordinator model. Global configuration is
-available only when explicitly selected with `--scope global`.
+Bootstrap closes the Codex agents phase only after
+`subagents validate-orderspec` returns a configuration-readiness receipt. This
+receipt validates the exact model, explicit reasoning field, and canonical
+worker instructions in project TOML. Actual model/effort availability remains
+runtime-owned and is checked by dispatch; TOML inspection does not claim it.
+
+For Codex, bootstrap currently requires only `orderspec.worker.weak`, because it
+is the only role consumed by `/order.code`. The AI proposes its exact current
+model and `model_reasoning_effort`, prioritizing reliable bounded-envelope
+execution before cost, and the operator approves the mapping. Reserved
+medium/strong roles are not provisioned until a deterministic framework
+consumer uses them. OrderSpec never falls back to the built-in `worker` or
+inherits the coordinator model. Global configuration is available only when
+explicitly selected with `--scope global`.
 
 Worker selection follows the rules injected by the active adapter during
 `agents_sync.py sync`.
@@ -90,19 +97,21 @@ Worker execution follows:
 ```text
 coordinator reads context
       ↓
-task packet with explicit read/write paths
+self-contained worker envelope with explicit read/write paths
       ↓
 worker executes one task
       ↓
-structured result + allowed diff check
+structured result + deterministic attempt snapshot comparison
       ↓
 task_progress.py marks one [X]
 ```
 
-The packet and result contract lives in
-`.orderspec/framework/protocols/sub-agent-execution.md`. The worker receives
-one rendered packet with finite read/write paths and exact contract excerpts,
-not the protocol file or the whole OrderSpec context.
+The coordinator contract lives in
+`.orderspec/framework/protocols/sub-agent-execution.md`. `code_workflow.py`
+renders the canonical worker-only rules, finite paths, exact contract excerpts,
+default-deny capabilities, and result schema into one envelope. Local and
+delegated executors receive that envelope verbatim, not framework protocol files
+or the whole OrderSpec context.
 
 ## Adding a new agent adapter
 

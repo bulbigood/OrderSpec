@@ -72,7 +72,79 @@ with tempfile.TemporaryDirectory(prefix="orderspec-code-workflow-") as temp:
         str(feature),
     )
     assert rc == 0 and data["action"] == "EXECUTE_TASK", data
-    packet = data["packets"][0]
-    assert packet["task_context"]["write_paths"] == ["src/service.py"], packet
+    envelope = data["worker_envelopes"][0]
+    assert envelope["protocol_version"] == 1, envelope
+    assert envelope["task"]["task_context"]["write_paths"] == ["src/service.py"], envelope
+    assert envelope["capabilities"]["network"] is False, envelope
+    assert set(envelope) == {"protocol_version", "instructions", "capabilities", "result_schema", "task"}, envelope
+
+    rc, attempt = run(
+        root,
+        "attempt-begin",
+        "--mode",
+        "LOCAL_ALL",
+        "--feature-dir",
+        str(feature),
+        "--task-id",
+        "T001",
+    )
+    assert rc == 0 and attempt["action"] == "DISPATCH", attempt
+    source.write_text("VALUE = 2\n", encoding="utf-8")
+    result_path = root / attempt["results_file"]
+    result_path.write_text(json.dumps({
+        "task_id": "T001",
+        "status": "SUCCESS",
+        "changed_files": ["src/service.py"],
+        "verification": {"status": "NOT_RUN", "evidence": "not required"},
+        "deviation": None,
+    }), encoding="utf-8")
+    rc, finished = run(
+        root,
+        "attempt-finish",
+        "--feature-dir",
+        str(feature),
+        "--attempt-id",
+        attempt["attempt_id"],
+        "--results-file",
+        str(result_path),
+    )
+    assert rc == 0 and finished["action"] == "READY_TO_VERIFY_AND_MARK", finished
+    assert finished["observed_by_task"] == {"T001": ["src/service.py"]}, finished
+
+    rc, attempt = run(
+        root,
+        "attempt-begin",
+        "--mode",
+        "LOCAL_ALL",
+        "--feature-dir",
+        str(feature),
+        "--task-id",
+        "T001",
+    )
+    assert rc == 0, attempt
+    (root / "forbidden.txt").write_text("unexpected\n", encoding="utf-8")
+    attempt_state_dir = feature / ".state" / "code-attempts"
+    (attempt_state_dir / "worker-intrusion.txt").write_text("unexpected\n", encoding="utf-8")
+    result_path = root / attempt["results_file"]
+    result_path.write_text(json.dumps({
+        "task_id": "T001",
+        "status": "SUCCESS",
+        "changed_files": [],
+        "verification": {"status": "NOT_RUN", "evidence": "not required"},
+        "deviation": None,
+    }), encoding="utf-8")
+    rc, rejected = run(
+        root,
+        "attempt-finish",
+        "--feature-dir",
+        str(feature),
+        "--attempt-id",
+        attempt["attempt_id"],
+        "--results-file",
+        str(result_path),
+    )
+    assert rc == 2 and rejected["error"] == "attempt_changes_rejected", rejected
+    assert "forbidden.txt" in rejected["unexpected_changed_paths"], rejected
+    assert any(path.endswith("worker-intrusion.txt") for path in rejected["unexpected_changed_paths"]), rejected
 
 print("All code-workflow tests passed")

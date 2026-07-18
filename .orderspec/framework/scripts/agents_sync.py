@@ -232,6 +232,65 @@ def inspect_subagents(agent_id: str, name: Optional[str] = None, scope: str = "p
     return adapter.inspect_subagents(project_root, requested_name=name, scope=scope)
 
 
+def validate_orderspec_workers(agent_id: str, scope: str = "project") -> dict:
+    """Return one deterministic readiness receipt for framework-required workers."""
+    try:
+        adapter = next(a for a in get_all_adapters() if a.agent_id == agent_id)
+    except StopIteration:
+        return {
+            "ok": False,
+            "ready": False,
+            "agent": agent_id,
+            "error": "adapter_not_found",
+        }
+    policy = adapter.subagent_policy()
+    required_roles = policy.get("required_orderspec_roles", [])
+    if not policy.get("supports_subagents"):
+        return {
+            "ok": True,
+            "ready": True,
+            "agent": agent_id,
+            "verification": "local_only",
+            "required_roles": [],
+            "workers": [],
+        }
+    if not required_roles:
+        return {
+            "ok": True,
+            "ready": True,
+            "agent": agent_id,
+            "verification": "runtime_only",
+            "required_roles": [],
+            "workers": [],
+        }
+    workers = []
+    ready = True
+    for role in required_roles:
+        inspection = adapter.inspect_subagents(os.getcwd(), requested_name=role, scope=scope)
+        requested = inspection.get("requested", {})
+        role_ready = bool(requested.get("configuration_ready"))
+        ready = ready and role_ready
+        workers.append({
+            "name": role,
+            "configuration_ready": role_ready,
+            "source": requested.get("source"),
+            "model": requested.get("model"),
+            "reasoning_effort": requested.get("reasoning_effort"),
+            "errors": requested.get("errors", inspection.get("errors", [])),
+        })
+    return {
+        "ok": ready,
+        "ready": ready,
+        "receipt_version": 1,
+        "agent": agent_id,
+        "scope": scope,
+        "verification": "adapter_managed",
+        "runtime_compatibility": "must_be_confirmed_by_current_runtime",
+        "required_roles": required_roles,
+        "workers": workers,
+    }
+
+
 def configure_subagent(
     agent_id: str,
     name: str,
@@ -401,6 +460,14 @@ Examples:
     parser_subagents_inspect.add_argument("--scope", choices=["project", "global"], default="project")
     parser_subagents_inspect.add_argument("--json", action="store_true", help="Output as JSON")
 
+    parser_subagents_validate = subagent_parsers.add_parser(
+        "validate-orderspec",
+        help="Validate every worker role required by the current OrderSpec framework",
+    )
+    parser_subagents_validate.add_argument("--agent", required=True, help="Agent adapter id")
+    parser_subagents_validate.add_argument("--scope", choices=["project", "global"], default="project")
+    parser_subagents_validate.add_argument("--json", action="store_true", help="Output as JSON")
+
     for action, help_text in (
         ("ensure", "Use an existing worker or configure a missing worker"),
         ("configure", "Create or update one worker definition"),
@@ -504,6 +571,8 @@ Examples:
     elif args.command == "subagents":
         if args.subagents_command == "inspect":
             result = inspect_subagents(args.agent, args.name, args.scope)
+        elif args.subagents_command == "validate-orderspec":
+            result = validate_orderspec_workers(args.agent, args.scope)
         elif args.subagents_command == "configure":
             result = configure_subagent(
                 agent_id=args.agent,
@@ -532,6 +601,8 @@ Examples:
             print(json.dumps(result, indent=2, ensure_ascii=False))
         else:
             print(json.dumps(result, indent=2, ensure_ascii=False))
+        if args.subagents_command == "validate-orderspec" and not result.get("ready"):
+            raise SystemExit(2)
 
 
 if __name__ == "__main__":

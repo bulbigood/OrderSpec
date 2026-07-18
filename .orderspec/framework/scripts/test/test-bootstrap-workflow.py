@@ -20,6 +20,12 @@ def run(*args):
     return process.returncode, json.loads(process.stdout)
 
 
+def run_agents(*args):
+    script = WORK / ".orderspec/framework/scripts/agents_sync.py"
+    process = subprocess.run([sys.executable, str(script), *args], cwd=WORK, text=True, capture_output=True)
+    return process.returncode, json.loads(process.stdout)
+
+
 def check(condition, name, detail=None):
     global passed, failed
     if condition:
@@ -43,6 +49,33 @@ check(rc == 0 and data["next_phase"] == "agents", "next routes ordered top-level
 
 rc, data = run("next", "--mode", "refine", "--completed", "agents")
 check(rc == 64 and data["error"] == "phases must complete in declared order", "out-of-order phase completion rejected", data)
+
+(WORK / ".orderspec/state").mkdir(parents=True)
+(WORK / ".orderspec/state/agents.json").write_text(
+    json.dumps({"version": 1, "enabled_agents": ["codex"], "agents": {}}) + "\n",
+    encoding="utf-8",
+)
+rc, data = run(
+    "next", "--mode", "refine", "--completed", "contracts",
+    "--completed", "constitution", "--completed", "agents",
+)
+check(rc == 2 and data["error"] == "agents_phase_unverified", "agents phase rejects missing required worker", data)
+
+rc, worker = run_agents(
+    "subagents", "configure", "--agent", "codex", "--name", "orderspec.worker.weak",
+    "--model", "test-model", "--reasoning", "low", "--json",
+)
+check(rc == 0 and worker["status"] == "created", "test worker configured", worker)
+rc, data = run(
+    "next", "--mode", "refine", "--completed", "contracts",
+    "--completed", "constitution", "--completed", "agents",
+)
+check(
+    rc == 0 and data["next_phase"] == "tooling"
+    and data["agent_receipts"][0]["ready"] is True,
+    "agents phase requires readiness receipt",
+    data,
+)
 
 rc, data = run("next", "--mode", "targeted-amend", "--completed", "contracts", "--completed", "validation")
 check(rc == 0 and data["status"] == "ready_to_finalize", "targeted amend uses bounded phase set", data)

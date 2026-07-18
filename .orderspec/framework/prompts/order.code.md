@@ -3,7 +3,7 @@ orderspec:
   artifact: command_prompt
   command: order.code
   phase: implement
-description: Execute a frozen work order through deterministic state transitions and bounded semantic task packets.
+description: Execute a frozen work order through deterministic state transitions and bounded semantic worker envelopes.
 ---
 
 ## User Input
@@ -18,11 +18,11 @@ Apply non-empty input when selecting execution controls. User prohibition of del
 
 `/order.code` implements an existing work order. It makes no contract,
 architecture, mapping, or task-decomposition decisions. Local coding choices
-are allowed only inside the resolved task packet and project constraints.
+are allowed only inside the resolved task envelope and project constraints.
 
 - `spec.md` owns WHAT; `plan.md` owns WHERE/HOW; `tasks.md` owns ORDER.
-- `code_workflow.py` owns mechanical preflight, task selection, packet
-  construction, completeness, coverage, and status transitions.
+- `code_workflow.py` owns mechanical preflight, task selection, envelope
+  construction, attempt snapshots, completeness, coverage, and status transitions.
 - The executor performs one bounded semantic task and returns evidence.
 - A change outside `task_context.write_paths` is a deviation, including a
   missing import or mechanical repair in another path.
@@ -100,7 +100,7 @@ that exact command. On refusal, stop without writes. Never use broad Git cleanup
 checkout, inferred deletion, or another rollback target. After successful apply,
 report restored/deleted paths and end.
 
-## Step 4 — Execute Returned Packets
+## Step 4 — Execute Returned Envelopes
 
 Request the next execution unit:
 
@@ -114,19 +114,32 @@ python3 .orderspec/framework/scripts/code_workflow.py next \
 For `LOCAL_PHASE`, `SELECTED_PHASE_FLAG` is the exact preflight value as
 `--selected-phase <value>`. Obey `action`:
 
-- `EXECUTE_TASK`: execute the sole packet locally or in one worker.
-- `EXECUTE_TASK_GROUP`: dispatch one worker per returned packet concurrently;
+- `EXECUTE_TASK`: execute the sole `worker_envelope` locally or in one worker.
+- `EXECUTE_TASK_GROUP`: dispatch one worker per returned envelope concurrently;
   wait for all. This action is emitted only for adjacent, unchecked, same-phase
   `[P]` tasks with distinct paths. If any non-file dependency or shared state is
-  uncertain, execute returned packets sequentially.
+  uncertain, execute returned envelopes sequentially.
 - `PHASE_COMPLETE`: run terminal validation with `PHASE_COMPLETE`.
 - `COMPLETE`: run terminal validation with `COMPLETE`.
 - `STOP`: leave the task unchecked and route the reported defect.
 
-Apply loaded `sub-agent-execution.md` exactly. Both local and delegated
-execution receive only the returned packet, including exact `task_context` and
-`contract_context`. Do not open full `spec.md`, scan the repository, add read
-paths, expand write paths, or infer missing requirements.
+Before any task write, start the exact returned execution unit:
+
+```bash
+python3 .orderspec/framework/scripts/code_workflow.py attempt-begin \
+  --mode "$MODE" --feature-dir "$FEATURE_DIR" \
+  $SELECTED_PHASE_FLAG --task-id <T###> [--task-id <T###>]
+```
+
+Task IDs MUST be in returned order. Obey only the `worker_envelopes` returned
+by `attempt-begin`; dispatch or execute each complete envelope verbatim without
+summarizing, augmenting, or translating it. The envelope is self-contained and
+schema-versioned. Do not send the worker this command prompt, framework
+protocol files, full feature artifacts, or coordinator commentary.
+
+Both local and delegated execution receive the same envelope, including exact
+`task_context` and `contract_context`. Do not open full `spec.md`, scan the
+repository, add read paths, expand write paths, or infer missing requirements.
 
 Workers are literal bounded implementers. They cannot mutate the environment,
 edit checkboxes, start workers, or advance tasks. The coordinator owns
@@ -146,9 +159,20 @@ Return exactly:
 }
 ```
 
-The coordinator compares task-start and task-end state, runs the packet's
-declared verification when project governance permits it, then submits the
-unaltered JSON:
+Write the worker result object, or ordered result array for a group, to the exact
+`results_file` returned by `attempt-begin`. Then run:
+
+```bash
+python3 .orderspec/framework/scripts/code_workflow.py attempt-finish \
+  --feature-dir "$FEATURE_DIR" --attempt-id "$ATTEMPT_ID" \
+  --results-file "$RESULT_FILE"
+```
+
+The attempt script compares repository state against its task-start snapshot,
+rejects undeclared writes and false `changed_files`, and returns
+`READY_TO_VERIFY_AND_MARK` only for successful workers. Rejection is terminal.
+After acceptance, run the envelope's declared verification when project
+governance permits it, then submit each original, unaltered result JSON:
 
 ```bash
 python3 .orderspec/framework/scripts/task_progress.py mark \
@@ -186,10 +210,10 @@ and resumability are not completion boundaries.
 - Test-writing tasks must run permitted evidence and observe the result declared
   by plan Evidence Sequencing. A mismatch is routed to `/order.tasks` or
   `/order.plan`; never manufacture a red state.
-- `VERIFY:` and `GATE:` packets are read-only and report `changed_files: []`.
+- `VERIFY:` and `GATE:` envelopes are read-only and report `changed_files: []`.
 - A task requiring verification cannot complete from source inspection or
   intent. Denied/unavailable required execution leaves it unchecked and routes
-  the capability/topology defect reported by the packet and project contracts.
+  the capability/topology defect reported by the envelope and project contracts.
 - Phase verification must pass before the next phase.
 - The final Contract GATE must pass before any contraction task. On failure,
   HALT; never perform deletion or contraction.
@@ -205,7 +229,7 @@ resume the same task only after success. Approval never amends an artifact.
 
 Classify by owner:
 
-- required path/mechanism exists in plan but task packet omits it: `/order.tasks`;
+- required path/mechanism exists in plan but task envelope omits it: `/order.tasks`;
 - required physical mapping is absent or wrong: `/order.plan`, then regenerate tasks;
 - required external behavior is absent or contradictory: `/order.spec`;
 - project capability/contract is absent or contradictory: `/order.bootstrap`.

@@ -22,6 +22,13 @@
       "usage": "apply",
       "authority": "framework"
     },
+    "protocol.worker_execution": {
+      "path": ".orderspec/framework/protocols/worker-execution.json",
+      "kind": "worker_protocol_template",
+      "reason": "canonical self-contained worker instructions and result contract",
+      "usage": "parse",
+      "authority": "framework"
+    },
     "protocol.environment_block": {
       "path": ".orderspec/framework/protocols/environment-block.md",
       "kind": "protocol",
@@ -124,6 +131,13 @@
       "path": ".orderspec/framework/schemas/task-context.schema.json",
       "kind": "schema",
       "reason": "per-task worker context schema",
+      "usage": "parse",
+      "authority": "framework"
+    },
+    "schema.worker_envelope": {
+      "path": ".orderspec/framework/schemas/worker-envelope.schema.json",
+      "kind": "schema",
+      "reason": "rendered worker envelope schema",
       "usage": "parse",
       "authority": "framework"
     },
@@ -363,9 +377,6 @@
         },
         {
           "ref": "protocol.sub_agent_execution"
-        },
-        {
-          "ref": "schema.task_context"
         },
         {
           "ref": "protocol.tooling"
