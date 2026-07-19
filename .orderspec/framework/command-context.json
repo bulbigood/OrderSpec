@@ -106,6 +106,20 @@
       "usage": "parse",
       "authority": "operator_config"
     },
+    "config.automation": {
+      "path": ".orderspec/config/automation.json",
+      "kind": "automation_config",
+      "reason": "operator policy for cross-command continuation",
+      "usage": "parse",
+      "authority": "operator_config"
+    },
+    "schema.automation_config": {
+      "path": ".orderspec/framework/schemas/automation-config.schema.json",
+      "kind": "schema",
+      "reason": "automation policy configuration schema",
+      "usage": "parse",
+      "authority": "framework"
+    },
     "state.agents": {
       "path": ".orderspec/state/agents.json",
       "kind": "runtime_state",
@@ -238,11 +252,15 @@
         },
         {
           "ref": "state.bootstrap"
+        },
+        {
+          "ref": "config.automation"
         }
       ],
       "required": [
         {"ref": "schema.bootstrap_state"},
-        {"ref": "schema.active_feature_state"}
+        {"ref": "schema.active_feature_state"},
+        {"ref": "schema.automation_config"}
       ]
     },
     "order.feature": {
@@ -406,6 +424,9 @@
       "read_if_exists": [
         {
           "group": "tooling.optional"
+        },
+        {
+          "ref": "config.automation"
         }
       ],
       "feature_context": {

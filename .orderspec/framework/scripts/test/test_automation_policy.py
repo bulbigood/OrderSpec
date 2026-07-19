@@ -43,6 +43,7 @@ with tempfile.TemporaryDirectory(prefix="orderspec-automation-policy-") as temp:
     root = Path(temp)
     config = root / "automation.json"
     data = json.loads(DEFAULT_CONFIG.read_text(encoding="utf-8"))
+    data["enabled"] = False
     config.write_text(json.dumps(data), encoding="utf-8")
 
     rc, result = run(config)

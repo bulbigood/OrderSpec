@@ -38,6 +38,11 @@ expect(
     "order.code preloads active tasks before plan without hiding lifecycle errors",
 )
 expect(
+    any(item.get("ref") == "config.automation" for item in manifest["commands"]["order.code"]["read_if_exists"])
+    and resources["config.automation"]["authority"] == "operator_config",
+    "order.code receives the optional operator automation policy",
+)
+expect(
     resources["protocol.sub_agent_execution"]["usage"] == "apply"
     and resources["protocol.sub_agent_execution"]["authority"] == "framework",
     "sub-agent protocol has framework apply authority",
@@ -92,6 +97,18 @@ expect(
     and "continuation_required: true" in code_prompt
     and '"ready at T008" is never a final response' in normalized_code_prompt,
     "order.code forbids ending a turn on an internal ready state",
+)
+expect(
+    "Automated cross-command continuation" in code_prompt
+    and "workflow_supervisor.py evaluate" in code_prompt
+    and "On `AUTO_ROUTE`, do not produce a completion report" in code_prompt
+    and "Load the exact target OrderSpec skill completely" in code_prompt,
+    "order.code acts as the Codex runtime adapter for enabled automatic routes",
+)
+expect(
+    "End the agent turn only when the supervisor returns `PAUSE`, `STOP`, or" in code_prompt
+    and "Operator questions and approvals remain hard pauses" in code_prompt,
+    "order.code automation preserves supervisor and operator stop barriers",
 )
 expect(
     "PHASE_COMPLETE" in code_prompt and "HALTED" in code_prompt,

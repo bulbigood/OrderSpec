@@ -46,6 +46,38 @@ End only after a framework payload has `terminal: true`: `STOP`, `HALTED`,
 `LOCAL_ALL` request mean continue through all internal states to one of these
 terminal outcomes.
 
+### Automated cross-command continuation
+
+`terminal: true` ends only the current command, not necessarily the agent turn.
+When `.orderspec/config/automation.json` has `enabled: true`, this coordinator is
+the runtime adapter described by `framework/docs/continuous-execution.md`:
+
+1. Before preflight, validate the policy and start a feature-scoped supervisor
+   run at `order.code` with terminal command `order.code-check`. Retain its exact
+   `run_file` for the whole turn. Do not start a second run while routing.
+2. After any terminal command boundary, submit one schema-valid typed event to
+   `workflow_supervisor.py evaluate`. A `HALTED` result with persisted feedback
+   is a `ROUTE`/`UPSTREAM_DEFECT` event whose target, summary, evidence, and
+   requested input come from that exact feedback item. Do not parse a prose
+   recommendation when typed feedback exists.
+3. On `AUTO_ROUTE`, do not produce a completion report or wait for the user.
+   Load the exact target OrderSpec skill completely, execute its
+   `recommended_command` input, and keep the same supervisor run. Treat each
+   routed command as a fresh command context: rerun `command_context.py resolve`
+   and do not reuse the prior command's loaded artifacts.
+4. Feed every subsequent terminal boundary back to the supervisor. Normal
+   author completion emits the canonical `ADVANCE`; a gate failure emits its
+   evidenced `ROUTE`; `order.code` is resumed when it becomes the supervisor's
+   `current_command`; a passing terminal `order.code-check` emits `COMPLETE`.
+5. End the agent turn only when the supervisor returns `PAUSE`, `STOP`, or
+   `COMPLETE`. Operator questions and approvals remain hard pauses. Policy and
+   loop-limit pauses must never be answered or bypassed by the agent.
+
+When automation is disabled, retain the normal interactive terminal behavior.
+Malformed events, supervisor errors, or a decision inconsistent with the run
+state are framework failures: preserve evidence and stop; never route them to
+an artifact owner.
+
 ## Step 1 — Resolve Context
 
 Run first:

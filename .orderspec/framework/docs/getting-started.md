@@ -62,9 +62,10 @@ adapters, and offers to integrate external agent rules according to the
 constitution.
 
 Continuous execution is optional and disabled by default. Review and enable
-`.orderspec/config/automation.json` when an external runtime adapter will drive
-commands. See [Continuous Execution](continuous-execution.md) for routing rules,
-operator interrupts, and persistent run-state commands.
+`.orderspec/config/automation.json` when an external runtime adapter or the
+synchronized Codex `order-code` coordinator will drive commands. See
+[Continuous Execution](continuous-execution.md) for routing rules, operator
+interrupts, and persistent run-state commands.
 
 ## Create and implement a feature
 

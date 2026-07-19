@@ -14,7 +14,8 @@ description: Initialize and maintain project-level governance, stack, architectu
 - `.orderspec/contracts/stack.md` (`STACK-NNN`);
 - `.orderspec/contracts/architecture.md` (`ARCH-NNN`);
 - `.orderspec/contracts/conventions.md` (`CONV-NNN`);
-- `.orderspec/config/tooling.json` and project-local skills;
+- `.orderspec/config/tooling.json`, `.orderspec/config/automation.json`, and
+  project-local skills;
 - agent synchronization and bootstrap runtime state.
 
 It does not inspect drift between feature specifications, plans, tasks, and
@@ -166,6 +167,8 @@ Classify requested change by owner:
 - technology/runtime/version: stack;
 - structure/dependency rule: architecture;
 - implementation practice/methodology: conventions.
+- continuous-execution policy: Phase 4 automation configuration; do not invent
+  a project-contract amendment for an operator policy change.
 
 Add next free ID, edit in place with same ID, or tombstone removal. Governance
 rules use declarative, testable MUST/SHOULD language. A SHOULD includes its
@@ -225,7 +228,47 @@ Report adapter errors and stale delivered prompts. Never delete stale files
 automatically. Refine re-syncs already enabled agents without reopening the
 selection when detected configuration is unchanged.
 
-## Phase 4: tooling and skills
+## Phase 4: tooling, skills, and automation policy
+
+Ensure the operator-owned automation policy exists and validates:
+
+```bash
+python3 .orderspec/framework/scripts/automation_config.py init
+python3 .orderspec/framework/scripts/automation_config.py validate
+```
+
+`init` creates the framework template only when the file is missing. Its safe
+default is `enabled: false`; it never overwrites an existing policy. Refine must
+validate the current file but must not enable automation or alter policy merely
+because bootstrap ran.
+
+When the user's semantic input explicitly requests an automation change, apply
+it in this phase. A precise request containing the exact desired value or rule
+is authorization for that bounded change. For a broad request, show the exact
+candidate diff and its routing/retry/loop-limit effects, then obtain approval.
+Never weaken hard operator-input or destructive-event pauses.
+
+For an enable/disable-only change, use the SHA returned by `validate`:
+
+```bash
+python3 .orderspec/framework/scripts/automation_config.py set-enabled \
+  --value <true|false> --expected-current-sha256 <sha256>
+```
+
+For context, defaults, rules, or limits, submit one complete candidate object;
+the script validates it before an atomic replacement and rejects concurrent
+drift:
+
+```bash
+python3 .orderspec/framework/scripts/automation_config.py write \
+  --input-file - --expected-current-sha256 <sha256> <<'JSON'
+{ "complete": "automation config candidate" }
+JSON
+```
+
+Run `automation_config.py validate` after every accepted update. Do not edit the
+file directly, partially patch an invalid intermediate state, or replace an
+unrelated operator customization.
 
 First migrate and validate configuration:
 
@@ -374,6 +417,8 @@ external-rule integration, unresolved decisions, and downstream impact.
 - IDs are unique, append-only, and tombstoned on removal;
 - every semantic governance change has operator approval;
 - tooling v3 refs resolve to live project-contract IDs;
+- automation policy exists, validates, and reflects every approved requested
+  change without implicit enablement;
 - installed skills exist project-locally;
 - Init searched every eligible uncovered skill coverage group, or reports the
   exact denied/unavailable/unresolved groups;

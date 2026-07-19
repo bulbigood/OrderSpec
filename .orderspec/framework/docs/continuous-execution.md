@@ -166,3 +166,9 @@ event. Schema validity is the transport contract; the supervisor additionally
 checks state-dependent transition, ownership, pause, and terminal-evidence
 invariants. This keeps Codex, Claude Code, and Kilo invocation details outside
 the workflow policy.
+
+The synchronized Codex `order-code` skill provides this adapter loop for runs
+started with `order.code`: while automation is enabled, its coordinator retains
+the supervisor run, executes allowed owner/gate transitions, and resumes
+`order.code` without ending the agent turn. Other entry commands and runtimes
+still require their own runtime adapter.

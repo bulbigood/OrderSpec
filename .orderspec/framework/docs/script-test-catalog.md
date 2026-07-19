@@ -105,6 +105,7 @@
 |---|---|
 | `scripts/agents_sync.py` | Обнаруживает AI-агентов, синхронизирует prompts/skills/rules и настраивает workers. |
 | `scripts/automation_policy.py` | Валидирует automation config/events и классифицирует AUTO_ROUTE/RETRY/PAUSE/STOP. |
+| `scripts/automation_config.py` | Создаёт безопасный automation.json и атомарно применяет валидированные операторские изменения. |
 | `scripts/common.py` | Общие path, process, JSON и feature-state helpers для скриптов. |
 | `scripts/run_all_tests.py` | Находит и последовательно запускает весь script test suite с timeout и summary. |
 | `scripts/tooling_config.py` | Читает, обновляет и мигрирует `tooling.json` v2 → v3. |
