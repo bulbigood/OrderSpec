@@ -45,9 +45,10 @@ the task path's `[NEW]`/`[MOD]`/`[DEL]` status in `plan.md`. Include a `mod` or
 `del` write target and only the exact source/config/test files required by that
 task. `@verify` uses `target_state: "none"`. New write targets are not readable until created. Paths must be literal
 files, not directories or globs. The resolver validates existence, path safety,
-task coverage, and output order. Optional `contract_refs` carries exact spec IDs
-needed by support paths without claiming traceability ownership on the task
-line.
+task coverage, and output order. Optional `contract_refs` carries exact
+behavioural IDs and Information Model context IDs (`ENT-NNN`, `STR-NNN`,
+`VAL-NNN`) needed by support paths without claiming traceability ownership on
+the task line.
 
 <!--
   IMPORTANT: Tasks below are SAMPLE placeholders. The /order.tasks command MUST
@@ -107,6 +108,7 @@ line.
 - [ ] T006 [US1] | src/controllers/[entity].ext | REQ-003,NFR-003 | controller handlers with catchAsync; 404 only if never existed
 - [ ] T007 [US1] | src/routes/[entity].ext | REQ-003 | routes with auth and validate middleware
 - [ ] T008 [US1] | src/services/[entity].ext | EDGE-001 | handle US1 edge case in service
+- [ ] T009 [US1] | @verify |  | VERIFY: run [exact test command]; assert AC-NNN and INV-NNN; STOP on failure
 
 **Checkpoint**: User Story 1 is functional and independently testable; MVP includes every P1 journey and declared dependency.
 
@@ -125,6 +127,7 @@ line.
 
 - [ ] T011 [US2] | src/services/[entity].ext | REQ-004 | extend service logic for US2
 - [ ] T012 [US2] | src/routes/[entity].ext | REQ-004,EDGE-002 | wire US2 endpoint and handle edge case
+- [ ] T013 [US2] | @verify |  | VERIFY: run [exact test command]; assert AC-NNN; STOP on failure
 
 **Checkpoint**: User Stories 1 and 2 both functional and backwards-compatible.
 
@@ -152,6 +155,7 @@ line.
 - The `[USn]` marker traces a task to its user story.
 - Each task is self-contained: raw path + spec IDs + ≤15-word gloss, so the implementer need not re-open spec.md.
 - Every test task's own gloss states the result selected by plan Evidence Sequencing.
+- Every story phase ends with a real same-story `@verify` task; Checkpoint is explanatory prose.
 - `GATE:` and `VERIFY:` tasks use `@verify`, are read-only, and report `changed_files: []`.
 - Stop at checkpoints to validate stories independently.
 - A direct ref belongs on the task whose path equals its single `primary_files`

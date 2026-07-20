@@ -126,6 +126,7 @@ progress, and succeeds without rewriting. Empty input never stops merely because
 
 1.  **Regenerate** — `tasks.md` is absent, or `input.controls.force` is true. This discards task design only; if any task is `[X]`, STOP and require `/order.code --reset` first.
 2.  **Refine** — active `tasks.md` exists and either `input.semantic_input` requests specific changes, the prior `tasks-report.md` has a `⛔ BLOCK` or `🔀 ROUTING` finding targeting `/order.tasks`, or open workflow feedback targets `order.tasks`. A blocking self-gate or open feedback selects Refine even when `input.semantic_input` is empty.
+    Feedback category `implementation_repair` is a bounded additive repair: preserve every `[X]` task line and its context, insert only the pending correction tasks required by the feedback immediately before the failed pending `@verify`, then resequence pending IDs if necessary. Such correction tasks may have empty field-3 refs because coverage is already owned, but MUST carry the minimal `contract_refs` needed for the failed obligation. Regenerate/reset only when the repair cannot be expressed without changing completed tasks or upstream plan decisions.
 3.  **Inspect** — `tasks.md` exists and neither feedback nor upstream drift
     requires Refine. Report current progress without rewriting task design.
 
@@ -206,7 +207,7 @@ eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
   python3 .orderspec/framework/scripts/setup.py tasks --json --refresh-template > /dev/null
   ```
 - **Refine only**: MUST NOT pass `--refresh-template`, copy the template, rewrite
-  the whole file, renumber tasks, or clear any checkbox. Start the transactional
+  the whole file, hand-renumber tasks, or clear any checkbox. Start the transactional
   guard before editing:
   ```bash
   python3 .orderspec/framework/scripts/setup.py tasks --json > /dev/null
@@ -218,6 +219,16 @@ eval "$(python3 .orderspec/framework/scripts/setup.py paths --shell-vars)"
   completed task lines and their task-context entries are immutable. If the
   correct fix would change completed work, STOP and route to `/order.code --reset`
   followed by a new work order.
+
+  If a required new task has no numeric ID gap at its dependency position, run
+  the deterministic resequencer before editing; never append a larger ID before
+  smaller existing IDs:
+  ```bash
+  python3 .orderspec/framework/scripts/task_refine.py resequence-pending \
+    --tasks "$FEATURE_DIR/tasks.md" \
+    --snapshot "$FEATURE_DIR/.state/tasks-refine-snapshot.json"
+  ```
+  Preserve its mapping and use a reported/free gap for the inserted task.
 
 ### Step 7: Load Inputs
 
@@ -331,7 +342,7 @@ template or from memory.
      ACs exceed the 3-ref cap.
   2. Data layer → service logic → wiring to contracts.
   3. `EDGE-NNN` for this story.
-  4. Emit a **Verification** prose line with the exact permitted test command and asserted AC/INV IDs, then a **Checkpoint** prose line: story independently functional and backwards-compatible. Neither line is a task; `/order.code` executes the declared Verification command at the phase barrier.
+  4. Emit a **Verification** prose line for human context, then append the phase's last executable task as `- [ ] T### [USn] | @verify |  | VERIFY: run <exact command>; assert <AC/INV IDs>; STOP on failure`. Emit the **Checkpoint** prose line after it. The `@verify` task is the machine-enforced phase barrier; Checkpoint remains prose.
   Omit test tasks only if the user or constitution explicitly opts out.
 - **Final Phase — Contract**: include only when the plan declares irreversible
   cleanup. Start with a GATE task (run the test command verbatim; verify all
@@ -430,15 +441,21 @@ file, route the defect to `/order.plan`; do not leave worker context implicit.
 Use it when a task's field-3 refs do not supply every exact contract excerpt the
 worker needs. This is mandatory for behavior-bearing support tasks with empty
 field-3 refs and for cross-boundary tasks whose traceability mechanism is owned
-by another file. Include the smallest relevant canonical Spec ID set. For
-example, a model task that must persist audit `actorId`, identifiers, and
-`before`/`after` snapshots receives the IDs that define those values even when
-the service is the mechanism's `primary_files` owner. Do not use
+by another file. Include the smallest relevant canonical behavioural IDs and
+Information Model context IDs (`ENT-NNN`, `STR-NNN`, `VAL-NNN`). A model task
+MUST reference every entity, nested structure, and value set required to define
+its complete schema. For example, a model task persisting an audit entity,
+snapshot, and action enum receives their `ENT`, `STR`, and `VAL` IDs even when a
+service owns the behavioural mechanism. Do not use
 `contract_refs` to fake coverage; field 3 remains the only coverage source.
 
 `task_context.py` owns parsing, fixed-position validation, file-existence
 checks, and resolver output. `/order.code` consumes its output verbatim. Do not
 hand-author a second whitelist in a prompt, packet, or coordinator note.
+Every task crossing a model/service/controller/serializer/test boundary MUST
+list the exact dependency paths in `read` and the contract IDs defining that
+boundary in `contract_refs`; a task that asserts a named model or service seam
+without those dependencies is incomplete even when its write path is correct.
 
 `task_contract_context.py` owns deterministic resolution of task refs to exact
 ID blocks from `spec.md`, relevant `mechanisms.tsv` rows, and the current phase
@@ -471,7 +488,10 @@ Acceptance Criteria). Mention Contract only for a migration work order.
   `implementation-first` without inventing a red state.
 - **Barrel/index exception**: registering multiple same-phase entities into barrel/index files is ONE task listing all of them — not one per file.
 - **Cross-cutting test tasks**: tests spanning multiple UJs (e.g. shared unauthenticated-access tests) omit the `[USn]` marker. Place them in the phase of their primary UJ or in the Final Phase before GATE. They carry AC refs normally (≤3 per line). A cross-cutting AC (e.g. AC-018 covering both GET and PATCH 404) is covered by placing its ref on ONE test-writing task whose path equals the AC's `primary_files` — no duplication needed; double coverage is not penalized.
-- Task IDs MAY have gaps (e.g. T005, T010, T015) — gaps are legal and reduce churn when inserting tasks. Only duplicate IDs are rejected.
+- In Regenerate, allocate IDs in tens (`T010`, `T020`, `T030`, ...); gaps are
+  mandatory refinement capacity. In Refine, preserve completed IDs and use
+  `task_refine.py resequence-pending` when an insertion point has no free ID.
+  Only duplicate or out-of-order IDs are rejected.
 - Soft limit 3–15 tasks per story phase. If a story exceeds 15, do NOT silently continue — flag the UJ as too large in the Completion Report and recommend splitting it in `spec.md`.
 
 ### Step 10: Prove Coverage
@@ -541,6 +561,11 @@ python3 .orderspec/framework/scripts/task_refine.py validate \
   --tasks "$FEATURE_DIR/tasks.md" \
   --snapshot "$FEATURE_DIR/.state/tasks-refine-snapshot.json"
 ```
+
+An `unsafe_refine` with `restored: true` is a rejected candidate edit, not a
+user-visible workflow boundary. Correct it once from `details`, begin a fresh
+transactional Refine attempt, and rerun validation. Under an active supervisor,
+never end the turn while its status remains `RUNNING`.
 
 In Regenerate, attempt to capture the clean Git-backed work-order baseline used
 by the safe reset mode. Capture succeeds only when Git is available, planned

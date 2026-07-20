@@ -62,7 +62,7 @@ python3 .orderspec/framework/scripts/agents_sync.py state --json
 python3 .orderspec/framework/scripts/automation_policy.py validate
 python3 .orderspec/framework/scripts/automation_policy.py classify \
   --event-file <event.json>
-python3 .orderspec/framework/scripts/workflow_supervisor.py start \
+python3 .orderspec/framework/scripts/workflow_supervisor.py acquire \
   --feature-dir <feature> --command order.code
 python3 .orderspec/framework/scripts/workflow_supervisor.py status \
   --run-file <run-file>
@@ -72,6 +72,8 @@ python3 .orderspec/framework/scripts/workflow_supervisor.py resume \
 
 `work_order.py rollback` previews by default; pass `--apply` only after
 reviewing the bounded rollback.
+The higher-level `/order.code --reset` flag is itself authorization and invokes
+that bounded rollback with `--apply` immediately; it does not ask twice.
 
 ## Regression tests
 

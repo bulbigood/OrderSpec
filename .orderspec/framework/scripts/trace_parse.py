@@ -199,7 +199,10 @@ def _extract_information_model(section_8_text):
 
     while i < len(lines):
         line = lines[i]
-        m = re.match(r"^### (?:Entity|Structure|Value Set):\s*(.+?)\s*$", line)
+        m = re.match(
+            r"^### (?:Entity|Structure|Value Set)(?: (?:ENT|STR|VAL)-\d{3})?:\s*(.+?)\s*$",
+            line,
+        )
 
         if not m:
             i += 1

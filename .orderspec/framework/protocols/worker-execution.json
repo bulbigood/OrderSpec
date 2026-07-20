@@ -66,6 +66,12 @@
           "evidence": {
             "type": "string",
             "minLength": 1
+          },
+          "expected_outcome": {
+            "enum": ["PASS", "FAIL", "NOT_RUN"]
+          },
+          "observed_outcome": {
+            "enum": ["PASS", "FAIL", "NOT_RUN"]
           }
         }
       },

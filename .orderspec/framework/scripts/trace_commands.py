@@ -656,6 +656,19 @@ def cmd_check_plan(feature):
 
     rc = 0
     manifest_paths, manifest_errors = _parse_pathmanifest(plan)
+    applied_paths = set()
+    transition_conflicts = any(
+        (tag == "[NEW]" and ((resolved_root() / path).exists() or (resolved_root() / path).is_symlink()))
+        or (tag == "[DEL]" and not ((resolved_root() / path).exists() or (resolved_root() / path).is_symlink()))
+        for path, tag in manifest_paths.items()
+    )
+    if transition_conflicts:
+        try:
+            from work_order import applied_transition_paths
+            applied_paths = applied_transition_paths(resolved_root(), fdir, plan)
+        except ValueError as exc:
+            print(f"check-plan: ERROR \u2014 {exc}", file=sys.stderr)
+            rc = 1
 
     for err in manifest_errors:
         print(f"check-plan: ERROR \u2014 {err}", file=sys.stderr)
@@ -663,16 +676,17 @@ def cmd_check_plan(feature):
 
     for path, tag in manifest_paths.items():
         full_path = resolved_root() / path
+        present = full_path.exists() or full_path.is_symlink()
 
-        if tag == "[MOD]" and not full_path.exists():
+        if tag == "[MOD]" and not present:
             print(f"check-plan: ERROR \u2014 [MOD] path does not exist: {path}", file=sys.stderr)
             rc = 1
 
-        if tag == "[NEW]" and full_path.exists():
+        if tag == "[NEW]" and present and path not in applied_paths:
             print(f"check-plan: ERROR \u2014 [NEW] path already exists: {path}", file=sys.stderr)
             rc = 1
 
-        if tag == "[DEL]" and not full_path.exists():
+        if tag == "[DEL]" and not present and path not in applied_paths:
             print(f"check-plan: ERROR \u2014 [DEL] path does not exist: {path}", file=sys.stderr)
             rc = 1
 

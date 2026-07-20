@@ -9,7 +9,7 @@ from pathlib import Path
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "automation_policy.py"
-DEFAULT_CONFIG = Path(__file__).resolve().parents[3] / "config" / "automation.json"
+DEFAULT_CONFIG = Path(__file__).resolve().parents[2] / "templates" / "automation-config.json"
 
 
 def run(config: Path, event: dict | None = None, counters: dict | None = None):
@@ -47,7 +47,7 @@ with tempfile.TemporaryDirectory(prefix="orderspec-automation-policy-") as temp:
     config.write_text(json.dumps(data), encoding="utf-8")
 
     rc, result = run(config)
-    assert rc == 0 and result["rule_count"] == 4, result
+    assert rc == 0 and result["rule_count"] == 6, result
 
     rc, result = run(config, route_event())
     assert rc == 0 and result["decision"] == "PAUSE", result
@@ -71,10 +71,62 @@ with tempfile.TemporaryDirectory(prefix="orderspec-automation-policy-") as temp:
     assert rc == 0 and result["decision"] == "AUTO_ROUTE", result
     assert result["basis"] == "auto-gate-artifact-fixes", result
     fingerprint = result["event_fingerprint"]
+    occurrence_key = result["occurrence_key"]
+
+    rc, distinct = run(config, route_event(
+        summary="a different mapping defect",
+        evidence="plan-report.md finding P1-002",
+    ), {f"event:{fingerprint}": 3, occurrence_key: 4})
+    assert rc == 0 and distinct["decision"] == "AUTO_ROUTE", distinct
+    assert distinct["event_fingerprint"] != fingerprint, distinct
+
+    rc, result = run(config, route_event(
+        source="order.code",
+        target="order.bootstrap",
+        reason="UPSTREAM_DEFECT",
+    ))
+    assert rc == 0 and result["decision"] == "AUTO_ROUTE", result
+    assert result["basis"] == "auto-code-project-routing", result
+
+    rc, result = run(config, route_event(
+        source="order.code", target="order.tasks", reason="IMPLEMENTATION_REPAIR",
+    ))
+    assert rc == 0 and result["decision"] == "AUTO_ROUTE", result
+
+    rc, result = run(config, route_event(
+        source="order.tasks",
+        target="order.plan",
+        reason="UPSTREAM_DEFECT",
+        summary="test topology is incomplete",
+        evidence="T120 has no plan-owned failure injection mechanism",
+    ))
+    assert rc == 0 and result["decision"] == "AUTO_ROUTE", result
+    assert result["basis"] == "auto-author-upstream-routing", result
 
     rc, result = run(config, route_event(), {f"event:{fingerprint}": 3})
     assert result["decision"] == "PAUSE", result
     assert "cycle" in result["safety_override"], result
+
+    rc, result = run(config, route_event(), {occurrence_key: 4})
+    assert result["decision"] == "PAUSE", result
+    assert "rule occurrence" in result["safety_override"], result
+
+    advance = {
+        "version": 1,
+        "id": "EVT-ADVANCE",
+        "kind": "ADVANCE",
+        "reason": "STAGE_COMPLETE",
+        "source": "order.tasks",
+        "target": "order.tasks-check",
+    }
+    rc, first_advance = run(config, advance)
+    assert rc == 0 and first_advance["decision"] == "AUTO_ROUTE", first_advance
+    rc, repeated_advance = run(
+        config,
+        advance,
+        {f"event:{first_advance['event_fingerprint']}": 99},
+    )
+    assert rc == 0 and repeated_advance["decision"] == "AUTO_ROUTE", repeated_advance
 
     rc, result = run(config, route_event(destructive=True))
     assert result["decision"] == "PAUSE", result
@@ -91,6 +143,10 @@ with tempfile.TemporaryDirectory(prefix="orderspec-automation-policy-") as temp:
             "kind": "MUTATION_APPROVAL",
             "question": "Start the local database?",
             "options": ["approve", "deny"],
+            "choices": [
+                {"value": "approve", "label": "Start database", "consequence": "Start the configured local database."},
+                {"value": "deny", "label": "Do not start database", "consequence": "Leave the environment unchanged."},
+            ],
             "exact_action": "docker compose up -d database"
         }
     }

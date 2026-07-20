@@ -50,7 +50,9 @@ Rules:
   worker discretion.
 - `contract_context` MUST be copied verbatim from
   `task_contract_context.py`. It is the authoritative mapping from task refs to
-  exact `spec.md` excerpts, mechanism rows, and current phase Goal/Verification.
+  exact behavioural ID blocks, Information Model blocks addressed by
+  `ENT-NNN`/`STR-NNN`/`VAL-NNN`, mechanism rows, and current phase
+  Goal/Verification. Model context IDs never claim mechanism coverage.
 - Coordinator/local executor MUST NOT open or search full `spec.md` to augment
   resolved excerpts unless `task_context.to_read` explicitly lists it.
 - `inline_context` is renderer-owned and contains only minimum relevant facts;

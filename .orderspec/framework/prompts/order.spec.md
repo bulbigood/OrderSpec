@@ -189,6 +189,13 @@ neither may bypass validation. Report the remaining module requests.
 The canonical spec template controls section structure and frontmatter. These
 rules control meaning.
 
+Every Information Model block uses its kind-specific stable context ID:
+`### Entity ENT-NNN: Name`, `### Structure STR-NNN: Name`, or
+`### Value Set VAL-NNN: Name`. These IDs are append-only, are valid only as
+task-context `contract_refs`, and are not behavioural traceability coverage.
+Preserve an ID while its logical subject retains identity; never renumber or
+reuse a removed Information Model ID during Refine.
+
 ### Stable IDs and references
 
 Definitions use exactly one strict anchor:

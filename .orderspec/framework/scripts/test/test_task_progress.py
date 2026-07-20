@@ -186,7 +186,57 @@ with tempfile.TemporaryDirectory(prefix="orderspec-task-reconcile-") as temp:
         rc != 0 and data.get("terminal") is True and "- [ ] T001" in tasks.read_text(encoding="utf-8"),
         "reconcile rejects missing observed-state evidence",
     )
+    current_attempt = tasks.parent / ".state" / "code-attempts" / "current.json"
+    current_attempt.parent.mkdir(parents=True)
+    current_attempt.write_text("{}\n", encoding="utf-8")
+    rc, data = run("reconcile", "--tasks", str(tasks), input_text=json.dumps(reconciliation))
+    expect(
+        rc != 0
+        and data["error"] == "reconciliation_during_attempt"
+        and data["recovery"]["action"] == "RECOVER_CURRENT_ATTEMPT"
+        and "attempt-recover" in data["recovery"]["command"],
+        "reconcile rejects an open attempt with an exact recovery command",
+    )
+    current_attempt.unlink()
     rc, data = run("reconcile", "--tasks", str(tasks), input_text=json.dumps(reconciliation))
     expect(rc == 0 and data["transition"] == "reconciled", "reconcile marks pre-existing verified work")
+
+with tempfile.TemporaryDirectory(prefix="orderspec-story-gate-") as temp:
+    tasks = Path(temp) / "tasks.md"
+    tasks.write_text(
+        "# Tasks\n\n## Story 1\n\n"
+        "- [ ] T001 [US1] | src/story.py | AC-001 | implement story\n",
+        encoding="utf-8",
+    )
+    rc, data = run("validate", "--tasks", str(tasks))
+    expect(
+        rc != 0 and "must end with a [US1] @verify task" in data["message"],
+        "story phase without executable verification is rejected",
+    )
+    tasks.write_text(
+        tasks.read_text(encoding="utf-8")
+        + "- [ ] T002 [US1] | @verify |  | VERIFY: run focused tests; assert AC-001; STOP on failure\n",
+        encoding="utf-8",
+    )
+    rc, data = run("validate", "--tasks", str(tasks))
+    expect(rc == 0 and data["unchecked"] == 2, "story phase executable verification is accepted")
+
+with tempfile.TemporaryDirectory(prefix="orderspec-red-evidence-") as temp:
+    tasks = Path(temp) / "tasks.md"
+    tasks.write_text(
+        "# Tasks\n\n## Tests\n\n"
+        "- [ ] T001 | tests/story.py | AC-001 | expected red: test missing behavior\n",
+        encoding="utf-8",
+    )
+    result = {
+        "task_id": "T001", "status": "SUCCESS", "changed_files": ["tests/story.py"],
+        "verification": {"status": "PASS", "evidence": "AC-001 failed as declared"},
+        "deviation": None,
+    }
+    rc, data = run("mark", "--tasks", str(tasks), input_text=json.dumps(result))
+    expect(rc != 0 and "expected_outcome FAIL" in data["message"], "red evidence cannot be generic PASS")
+    result["verification"].update({"expected_outcome": "FAIL", "observed_outcome": "FAIL"})
+    rc, _ = run("mark", "--tasks", str(tasks), input_text=json.dumps(result))
+    expect(rc == 0, "red evidence records expected and observed failure")
 
 print("All task-progress tests passed")

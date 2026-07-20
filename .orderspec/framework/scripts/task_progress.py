@@ -23,6 +23,7 @@ from typing import Any
 
 TASK_LINE_RE = re.compile(r"^- \[(?P<status>[ xX])\] (?P<task>T\d{3})(?P<rest>.*)$")
 TASK_ID_RE = re.compile(r"^T\d{3}$")
+STORY_RE = re.compile(r"(?:^|\s)\[(US\d+)\](?:\s|$)")
 SUCCESS_STATUSES = {"PASS", "NOT_RUN"}
 VERIFICATION_WORDS_RE = re.compile(
     r"\b(?:gate|test|tests|verify|verification|checkpoint|run)\b", re.IGNORECASE
@@ -96,6 +97,12 @@ def parse_tasks(path: Path) -> tuple[list[dict[str, Any]], list[str]]:
         previous_number = max(previous_number, number)
 
         gloss = parts[-1].strip()
+        lowered_gloss = gloss.lower()
+        evidence_mode = (
+            "red"
+            if "expect failure" in lowered_gloss or "expected red" in lowered_gloss
+            else "baseline" if "baseline" in lowered_gloss else "pass"
+        )
         records.append(
             {
                 "task_id": task_id,
@@ -104,10 +111,16 @@ def parse_tasks(path: Path) -> tuple[list[dict[str, Any]], list[str]]:
                 "line_number": line_number,
                 "line": line,
                 "phase": phase,
+                "story": (
+                    story_match.group(1)
+                    if (story_match := STORY_RE.search(match.group("rest")))
+                    else None
+                ),
                 "is_parallel": bool(re.search(r"(?:^|\s)\[P\](?:\s|$)", match.group("rest"))),
                 "requires_verification": bool(VERIFICATION_WORDS_RE.search(gloss)),
                 "is_gate": gloss.startswith("GATE:"),
                 "is_verification_only": gloss.startswith(("GATE:", "VERIFY:")),
+                "evidence_mode": evidence_mode,
             }
         )
 
@@ -117,8 +130,37 @@ def parse_tasks(path: Path) -> tuple[list[dict[str, Any]], list[str]]:
     return records, errors
 
 
+def validate_phase_gates(records: list[dict[str, Any]]) -> list[str]:
+    """Require every story phase to end in an executable read-only VERIFY task."""
+    errors: list[str] = []
+    phases: dict[str | None, list[dict[str, Any]]] = {}
+    for record in records:
+        phases.setdefault(record["phase"], []).append(record)
+    for phase, phase_records in phases.items():
+        stories = {record["story"] for record in phase_records if record["story"]}
+        if not stories:
+            continue
+        label = phase or "(no phase heading)"
+        if len(stories) != 1:
+            errors.append(f"phase {label!r} mixes story markers: {', '.join(sorted(stories))}")
+            continue
+        story = next(iter(stories))
+        last = phase_records[-1]
+        if not (
+            last["story"] == story
+            and last["path"] == "@verify"
+            and last["is_verification_only"]
+            and last["line"].split(" | ")[-1].strip().startswith("VERIFY:")
+        ):
+            errors.append(
+                f"story phase {label!r} must end with a [{story}] @verify task whose gloss starts VERIFY:"
+            )
+    return errors
+
+
 def cmd_validate(args: argparse.Namespace) -> int:
     records, errors = parse_tasks(Path(args.tasks))
+    errors.extend(validate_phase_gates(records))
     if errors:
         return fail("; ".join(errors), code="invalid_tasks_file")
 
@@ -217,6 +259,11 @@ def validate_success_result(result: dict[str, Any], record: dict[str, Any]) -> s
     evidence = verification.get("evidence")
     if not isinstance(evidence, str) or not evidence.strip():
         return "worker result verification evidence is empty"
+    if record.get("evidence_mode") == "red":
+        if verification.get("expected_outcome") != "FAIL":
+            return "red-first task requires verification.expected_outcome FAIL"
+        if verification.get("observed_outcome") != "FAIL":
+            return "red-first task requires verification.observed_outcome FAIL"
 
     deviation = result.get("deviation")
     if deviation not in (None, ""):
@@ -349,11 +396,35 @@ def cmd_mark(args: argparse.Namespace) -> int:
 
 
 def cmd_reconcile(args: argparse.Namespace) -> int:
+    tasks_path = Path(args.tasks)
+    resolved_tasks_path = tasks_path.resolve()
+    current_attempt = resolved_tasks_path.parent / ".state" / "code-attempts" / "current.json"
+    if current_attempt.exists():
+        emit(
+            {
+                "ok": False,
+                "error": "reconciliation_during_attempt",
+                "message": "reconciliation is allowed only before attempt-begin",
+                "terminal": True,
+                "required_action": "recover and close the current attempt; do not modify tasks.md",
+                "recovery": {
+                    "action": "RECOVER_CURRENT_ATTEMPT",
+                    "command": [
+                        sys.executable,
+                        str(Path(__file__).resolve().parent / "code_workflow.py"),
+                        "attempt-recover",
+                        "--feature-dir",
+                        str(resolved_tasks_path.parent),
+                    ],
+                },
+            }
+        )
+        return 2
     result, result_error = load_result(args)
     if result_error:
         return fail(result_error, code="invalid_reconciliation_result")
     assert result is not None
-    return update_one(Path(args.tasks), result, reconcile=True)
+    return update_one(tasks_path, result, reconcile=True)
 
 
 def main() -> int:

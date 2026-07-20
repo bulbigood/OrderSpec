@@ -1,5 +1,5 @@
 {
-  "framework_version": "0.6.0",
+  "framework_version": "0.8.0",
   "schema_versions": {
     "frontmatter": 3,
     "artifacts": 2,

@@ -62,16 +62,16 @@
 | `scripts/bootstrap_contracts.py` | Обнаруживает стек и структуру проекта, создаёт, мигрирует, проверяет и аудитит project contracts. |
 | `scripts/bootstrap_workflow.py` | Детерминированно выбирает фазу unified `/order.bootstrap`. |
 | `scripts/code_obligations.py` | Строит и обновляет ledger обязательств для `/order.code-check`. |
-| `scripts/code_workflow.py` | Управляет preflight, worker packets, попытками и завершением `/order.code`. |
+| `scripts/code_workflow.py` | Управляет preflight, resumable attempt v2 packets, попытками и защищённым завершением `/order.code`. |
 | `scripts/default_mode.py` | Выбирает безопасный режим команды без аргументов по текущему состоянию pipeline. |
 | `scripts/feature_spec.py` | Выделяет канонический каталог новой feature без записи содержимого spec. |
 | `scripts/task_context.py` | Разбирает task-context и выдаёт разрешённый worker file context. |
-| `scripts/task_contract_context.py` | Собирает для задачи минимальные выдержки project/spec contracts. |
+| `scripts/task_contract_context.py` | Собирает минимальные выдержки behavioural и `ENT`/`STR`/`VAL` Information Model contracts. |
 | `scripts/task_progress.py` | Сверяет результаты worker и атомарно переводит task checkboxes в завершённое состояние. |
 | `scripts/task_refine.py` | Защищает завершённые задачи при transactional refinement `tasks.md`. |
 | `scripts/work_order.py` | Фиксирует baseline work order и безопасно откатывает только разрешённые пути. |
 | `scripts/workflow_feedback.py` | Хранит typed handoff о дефектах между стадиями и отмечает их потребление. |
-| `scripts/workflow_supervisor.py` | Хранит состояние continuous run, классифицирует события и поддерживает pause/resume. |
+| `scripts/workflow_supervisor.py` | Хранит continuous run, классифицирует события, поддерживает pause/resume и проверяет code-attempt boundary. |
 
 ### Command context, setup и gates
 
@@ -137,6 +137,7 @@
 | `scripts/test/test_default_mode.py` | Выбор режима команд без аргументов. |
 | `scripts/test/test_feature_spec.py` | Выделение feature ID и каталога. |
 | `scripts/test/test_feedback_recovery_flow.py` | Сквозное восстановление code → spec refine → tasks refine → resume. |
+| `scripts/test/test_information_model_context_ids.py` | Стабильные, уникальные и kind-correct `ENT`/`STR`/`VAL` anchors. |
 | `scripts/test/test_task_context.py` | Парсинг task context, path policy и worker whitelist. |
 | `scripts/test/test_task_contract_context.py` | Выбор минимального contract context для задачи. |
 | `scripts/test/test_task_progress.py` | Reconciliation, completion и validation worker result. |

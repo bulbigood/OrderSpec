@@ -3,7 +3,8 @@
 
 Git is used only as an immutable object database. The script never invokes a
 Git write command. Rollback is restricted to the frozen plan pathmanifest and
-clears task checkboxes only after every path was restored successfully.
+clears task checkboxes and code-attempt state only after every path was
+restored successfully.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from task_progress import atomic_replace, parse_tasks
 from trace_parse import _parse_pathmanifest
 
 BASELINE_NAME = "work-order-baseline.json"
+ATTEMPT_STATE_DIR = Path(".state/code-attempts")
 
 
 def emit(payload: dict[str, Any]) -> None:
@@ -161,9 +163,90 @@ def load_baseline(feature: Path, plan: Path) -> dict[str, Any]:
         raise ValueError(f"work-order baseline unavailable: {exc}") from exc
     if payload.get("version") != 1 or not isinstance(payload.get("entries"), list):
         raise ValueError("invalid work-order baseline")
-    if payload.get("plan_sha256") != sha256(plan):
-        raise ValueError("plan.md changed after baseline capture; automatic rollback is unsafe")
+    expected: dict[str, str] = {}
+    state_to_tag = {"new": "[NEW]", "mod": "[MOD]", "del": "[DEL]"}
+    for entry in payload["entries"]:
+        if not isinstance(entry, dict):
+            raise ValueError("invalid work-order baseline entry")
+        rel = entry.get("path")
+        tag = state_to_tag.get(entry.get("state"))
+        if not isinstance(rel, str) or not safe_path(rel) or tag is None or rel in expected:
+            raise ValueError(f"invalid work-order baseline entry: {entry}")
+        expected[rel] = tag
+    current, errors = _parse_pathmanifest(plan)
+    if errors:
+        raise ValueError("current plan pathmanifest is invalid: " + "; ".join(errors))
+    if current != expected:
+        raise ValueError(
+            "plan pathmanifest changed after baseline capture; automatic rollback is unsafe"
+        )
     return payload
+
+
+def applied_transition_paths(root: Path, feature: Path, plan: Path) -> set[str]:
+    """Return pathmanifest transitions proven applied by the frozen work order."""
+    tasks = feature / "tasks.md"
+    if not tasks.is_file():
+        return set()
+    records, errors = parse_tasks(tasks)
+    if errors:
+        raise ValueError("invalid active tasks baseline: " + "; ".join(errors))
+    completed = [record for record in records if record["status"] in {"x", "X"}]
+    if not completed:
+        return set()
+
+    payload = load_baseline(feature, plan)
+    owners: dict[str, list[dict[str, Any]]] = {}
+    for record in records:
+        owners.setdefault(record["path"], []).append(record)
+
+    applied: set[str] = set()
+    for entry in payload["entries"]:
+        rel = entry["path"]
+        path_owners = owners.get(rel, [])
+        absolute = root / rel
+        present = absolute.exists() or absolute.is_symlink()
+        if entry["state"] == "new" and present and any(
+            record["status"] in {"x", "X"} for record in path_owners
+        ):
+            applied.add(rel)
+        elif entry["state"] == "del" and not present and path_owners and all(
+            record["status"] in {"x", "X"} for record in path_owners
+        ):
+            applied.add(rel)
+    return applied
+
+
+def attempt_state_paths(root: Path, feature: Path) -> list[Path]:
+    attempt_dir = feature / ATTEMPT_STATE_DIR
+    if attempt_dir.is_symlink():
+        raise ValueError(f"attempt-state directory must not be a symlink: {attempt_dir}")
+    if not attempt_dir.exists():
+        return []
+    if not attempt_dir.is_dir():
+        raise ValueError(f"attempt-state path is not a directory: {attempt_dir}")
+    paths: list[Path] = []
+    for path in attempt_dir.rglob("*"):
+        ensure_contained(root, path)
+        if path.is_file() or path.is_symlink():
+            paths.append(path)
+        elif not path.is_dir():
+            raise ValueError(f"unsupported attempt-state path: {path}")
+    return sorted(paths, key=lambda item: item.as_posix())
+
+
+def remove_attempt_state(feature: Path, paths: list[Path]) -> None:
+    attempt_dir = feature / ATTEMPT_STATE_DIR
+    for path in paths:
+        path.unlink()
+    if attempt_dir.is_dir():
+        for directory in sorted(
+            (path for path in attempt_dir.rglob("*") if path.is_dir()),
+            key=lambda item: len(item.parts),
+            reverse=True,
+        ):
+            directory.rmdir()
+        attempt_dir.rmdir()
 
 
 def current_kind(path: Path) -> str:
@@ -249,12 +332,30 @@ def cmd_rollback(args: argparse.Namespace) -> int:
         root, feature, plan, tasks = resolve_inputs(args.feature_dir)
         payload = load_baseline(feature, plan)
         actions = actions_for(root, payload)
+        attempt_paths = attempt_state_paths(root, feature)
+        attempt_relative = [path.relative_to(root).as_posix() for path in attempt_paths]
         if not args.apply:
-            emit({"ok": True, "mode": "preview", "baseline": str(baseline_path(feature)), "actions": actions})
+            emit({
+                "ok": True,
+                "mode": "preview",
+                "baseline": str(baseline_path(feature)),
+                "actions": actions,
+                "delete_attempt_state": attempt_relative,
+                "apply_command": [
+                    sys.executable,
+                    str(Path(__file__).resolve()),
+                    "rollback",
+                    "--feature-dir",
+                    str(feature),
+                    "--apply",
+                ],
+            })
             return 0
 
         current: dict[str, dict[str, Any]] = {}
         desired: dict[str, dict[str, Any]] = {}
+        current_attempts = {path: snapshot_current(path) for path in attempt_paths}
+        original_tasks = tasks.read_text(encoding="utf-8")
         entries = {entry["path"]: entry for entry in payload["entries"]}
         for action in actions:
             rel = action["path"]
@@ -271,13 +372,26 @@ def cmd_rollback(args: argparse.Namespace) -> int:
                 rel = action["path"]
                 changed.append(rel)
                 write_state(root / rel, desired[rel])
+            reset = clear_checkboxes(tasks)
+            remove_attempt_state(feature, attempt_paths)
         except Exception:
             for rel in reversed(changed):
                 write_state(root / rel, current[rel])
+            atomic_replace(tasks, original_tasks)
+            for path, state in current_attempts.items():
+                write_state(path, state)
             raise
-        reset = clear_checkboxes(tasks)
         effective = [item["path"] for item in actions if item["action"] != "noop"]
-        emit({"ok": True, "mode": "applied", "restored_paths": effective, "checkboxes_reset": reset})
+        emit({
+            "ok": True,
+            "action": "RESET_APPLIED",
+            "terminal": True,
+            "continuation_required": False,
+            "mode": "applied",
+            "restored_paths": effective,
+            "checkboxes_reset": reset,
+            "deleted_attempt_state": attempt_relative,
+        })
         return 0
     except (OSError, RuntimeError, ValueError, UnicodeError) as exc:
         emit({"ok": False, "error": str(exc)})

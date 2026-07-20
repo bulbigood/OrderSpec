@@ -90,6 +90,14 @@ def put_mechanisms(*rows):
     return run_trace("put-mechanisms", F, input_text=text)
 
 
+def write_work_order_baseline(*entries):
+    SDIR.mkdir(parents=True, exist_ok=True)
+    (SDIR / "work-order-baseline.json").write_text(
+        json.dumps({"version": 1, "entries": list(entries)}),
+        encoding="utf-8",
+    )
+
+
 VALID_SPEC_FRONTMATTER = """---
 orderspec:
   artifact: spec
@@ -228,6 +236,84 @@ if rc == 1 and "routes.py" in err:
 else:
     no("check-plan mixed", f"rc={rc} err={err}")
 
+# C9: a completed task proves an applied [NEW] transition from the frozen baseline
+reset_feature()
+path = WORK / "src" / "generated.py"
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text("generated\n")
+(SPECS / "plan.md").write_text("""```pathmanifest
+src/generated.py  [NEW]
+```
+""")
+(SPECS / "tasks.md").write_text(
+    "- [X] T001 | src/generated.py | REQ-001 | generate file\n",
+    encoding="utf-8",
+)
+write_work_order_baseline({"path": "src/generated.py", "state": "new"})
+rc, out, err = run_trace("check-plan", F)
+if rc == 0:
+    ok("check-plan: frozen completed [NEW] transition → OK")
+else:
+    no("check-plan applied new", f"rc={rc} err={err}")
+
+# C10: a baseline alone never excuses an unchecked [NEW] transition
+(SPECS / "tasks.md").write_text(
+    "- [ ] T001 | src/generated.py | REQ-001 | generate file\n",
+    encoding="utf-8",
+)
+rc, out, err = run_trace("check-plan", F)
+if rc == 1 and "[NEW] path already exists" in err:
+    ok("check-plan: unchecked [NEW] transition remains strict")
+else:
+    no("check-plan unchecked new", f"rc={rc} err={err}")
+
+# C11: [DEL] is applied only after every owner of the path is complete
+reset_feature()
+(SPECS / "plan.md").write_text("""```pathmanifest
+src/obsolete.py  [DEL]
+```
+""")
+(SPECS / "tasks.md").write_text(
+    "- [X] T001 | src/obsolete.py | REQ-001 | prepare deletion\n"
+    "- [ ] T002 | src/obsolete.py | REQ-001 | delete file\n",
+    encoding="utf-8",
+)
+write_work_order_baseline({"path": "src/obsolete.py", "state": "del"})
+rc, out, err = run_trace("check-plan", F)
+if rc == 1 and "[DEL] path does not exist" in err:
+    ok("check-plan: incomplete [DEL] transition remains strict")
+else:
+    no("check-plan incomplete del", f"rc={rc} err={err}")
+(SPECS / "tasks.md").write_text(
+    (SPECS / "tasks.md").read_text(encoding="utf-8").replace("- [ ] T002", "- [X] T002"),
+    encoding="utf-8",
+)
+rc, out, err = run_trace("check-plan", F)
+if rc == 0:
+    ok("check-plan: frozen completed [DEL] transition → OK")
+else:
+    no("check-plan applied del", f"rc={rc} err={err}")
+
+# C12: completed markers cannot bypass a baseline/pathmanifest mismatch
+reset_feature()
+path = WORK / "src" / "generated.py"
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text("generated\n")
+(SPECS / "plan.md").write_text("""```pathmanifest
+src/generated.py  [NEW]
+```
+""")
+(SPECS / "tasks.md").write_text(
+    "- [X] T001 | src/generated.py | REQ-001 | generate file\n",
+    encoding="utf-8",
+)
+write_work_order_baseline({"path": "src/other.py", "state": "new"})
+rc, out, err = run_trace("check-plan", F)
+if rc == 1 and "plan pathmanifest changed after baseline capture" in err:
+    ok("check-plan: mismatched frozen baseline remains strict")
+else:
+    no("check-plan mismatched baseline", f"rc={rc} err={err}")
+
 # ── validate tests ───────────────────────────────────────────────────────────
 
 # V1: clean spec → exit 0
@@ -306,7 +392,7 @@ if rc == 1 and "M16" in out:
 else:
     no("validate M16", f"rc={rc} out={out} err={err}")
 
-# V4b: tasks stage accepts an applied [NEW] transition from the frozen baseline
+# V4b: plan and tasks stages accept a baseline-proven applied [NEW] transition
 reset_feature()
 write_spec("""- **REQ-001** user can log in
 - **UJ-001** Login journey
@@ -325,6 +411,10 @@ put_mechanisms(
 (SPECS / "tasks.md").write_text("""- [X] T001 [US1] | src/models/user.py | REQ-001 | user model
 - [X] T002 [US1] | tests/unit/user.test.py |  | unit evidence path
 """)
+write_work_order_baseline(
+    {"path": "src/models/user.py", "state": "new"},
+    {"path": "tests/unit/user.test.py", "state": "new"},
+)
 rc, out, err = run_trace("validate", "--stage", "tasks", F)
 if rc == 0 and "M10" not in out:
     ok("validate: tasks stage accepts applied [NEW] baseline transition")
@@ -332,8 +422,8 @@ else:
     no("validate tasks applied transition", f"rc={rc} out={out} err={err}")
 
 rc, out, err = run_trace("validate", "--stage", "plan", F)
-if rc == 1 and "M10" in out:
-    ok("validate: plan stage still rejects existing [NEW] baseline path")
+if rc == 0 and "M10" not in out:
+    ok("validate: plan stage accepts applied [NEW] baseline transition")
 else:
     no("validate plan baseline M10", f"rc={rc} out={out} err={err}")
 
@@ -604,7 +694,7 @@ write_spec("""- **REQ-001** user can log in
 - **UJ-001** Login journey
   Covers: REQ-001
 ## 8. Information Model
-### Entity: Task
+### Entity ENT-001: Task
 | Field | Type |
 |-------|------|
 | title | string |

@@ -47,12 +47,28 @@ with tempfile.TemporaryDirectory(prefix="orderspec-task-refine-") as temp:
     rc, data = run("validate", "--tasks", str(tasks), "--snapshot", str(snapshot))
     assert rc == 0 and data["ok"] is True
 
+    tasks.write_text(tasks_text(), encoding="utf-8")
+    rc, _ = run("begin", "--tasks", str(tasks), "--snapshot", str(snapshot))
+    assert rc == 0
+    rc, data = run(
+        "resequence-pending", "--tasks", str(tasks), "--snapshot", str(snapshot)
+    )
+    assert rc == 0 and data["action"] == "PENDING_TASKS_RESEQUENCED", data
+    assert data["mapping"] == {"T002": "T020"} and data["free_id_before_first_pending"] == "T010"
+    resequenced = tasks.read_text(encoding="utf-8")
+    assert "- [X] T001" in resequenced and "- [ ] T020" in resequenced
+    assert '"T020"' in resequenced and '"T002"' not in resequenced
+    rc, data = run("validate", "--tasks", str(tasks), "--snapshot", str(snapshot))
+    assert rc == 0 and data["ok"] is True, data
+
     rc, _ = run("begin", "--tasks", str(tasks), "--snapshot", str(snapshot))
     assert rc == 0
     original = tasks.read_text(encoding="utf-8")
     tasks.write_text(tasks_text(completed_gloss="illegally changed"), encoding="utf-8")
     rc, data = run("validate", "--tasks", str(tasks), "--snapshot", str(snapshot))
-    assert rc == 1 and data["restored"] is True
+    assert rc == 1 and data["action"] == "REFINE_RESTORED_RETRY", data
+    assert data["terminal"] is False and data["continuation_required"] is True
+    assert data["restored"] is True
     assert tasks.read_text(encoding="utf-8") == original
 
 print("All task-refine tests passed")

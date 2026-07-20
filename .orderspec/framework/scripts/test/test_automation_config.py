@@ -62,6 +62,6 @@ with tempfile.TemporaryDirectory(prefix="orderspec-automation-config-") as temp:
     assert config_path.read_text(encoding="utf-8") == before
 
     rc, result = run(root, "validate")
-    assert rc == 0 and result["enabled"] is True and result["rule_count"] == 4, result
+    assert rc == 0 and result["enabled"] is True and result["rule_count"] == 6, result
 
 print("All automation-config tests passed")

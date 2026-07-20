@@ -15,18 +15,23 @@ import os
 import secrets
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 WORKER_PROTOCOL_PATH = SCRIPT_DIR.parent / "protocols" / "worker-execution.json"
 ATTEMPT_STATE_DIR = ".state/code-attempts"
+ATTEMPT_CURRENT_NAME = "current.json"
+ATTEMPT_HISTORY_DIR = "history"
+ATTEMPT_VERSION = 3
 sys.path.insert(0, str(SCRIPT_DIR))
 
 from common import get_feature_paths, get_repo_root  # noqa: E402
 from task_context import READ_ONLY_TASK_TARGET, load_and_validate  # noqa: E402
 from task_contract_context import resolve as resolve_contract, validate as validate_contracts  # noqa: E402
-from task_progress import parse_tasks  # noqa: E402
+from task_progress import parse_tasks, validate_phase_gates  # noqa: E402
+from workflow_feedback import load_open_for_command  # noqa: E402
 
 
 FULL_MODES = {"LOCAL_ALL", "DELEGATED"}
@@ -106,7 +111,13 @@ def validate_worker_envelope(envelope: Any) -> list[str]:
     if not isinstance(context, dict) or set(context) != {"to_read", "write_paths", "target_state"}:
         errors.append("worker envelope task_context fields are invalid")
     verification = task.get("verification")
-    if not isinstance(verification, dict) or set(verification) != {"required", "source", "expected"}:
+    verification_fields = {"required", "source", "expected"}
+    if (
+        not isinstance(verification, dict)
+        or frozenset(verification) not in {
+            frozenset(verification_fields), frozenset(verification_fields | {"mode"})
+        }
+    ):
         errors.append("worker envelope verification fields are invalid")
     elif verification.get("source") != "task_line":
         errors.append("worker envelope verification source must be task_line")
@@ -115,7 +126,9 @@ def validate_worker_envelope(envelope: Any) -> list[str]:
     return errors
 
 
-def validate_worker_result(result: dict[str, Any], verification_required: bool) -> list[str]:
+def validate_worker_result(
+    result: dict[str, Any], verification_required: bool, verification_mode: str
+) -> list[str]:
     errors: list[str] = []
     expected = {"task_id", "status", "changed_files", "verification", "deviation"}
     if set(result) != expected:
@@ -130,7 +143,12 @@ def validate_worker_result(result: dict[str, Any], verification_required: bool) 
     ):
         errors.append("worker result changed_files must be unique non-empty strings")
     verification = result.get("verification")
-    if not isinstance(verification, dict) or set(verification) != {"status", "evidence"}:
+    allowed_verification = {"status", "evidence", "expected_outcome", "observed_outcome"}
+    if (
+        not isinstance(verification, dict)
+        or not {"status", "evidence"}.issubset(verification)
+        or set(verification) - allowed_verification
+    ):
         errors.append("worker result verification fields are invalid")
     else:
         if verification.get("status") not in {"PASS", "FAIL", "NOT_RUN"}:
@@ -139,6 +157,11 @@ def validate_worker_result(result: dict[str, Any], verification_required: bool) 
             errors.append("worker verification evidence is empty")
         if result.get("status") == "SUCCESS" and verification_required and verification.get("status") != "PASS":
             errors.append("successful task requires PASS verification")
+        if result.get("status") == "SUCCESS" and verification_mode == "red":
+            if verification.get("expected_outcome") != "FAIL":
+                errors.append("red-first task requires expected_outcome FAIL")
+            if verification.get("observed_outcome") != "FAIL":
+                errors.append("red-first task requires observed_outcome FAIL")
     deviation = result.get("deviation")
     if deviation is not None and not isinstance(deviation, str):
         errors.append("worker result deviation must be null or a string")
@@ -174,6 +197,12 @@ def snapshot_repository(repo_root: Path) -> tuple[dict[str, dict[str, Any]], str
             for name in sorted(files):
                 path = current_path / name
                 rel = path.relative_to(repo_root).as_posix()
+                parts = path.relative_to(repo_root).parts
+                if name.startswith(".") and any(
+                    parts[index:index + 2] == (".state", "code-attempts")
+                    for index in range(len(parts) - 1)
+                ):
+                    continue
                 if path.is_symlink():
                     snapshot[rel] = {"kind": "symlink", "digest": os.readlink(path)}
                     continue
@@ -220,7 +249,225 @@ def continuing(payload: dict[str, Any], next_action: str) -> dict[str, Any]:
         "terminal": False,
         "continuation_required": True,
         "next_action": next_action,
+        "final_response": {
+            "permitted": False,
+            "reason": "NON_TERMINAL_WORKFLOW_STATE",
+        },
     }
+
+
+def attempt_state_digest(state: dict[str, Any]) -> str:
+    unsigned = {key: value for key, value in state.items() if key != "state_digest"}
+    return hashlib.sha256(
+        json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def fsync_directory(path: Path) -> None:
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def write_attempt_state(path: Path, state: dict[str, Any]) -> str | None:
+    state["state_digest"] = attempt_state_digest(state)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent), text=True)
+        temporary = Path(temp_name)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(state, handle, indent=2, ensure_ascii=False)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        fsync_directory(path.parent)
+    except OSError as exc:
+        return str(exc)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    return None
+
+
+def write_json_atomic(path: Path, payload: dict[str, Any]) -> str | None:
+    """Write a framework-owned JSON payload without attempt-state signing."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent), text=True)
+        temporary = Path(temp_name)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, ensure_ascii=False)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+        fsync_directory(path.parent)
+    except OSError as exc:
+        return str(exc)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    return None
+
+
+def create_attempt_state(path: Path, state: dict[str, Any]) -> str | None:
+    """Create the singleton current slot without a check-then-create race."""
+    state["state_digest"] = attempt_state_digest(state)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=str(path.parent), text=True)
+        temporary = Path(temp_name)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(state, handle, indent=2, ensure_ascii=False)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.link(temporary, path)
+        fsync_directory(path.parent)
+    except FileExistsError:
+        return "attempt slot already exists"
+    except OSError as exc:
+        return str(exc)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+    return None
+
+
+def load_attempt_state(path: Path) -> tuple[dict[str, Any] | None, str | None]:
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        return None, f"cannot read attempt state {path.name}: {exc}"
+    if not isinstance(state, dict) or state.get("version") != ATTEMPT_VERSION:
+        return None, f"unsupported attempt state version in {path.name}"
+    attempt_id = state.get("attempt_id")
+    if not isinstance(attempt_id, str) or not attempt_id or any(
+        char not in "0123456789abcdef" for char in attempt_id
+    ):
+        return None, f"invalid attempt state identity in {path.name}"
+    if state.get("state_digest") != attempt_state_digest(state):
+        return None, f"attempt state integrity check failed: {path.name}"
+    required = {
+        "version", "attempt_id", "mode", "feature_dir", "task_ids", "write_paths",
+        "verification_required", "worker_envelopes", "baseline", "results_file", "state_digest",
+    }
+    optional = {
+        "finish_status", "terminal_error", "reconciliation_commands", "reconciliation_files",
+    }
+    if not required.issubset(state) or set(state) - required - optional:
+        return None, f"attempt state fields are invalid in {path.name}"
+    task_ids = state.get("task_ids")
+    envelopes = state.get("worker_envelopes")
+    if (
+        state.get("mode") not in FULL_MODES | {"LOCAL_PHASE"}
+        or not isinstance(state.get("feature_dir"), str)
+        or not isinstance(task_ids, list)
+        or not task_ids
+        or len(task_ids) != len(set(task_ids))
+        or not isinstance(state.get("write_paths"), dict)
+        or set(state["write_paths"]) != set(task_ids)
+        or not isinstance(state.get("verification_required"), dict)
+        or set(state["verification_required"]) != set(task_ids)
+        or not isinstance(envelopes, list)
+        or len(envelopes) != len(task_ids)
+        or not isinstance(state.get("baseline"), dict)
+        or not isinstance(state.get("results_file"), str)
+    ):
+        return None, f"attempt state structure is invalid in {path.name}"
+    envelope_ids = []
+    for envelope in envelopes:
+        errors = validate_worker_envelope(envelope)
+        if errors:
+            return None, f"stored worker envelope is invalid in {path.name}: {'; '.join(errors)}"
+        envelope_ids.append(envelope["task"]["task_id"])
+    if envelope_ids != task_ids:
+        return None, f"stored worker envelope order is invalid in {path.name}"
+    expected_results = (
+        Path(state["feature_dir"])
+        / ATTEMPT_STATE_DIR
+        / f"{state['attempt_id']}-results.json"
+    ).as_posix()
+    if state["results_file"] != expected_results:
+        return None, f"attempt results path is invalid in {path.name}"
+    finish_status = state.get("finish_status")
+    if finish_status not in {
+        None, "accepted", "invalid_results", "rejected", "worker_failed", "reconcile_candidate",
+    }:
+        return None, f"attempt finish status is invalid in {path.name}"
+    reconciliation_commands = state.get("reconciliation_commands")
+    reconciliation_files = state.get("reconciliation_files")
+    if finish_status == "reconcile_candidate":
+        if (
+            not isinstance(reconciliation_commands, list)
+            or not reconciliation_commands
+            or any(
+                not isinstance(command, list)
+                or not command
+                or any(not isinstance(part, str) or not part for part in command)
+                for command in reconciliation_commands
+            )
+            or not isinstance(reconciliation_files, list)
+            or not reconciliation_files
+            or any(not isinstance(item, str) or not item for item in reconciliation_files)
+        ):
+            return None, f"attempt reconciliation state is invalid in {path.name}"
+    elif reconciliation_commands is not None or reconciliation_files is not None:
+        return None, f"unexpected attempt reconciliation state in {path.name}"
+    state["_state_path"] = path
+    return state, None
+
+
+def archive_attempt_state(feature_dir: Path, state: dict[str, Any]) -> str | None:
+    """Atomically remove a closed attempt from the singleton execution boundary."""
+    state_path = feature_dir / ATTEMPT_STATE_DIR / ATTEMPT_CURRENT_NAME
+    history_dir = state_path.parent / ATTEMPT_HISTORY_DIR
+    history_path = history_dir / f"{state['attempt_id']}.json"
+    try:
+        history_dir.mkdir(parents=True, exist_ok=True)
+        if history_path.exists():
+            return f"attempt history already exists: {history_path}"
+        os.replace(state_path, history_path)
+        fsync_directory(history_dir)
+        fsync_directory(state_path.parent)
+    except OSError as exc:
+        return str(exc)
+    return None
+
+
+def attempt_inventory(feature_dir: Path) -> tuple[list[dict[str, Any]], list[str]]:
+    """Return the sole integrity-checked current attempt, if one exists."""
+    current = feature_dir / ATTEMPT_STATE_DIR / ATTEMPT_CURRENT_NAME
+    if not current.exists():
+        return [], []
+    state, error = load_attempt_state(current)
+    return ([] if state is None else [state]), ([] if error is None else [error])
+
+
+def blocking_attempts(feature_dir: Path) -> tuple[list[dict[str, Any]], list[str]]:
+    states, errors = attempt_inventory(feature_dir)
+    return states, errors
+
+
+def invalid_attempt_inventory_stop(feature_dir: Path, errors: list[str]) -> tuple[int, dict[str, Any]]:
+    rc, payload = stop("invalid_attempt_inventory", "; ".join(errors))
+    payload["recovery"] = {
+        "action": "RESET_PREVIEW",
+        "command": [
+            sys.executable,
+            str(SCRIPT_DIR / "code_workflow.py"),
+            "attempt-reset",
+            "--feature-dir",
+            str(feature_dir),
+        ],
+    }
+    return rc, payload
 
 
 def preflight(mode: str, force: bool) -> tuple[int, dict[str, Any]]:
@@ -244,9 +491,9 @@ def preflight(mode: str, force: bool) -> tuple[int, dict[str, Any]]:
     if mode == "RESET":
         return 0, {
             "ok": True,
-            "action": "RESET_PREVIEW",
-            "terminal": True,
-            "continuation_required": False,
+            "action": "RESET_APPLY",
+            "terminal": False,
+            "continuation_required": True,
             "mode": mode,
             "feature_dir": str(feature_dir),
             "command": [
@@ -255,8 +502,44 @@ def preflight(mode: str, force: bool) -> tuple[int, dict[str, Any]]:
                 "rollback",
                 "--feature-dir",
                 str(feature_dir),
+                "--apply",
             ],
+            "next_action": "execute command immediately; --reset is explicit authorization",
+            "final_response": {
+                "permitted": False,
+                "reason": "NON_TERMINAL_WORKFLOW_STATE",
+            },
         }
+
+    open_feedback: list[dict[str, Any]] = []
+    feedback_errors: list[str] = []
+    for target in ("order.bootstrap", "order.spec", "order.plan", "order.tasks"):
+        items, errors = load_open_for_command(repo_root, feature_dir, target)
+        open_feedback.extend(item for item in items if item.get("source") == "order.code")
+        feedback_errors.extend(errors)
+    if feedback_errors:
+        return stop("invalid_feedback_state", "; ".join(feedback_errors))
+    if open_feedback:
+        feedback = sorted(
+            open_feedback,
+            key=lambda item: (str(item.get("created_at", "")), str(item.get("id", ""))),
+        )[0]
+        return 0, continuing(
+            {
+                "ok": True,
+                "action": "ROUTE_EXISTING_FEEDBACK",
+                "mode": mode,
+                "feature_dir": str(feature_dir),
+                "feedback": feedback,
+                "route_feedback": {
+                    "feedback_file": feedback["report"],
+                    "target": feedback["target"],
+                    "requested_change": feedback["requested_change"],
+                    "recommended_command": feedback["recommended_command"],
+                },
+            },
+            "call workflow_supervisor.py route-feedback with route_feedback.feedback_file immediately",
+        )
 
     gate_command = [
         sys.executable,
@@ -290,6 +573,7 @@ def preflight(mode: str, force: bool) -> tuple[int, dict[str, Any]]:
         }
 
     records, task_errors = parse_tasks(tasks)
+    task_errors.extend(validate_phase_gates(records))
     if task_errors:
         return stop("invalid_tasks", "; ".join(task_errors), route="/order.tasks")
 
@@ -301,13 +585,19 @@ def preflight(mode: str, force: bool) -> tuple[int, dict[str, Any]]:
 
     contract_rc, contract_validation = validate_contracts(feature_dir, repo_root)
     if contract_rc != 0:
+        failures = contract_validation.get("failures", [])
+        route = (
+            "/order.spec"
+            if any(item.get("error") == "invalid_contract_anchors" for item in failures)
+            else "/order.tasks or /order.spec"
+        )
         return contract_rc, {
             "ok": False,
             "action": "STOP",
             "terminal": True,
             "continuation_required": False,
             "error": "invalid_task_contract_context",
-            "route": "/order.tasks or /order.spec",
+            "route": route,
             "validation": contract_validation,
         }
 
@@ -368,7 +658,12 @@ def packet_for(
         "verification": {
             "required": record["requires_verification"],
             "source": "task_line",
-            "expected": "PASS with short observable evidence when required; otherwise PASS or NOT_RUN",
+            "mode": record["evidence_mode"],
+            "expected": (
+                "PASS while recording expected_outcome FAIL and observed_outcome FAIL; evidence must name the exact failing assertions"
+                if record["evidence_mode"] == "red"
+                else "PASS with short observable evidence when required; otherwise PASS or NOT_RUN"
+            ),
         },
         "read_only": record["is_verification_only"],
         "stop_conditions": [
@@ -467,6 +762,47 @@ def attempt_begin(
 ) -> tuple[int, dict[str, Any]]:
     if not task_ids or len(task_ids) != len(set(task_ids)):
         return stop("invalid_attempt_tasks", "attempt requires unique task IDs")
+    repo_root = get_repo_root().resolve()
+    try:
+        feature_dir = safe_feature_dir(feature_dir_value, repo_root)
+    except ValueError as exc:
+        return stop("invalid_feature_dir", str(exc))
+
+    blocking, inventory_errors = blocking_attempts(feature_dir)
+    if inventory_errors:
+        return invalid_attempt_inventory_stop(feature_dir, inventory_errors)
+    current = blocking[0] if blocking else None
+    if current and current.get("finish_status") == "accepted":
+        return stop(
+            "attempt_pending_mark",
+            "accepted attempt must be verified, marked, and cleaned before another attempt: "
+            + current["attempt_id"],
+        )
+    if current and current.get("finish_status") is not None:
+        archive_error = archive_attempt_state(feature_dir, current)
+        if archive_error:
+            return stop("attempt_archive_failed", archive_error)
+        return attempt_begin(mode, feature_dir_value, task_ids, selected_phase)
+    if current:
+        state = current
+        if state.get("mode") != mode or state.get("task_ids") != task_ids:
+            return stop(
+                "active_attempt_mismatch",
+                f"active attempt {state['attempt_id']} owns {state.get('task_ids')} in {state.get('mode')}",
+            )
+        envelopes = state.get("worker_envelopes")
+        if not isinstance(envelopes, list) or not envelopes:
+            return stop("invalid_attempt_state", "current attempt has no resumable envelopes")
+        return 0, continuing({
+            "ok": True,
+            "action": "RESUME_ATTEMPT",
+            "attempt_id": state["attempt_id"],
+            "task_ids": state["task_ids"],
+            "worker_envelopes": envelopes,
+            "state_file": state["_state_path"].relative_to(repo_root).as_posix(),
+            "results_file": state["results_file"],
+        }, "execute the original envelope and finish the existing attempt")
+
     next_rc, next_payload = next_packets(mode, feature_dir_value, selected_phase)
     if next_rc != 0 or next_payload.get("action") not in {"EXECUTE_TASK", "EXECUTE_TASK_GROUP"}:
         return next_rc or 2, next_payload
@@ -478,11 +814,6 @@ def attempt_begin(
             f"attempt tasks {task_ids} do not match next execution unit {expected_ids}",
         )
 
-    repo_root = get_repo_root().resolve()
-    try:
-        feature_dir = safe_feature_dir(feature_dir_value, repo_root)
-    except ValueError as exc:
-        return stop("invalid_feature_dir", str(exc))
     attempt_dir = feature_dir / ATTEMPT_STATE_DIR
     attempt_dir.mkdir(parents=True, exist_ok=True)
     baseline, snapshot_error = snapshot_repository(repo_root)
@@ -491,7 +822,7 @@ def attempt_begin(
 
     attempt_id = secrets.token_hex(16)
     state: dict[str, Any] = {
-        "version": 1,
+        "version": ATTEMPT_VERSION,
         "attempt_id": attempt_id,
         "mode": mode,
         "feature_dir": feature_dir.relative_to(repo_root).as_posix(),
@@ -504,14 +835,16 @@ def attempt_begin(
             envelope["task"]["task_id"]: envelope["task"]["verification"]["required"]
             for envelope in envelopes
         },
+        "worker_envelopes": envelopes,
         "baseline": baseline,
         "results_file": (attempt_dir / f"{attempt_id}-results.json").relative_to(repo_root).as_posix(),
     }
-    state["state_digest"] = hashlib.sha256(
-        json.dumps(state, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
-    state_path = attempt_dir / f"{attempt_id}.json"
-    state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    state_path = attempt_dir / ATTEMPT_CURRENT_NAME
+    state_error = create_attempt_state(state_path, state)
+    if state_error:
+        if state_error == "attempt slot already exists":
+            return attempt_begin(mode, feature_dir_value, task_ids, selected_phase)
+        return stop("attempt_state_write_failed", state_error)
     return 0, continuing({
         "ok": True,
         "action": "DISPATCH",
@@ -535,9 +868,12 @@ def attempt_finish(
         return stop("invalid_feature_dir", str(exc))
     if not attempt_id or any(char not in "0123456789abcdef" for char in attempt_id):
         return stop("invalid_attempt_id", "attempt ID must be lowercase hexadecimal")
-    state_path = feature_dir / ATTEMPT_STATE_DIR / f"{attempt_id}.json"
+    state_path = feature_dir / ATTEMPT_STATE_DIR / ATTEMPT_CURRENT_NAME
     try:
-        state = json.loads(state_path.read_text(encoding="utf-8"))
+        state, state_error = load_attempt_state(state_path)
+        if state_error or state is None:
+            raise ValueError(state_error or "attempt state is unavailable")
+        state.pop("_state_path", None)
         results_path = Path(results_file_value).resolve()
         results_path.relative_to(repo_root)
         if results_path.relative_to(repo_root).as_posix() != state.get("results_file"):
@@ -545,14 +881,9 @@ def attempt_finish(
         results = json.loads(results_path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
         return stop("invalid_attempt_input", str(exc))
-    if state.get("attempt_id") != attempt_id or state.get("version") != 1:
-        return stop("invalid_attempt_state", "attempt state identity or version mismatch")
-    state_digest = state.pop("state_digest", None)
-    expected_digest = hashlib.sha256(
-        json.dumps(state, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
-    if state_digest != expected_digest:
-        return stop("invalid_attempt_state", "attempt state integrity check failed")
+    if state.get("attempt_id") != attempt_id:
+        return stop("invalid_attempt_state", "attempt ID does not own the current slot")
+    state.pop("state_digest", None)
     if isinstance(results, dict):
         results = [results]
     if not isinstance(results, list) or not all(isinstance(item, dict) for item in results):
@@ -565,13 +896,27 @@ def attempt_finish(
         )
     result_errors = []
     for result in results:
+        envelope = next(
+            item for item in state["worker_envelopes"]
+            if item["task"]["task_id"] == result["task_id"]
+        )
         errors = validate_worker_result(
             result,
             bool(state.get("verification_required", {}).get(result["task_id"])),
+            str(envelope["task"]["verification"].get("mode", "pass")),
         )
         if errors:
             result_errors.append({"task_id": result["task_id"], "errors": errors})
     if result_errors:
+        state["version"] = ATTEMPT_VERSION
+        state["finish_status"] = "invalid_results"
+        state["terminal_error"] = {"error": "invalid_worker_results", "results": result_errors}
+        state_error = write_attempt_state(state_path, state)
+        if state_error:
+            return stop("attempt_state_update_failed", state_error)
+        archive_error = archive_attempt_state(feature_dir, state)
+        if archive_error:
+            return stop("attempt_archive_failed", archive_error)
         return 2, {
             "ok": False,
             "action": "STOP",
@@ -625,16 +970,195 @@ def attempt_finish(
                 "observed": expected,
                 "error": "successful write task did not change every declared write path",
             })
+
+    preserved_retry_sources: dict[str, str] = {}
+    history_dir = feature_dir / ATTEMPT_STATE_DIR / ATTEMPT_HISTORY_DIR
+    if history_dir.is_dir():
+        for history_path in sorted(history_dir.glob("*.json")):
+            history_relative = history_path.relative_to(repo_root).as_posix()
+            if history_relative not in baseline:
+                continue
+            prior, prior_error = load_attempt_state(history_path)
+            if prior_error or prior is None or prior.get("finish_status") != "worker_failed":
+                continue
+            prior_terminal = prior.get("terminal_error")
+            if not isinstance(prior_terminal, dict):
+                continue
+            prior_observed = prior_terminal.get("observed_by_task", {})
+            if not isinstance(prior_observed, dict):
+                continue
+            prior_write_paths = prior.get("write_paths", {})
+            for task_id in state["task_ids"]:
+                declared_paths = sorted(state["write_paths"][task_id])
+                if (
+                    task_id not in preserved_retry_sources
+                    and sorted(prior_write_paths.get(task_id, [])) == declared_paths
+                    and sorted(prior_observed.get(task_id, [])) == declared_paths
+                ):
+                    preserved_retry_sources[task_id] = prior["attempt_id"]
+
+    completed_predecessor_sources: dict[str, list[str]] = {}
+    task_records, task_errors = parse_tasks(feature_dir / "tasks.md")
+    if not task_errors:
+        record_indexes = {
+            record["task_id"]: index for index, record in enumerate(task_records)
+        }
+        for task_id in state["task_ids"]:
+            target_index = record_indexes.get(task_id)
+            if target_index is None:
+                continue
+            predecessors = []
+            for declared_path in sorted(state["write_paths"][task_id]):
+                matching = [
+                    record
+                    for record in task_records[:target_index]
+                    if record["status"] in {"x", "X"}
+                    and not record["is_verification_only"]
+                    and record["path"] == declared_path
+                ]
+                if not matching:
+                    predecessors = []
+                    break
+                predecessor_id = matching[-1]["task_id"]
+                if predecessor_id not in predecessors:
+                    predecessors.append(predecessor_id)
+            if predecessors:
+                completed_predecessor_sources[task_id] = predecessors
+
+    evidenced_preexisting_tasks = set(preserved_retry_sources) | set(
+        completed_predecessor_sources
+    )
+    preexisting_reconciliation = (
+        not unexpected
+        and len(mismatches) == len(results)
+        and evidenced_preexisting_tasks == set(state["task_ids"])
+        and all(
+            result.get("status") == "SUCCESS"
+            and result.get("changed_files") == []
+            and result.get("verification", {}).get("status") == "PASS"
+            and observed_by_task[result["task_id"]] == []
+            and bool(state["write_paths"][result["task_id"]])
+            and all(path in baseline for path in state["write_paths"][result["task_id"]])
+            and mismatch.get("task_id") == result["task_id"]
+            and mismatch.get("reported") == []
+            and mismatch.get("observed") == []
+            and mismatch.get("error")
+            == "successful write task did not change every declared write path"
+            for result, mismatch in zip(results, mismatches)
+        )
+    )
+    if preexisting_reconciliation:
+        reconciliation_files = []
+        reconciliation_commands = []
+        for result in results:
+            task_id = result["task_id"]
+            declared_paths = sorted(state["write_paths"][task_id])
+            if task_id in preserved_retry_sources:
+                source_observation = (
+                    "prior failed attempt "
+                    + preserved_retry_sources[task_id]
+                    + " preserved these paths"
+                )
+            else:
+                source_observation = (
+                    "completed predecessor tasks "
+                    + ", ".join(completed_predecessor_sources[task_id])
+                    + " owned these paths"
+                )
+            reconciliation_path = (
+                feature_dir
+                / ATTEMPT_STATE_DIR
+                / f"{attempt_id}-reconcile-{task_id}.json"
+            )
+            reconciliation_payload = {
+                "task_id": task_id,
+                "status": "ALREADY_COMPLETE",
+                "changed_files": [],
+                "verification": result["verification"],
+                "observed_state": (
+                    source_observation
+                    + "; they existed at attempt start and remained byte-identical: "
+                    + ", ".join(declared_paths)
+                ),
+                "deviation": None,
+            }
+            payload_error = write_json_atomic(reconciliation_path, reconciliation_payload)
+            if payload_error:
+                return stop("reconciliation_payload_write_failed", payload_error)
+            relative_path = reconciliation_path.relative_to(repo_root).as_posix()
+            reconciliation_files.append(relative_path)
+            reconciliation_commands.append([
+                sys.executable,
+                str(SCRIPT_DIR / "task_progress.py"),
+                "reconcile",
+                "--tasks",
+                str(feature_dir / "tasks.md"),
+                "--result-file",
+                str(reconciliation_path),
+            ])
+
+        state["version"] = ATTEMPT_VERSION
+        state["finish_status"] = "reconcile_candidate"
+        state["reconciliation_files"] = reconciliation_files
+        state["reconciliation_commands"] = reconciliation_commands
+        state_error = write_attempt_state(state_path, state)
+        if state_error:
+            return stop("attempt_state_update_failed", state_error)
+        archive_error = archive_attempt_state(feature_dir, state)
+        if archive_error:
+            return stop("attempt_archive_failed", archive_error)
+        return 0, continuing({
+            "ok": True,
+            "action": "RECONCILE_PREEXISTING",
+            "attempt_id": attempt_id,
+            "task_ids": state["task_ids"],
+            "observed_by_task": observed_by_task,
+            "retry_sources": preserved_retry_sources,
+            "completed_predecessor_sources": completed_predecessor_sources,
+            "reconciliation_files": reconciliation_files,
+            "reconciliation_commands": reconciliation_commands,
+        }, "execute every reconciliation command in order, then call code_workflow.py next immediately")
+
     if unexpected or mismatches:
+        terminal_error = {
+            "error": "attempt_changes_rejected",
+            "unexpected_changed_paths": unexpected,
+            "result_mismatches": mismatches,
+            "observed_by_task": observed_by_task,
+        }
+        state["version"] = ATTEMPT_VERSION
+        state["finish_status"] = "rejected"
+        state["terminal_error"] = terminal_error
+        state_error = write_attempt_state(state_path, state)
+        if state_error:
+            return stop("attempt_state_update_failed", state_error)
+        archive_error = archive_attempt_state(feature_dir, state)
+        if archive_error:
+            return stop("attempt_archive_failed", archive_error)
+        diagnostic_state = (
+            feature_dir / ATTEMPT_STATE_DIR / ATTEMPT_HISTORY_DIR / f"{attempt_id}.json"
+        ).relative_to(repo_root).as_posix()
         return 2, {
             "ok": False,
             "action": "STOP",
             "terminal": True,
             "continuation_required": False,
-            "error": "attempt_changes_rejected",
-            "unexpected_changed_paths": unexpected,
-            "result_mismatches": mismatches,
-            "observed_by_task": observed_by_task,
+            **terminal_error,
+            "diagnostics": {
+                "attempt_state": diagnostic_state,
+                "worker_results": state["results_file"],
+            },
+            "operator_action": {
+                "action": "RESTORE_REJECTED_CHANGES_OR_RESET",
+                "restore_paths": sorted(set(unexpected)),
+                "resume_command": "/order.code --resume",
+                "reset_command": "/order.code --reset",
+                "instructions": (
+                    "Preserve diagnostics. Restore every unexpected path to its attempt-start state, "
+                    "then run /order.code --resume. If exact restoration is unsafe or unknown, run "
+                    "/order.code --reset; the explicit flag authorizes only its bounded rollback."
+                ),
+            },
         }
     failed = [
         {"task_id": item["task_id"], "status": item.get("status")}
@@ -642,6 +1166,19 @@ def attempt_finish(
         if item.get("status") != "SUCCESS"
     ]
     if failed:
+        state["version"] = ATTEMPT_VERSION
+        state["finish_status"] = "worker_failed"
+        state["terminal_error"] = {
+            "error": "worker_failed",
+            "workers": failed,
+            "observed_by_task": observed_by_task,
+        }
+        state_error = write_attempt_state(state_path, state)
+        if state_error:
+            return stop("attempt_state_update_failed", state_error)
+        archive_error = archive_attempt_state(feature_dir, state)
+        if archive_error:
+            return stop("attempt_archive_failed", archive_error)
         return 2, {
             "ok": False,
             "action": "STOP",
@@ -651,14 +1188,11 @@ def attempt_finish(
             "workers": failed,
             "observed_by_task": observed_by_task,
         }
+    state["version"] = ATTEMPT_VERSION
     state["finish_status"] = "accepted"
-    state["state_digest"] = hashlib.sha256(
-        json.dumps(state, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
-    try:
-        state_path.write_text(json.dumps(state, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    except OSError as exc:
-        return stop("attempt_state_update_failed", str(exc))
+    state_error = write_attempt_state(state_path, state)
+    if state_error:
+        return stop("attempt_state_update_failed", state_error)
     return 0, continuing({
         "ok": True,
         "action": "READY_TO_VERIFY_AND_MARK",
@@ -679,19 +1213,13 @@ def attempt_cleanup(feature_dir_value: str, attempt_id: str) -> tuple[int, dict[
     if not attempt_id or any(char not in "0123456789abcdef" for char in attempt_id):
         return stop("invalid_attempt_id", "attempt ID must be lowercase hexadecimal")
 
-    state_path = feature_dir / ATTEMPT_STATE_DIR / f"{attempt_id}.json"
-    try:
-        state = json.loads(state_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        return stop("invalid_attempt_state", str(exc))
-    if state.get("attempt_id") != attempt_id or state.get("version") != 1:
-        return stop("invalid_attempt_state", "attempt state identity or version mismatch")
-    state_digest = state.pop("state_digest", None)
-    expected_digest = hashlib.sha256(
-        json.dumps(state, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
-    if state_digest != expected_digest:
-        return stop("invalid_attempt_state", "attempt state integrity check failed")
+    state_path = feature_dir / ATTEMPT_STATE_DIR / ATTEMPT_CURRENT_NAME
+    state, state_error = load_attempt_state(state_path)
+    if state_error or state is None:
+        return stop("invalid_attempt_state", state_error or "attempt state is unavailable")
+    state.pop("_state_path", None)
+    if state.get("attempt_id") != attempt_id:
+        return stop("invalid_attempt_state", "attempt ID does not own the current slot")
     if state.get("finish_status") != "accepted":
         return stop(
             "attempt_not_accepted",
@@ -740,6 +1268,106 @@ def attempt_cleanup(feature_dir_value: str, attempt_id: str) -> tuple[int, dict[
     }, "call code_workflow.py next immediately")
 
 
+def attempt_recover(feature_dir_value: str) -> tuple[int, dict[str, Any]]:
+    """Return or execute the sole legal recovery for the singleton attempt slot."""
+    repo_root = get_repo_root().resolve()
+    try:
+        feature_dir = safe_feature_dir(feature_dir_value, repo_root)
+    except ValueError as exc:
+        return stop("invalid_feature_dir", str(exc))
+    states, errors = attempt_inventory(feature_dir)
+    if errors:
+        return invalid_attempt_inventory_stop(feature_dir, errors)
+    if not states:
+        return 0, continuing(
+            {"ok": True, "action": "NO_OPEN_ATTEMPT"},
+            "retry the interrupted code_workflow command immediately",
+        )
+    state = states[0]
+    status = state.get("finish_status")
+    if status is None:
+        envelopes = state.get("worker_envelopes")
+        if not isinstance(envelopes, list) or not envelopes:
+            return stop("invalid_attempt_state", "current attempt has no resumable envelopes")
+        return 0, continuing({
+            "ok": True,
+            "action": "RESUME_ATTEMPT",
+            "attempt_id": state["attempt_id"],
+            "task_ids": state["task_ids"],
+            "worker_envelopes": envelopes,
+            "state_file": state["_state_path"].relative_to(repo_root).as_posix(),
+            "results_file": state["results_file"],
+        }, "execute the original envelope and call attempt-finish")
+    if status == "accepted":
+        return 0, continuing({
+            "ok": True,
+            "action": "MARK_AND_CLEAN",
+            "attempt_id": state["attempt_id"],
+            "task_ids": state["task_ids"],
+            "results_file": state["results_file"],
+        }, "verify and mark every result, then call attempt-cleanup")
+    archive_error = archive_attempt_state(feature_dir, state)
+    if archive_error:
+        return stop("attempt_archive_failed", archive_error)
+    return 0, continuing({
+        "ok": True,
+        "action": "ATTEMPT_ARCHIVED",
+        "attempt_id": state["attempt_id"],
+        "finish_status": status,
+    }, "retry the interrupted code_workflow command immediately")
+
+
+def attempt_reset(feature_dir_value: str, apply: bool) -> tuple[int, dict[str, Any]]:
+    """Preview or remove only feature-local attempt runtime state."""
+    repo_root = get_repo_root().resolve()
+    try:
+        feature_dir = safe_feature_dir(feature_dir_value, repo_root)
+    except ValueError as exc:
+        return stop("invalid_feature_dir", str(exc))
+    attempt_dir = feature_dir / ATTEMPT_STATE_DIR
+    paths = sorted(
+        (path for path in attempt_dir.rglob("*") if path.is_file() or path.is_symlink()),
+        key=lambda path: path.as_posix(),
+    ) if attempt_dir.is_dir() else []
+    relative = [path.relative_to(repo_root).as_posix() for path in paths]
+    if not apply:
+        return 0, {
+            "ok": True,
+            "action": "RESET_PREVIEW",
+            "terminal": True,
+            "continuation_required": False,
+            "delete": relative,
+            "apply_command": [
+                sys.executable,
+                str(SCRIPT_DIR / "code_workflow.py"),
+                "attempt-reset",
+                "--feature-dir",
+                str(feature_dir),
+                "--apply",
+            ],
+        }
+    try:
+        for path in paths:
+            path.unlink()
+        if attempt_dir.is_dir():
+            for directory in sorted(
+                (path for path in attempt_dir.rglob("*") if path.is_dir()),
+                key=lambda path: len(path.parts),
+                reverse=True,
+            ):
+                directory.rmdir()
+            attempt_dir.rmdir()
+    except OSError as exc:
+        return stop("attempt_reset_failed", str(exc))
+    return 0, {
+        "ok": True,
+        "action": "ATTEMPT_STATE_RESET",
+        "terminal": True,
+        "continuation_required": False,
+        "deleted": relative,
+    }
+
+
 def finish(mode: str, feature_dir_value: str, outcome: str) -> tuple[int, dict[str, Any]]:
     if mode not in FULL_MODES | {"LOCAL_PHASE"}:
         return stop("invalid_mode", f"finish does not support mode: {mode}")
@@ -753,6 +1381,32 @@ def finish(mode: str, feature_dir_value: str, outcome: str) -> tuple[int, dict[s
         feature_dir = safe_feature_dir(feature_dir_value, repo_root)
     except ValueError as exc:
         return stop("invalid_feature_dir", str(exc))
+    blocking, inventory_errors = blocking_attempts(feature_dir)
+    if inventory_errors:
+        return invalid_attempt_inventory_stop(feature_dir, inventory_errors)
+    if blocking:
+        state = blocking[0]
+        rc, payload = stop(
+            "open_attempt_boundary",
+            "cannot finish order.code while an attempt is active or awaiting mark/cleanup",
+        )
+        payload["attempt"] = {
+            "attempt_id": state["attempt_id"],
+            "task_ids": state.get("task_ids", []),
+            "finish_status": state.get("finish_status") or "active",
+        }
+        payload["boundary_recovery"] = {
+            "action": "RECOVER_CURRENT_ATTEMPT",
+            "command": [
+                sys.executable,
+                str(SCRIPT_DIR / "code_workflow.py"),
+                "attempt-recover",
+                "--feature-dir",
+                str(feature_dir),
+            ],
+        }
+        payload["next_action"] = "execute boundary_recovery.command, obey its action, then retry finish"
+        return rc, payload
     tasks = feature_dir / "tasks.md"
     records, errors = parse_tasks(tasks)
     if errors:
@@ -871,6 +1525,13 @@ def main() -> int:
     attempt_cleanup_parser.add_argument("--feature-dir", required=True)
     attempt_cleanup_parser.add_argument("--attempt-id", required=True)
 
+    attempt_recover_parser = subparsers.add_parser("attempt-recover")
+    attempt_recover_parser.add_argument("--feature-dir", required=True)
+
+    attempt_reset_parser = subparsers.add_parser("attempt-reset")
+    attempt_reset_parser.add_argument("--feature-dir", required=True)
+    attempt_reset_parser.add_argument("--apply", action="store_true")
+
     finish_parser = subparsers.add_parser("finish")
     finish_parser.add_argument("--mode", required=True, choices=sorted(FULL_MODES | {"LOCAL_PHASE"}))
     finish_parser.add_argument("--feature-dir", required=True)
@@ -887,6 +1548,10 @@ def main() -> int:
         rc, payload = attempt_finish(args.feature_dir, args.attempt_id, args.results_file)
     elif args.command == "attempt-cleanup":
         rc, payload = attempt_cleanup(args.feature_dir, args.attempt_id)
+    elif args.command == "attempt-recover":
+        rc, payload = attempt_recover(args.feature_dir)
+    elif args.command == "attempt-reset":
+        rc, payload = attempt_reset(args.feature_dir, args.apply)
     else:
         rc, payload = finish(args.mode, args.feature_dir, args.outcome)
     emit(payload)

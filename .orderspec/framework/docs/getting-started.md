@@ -136,7 +136,9 @@ framework-owned files to record project-specific decisions; those belong in
 
 During implementation, completed tasks and the plan baseline are protected.
 When a safe Git-backed work-order baseline exists, `/order.code --reset`
-previews and restores only planned paths, then clears task progress after the
-rollback succeeds. If execution finds an upstream contract, plan, or task
+explicitly authorizes restoration of only planned paths, then clears task progress and
+feature-local code-attempt state after the rollback succeeds. Non-physical
+plan edits do not invalidate reset when the parsed pathmanifest is unchanged.
+If execution finds an upstream contract, plan, or task
 defect, it persists feedback for the owning command instead of silently
 rewriting the artifact. See [Architecture](architecture.md#work-order-state-and-feedback).

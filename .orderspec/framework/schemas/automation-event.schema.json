@@ -32,6 +32,19 @@
               "type": "array",
               "items": {"type": "string", "minLength": 1}
             },
+            "choices": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["value", "label", "consequence"],
+                "properties": {
+                  "value": {"type": "string", "minLength": 1},
+                  "label": {"type": "string", "minLength": 1},
+                  "consequence": {"type": "string", "minLength": 1}
+                }
+              }
+            },
             "exact_action": {"type": ["string", "null"]},
             "resume_strategy": {"enum": ["same_session", "fresh_session"], "default": "same_session"}
           },
@@ -41,8 +54,11 @@
                 "properties": {"response_type": {"const": "text"}},
                 "required": ["response_type"]
               },
-              "then": {"properties": {"options": {"maxItems": 0}}},
-              "else": {"required": ["options"], "properties": {"options": {"minItems": 2}}}
+              "then": {"properties": {"options": {"maxItems": 0}, "choices": {"maxItems": 0}}},
+              "else": {
+                "required": ["options", "choices"],
+                "properties": {"options": {"minItems": 2}, "choices": {"minItems": 2}}
+              }
             }
           ]
         }
@@ -66,7 +82,7 @@
       "then": {
         "required": ["target", "evidence"],
         "properties": {
-          "reason": {"enum": ["ARTIFACT_DEFECT", "UPSTREAM_DEFECT"]},
+          "reason": {"enum": ["ARTIFACT_DEFECT", "UPSTREAM_DEFECT", "IMPLEMENTATION_REPAIR"]},
           "target": {"$ref": "#/$defs/command"},
           "evidence": {"type": "string", "minLength": 1},
           "interaction": {"type": "null"}

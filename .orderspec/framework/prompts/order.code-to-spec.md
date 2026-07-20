@@ -384,9 +384,9 @@ Translate the internal model into OrderSpec logical contract:
 | HTTP endpoint | `IF-NNN` with logical Operation name |
 | CLI command | `IF-NNN` with Kind: `cli` |
 | Event consumer | `IF-NNN` with Kind: `consumer` |
-| Request/response schema | `### Structure:` in §8 |
-| Database model | `### Entity:` in §8 |
-| Enum values | `### Value Set:` in §8 |
+| Request/response schema | `### Structure STR-NNN:` in §8 |
+| Database model | `### Entity ENT-NNN:` in §8 |
+| Enum values | `### Value Set VAL-NNN:` in §8 |
 | Input validation | `REQ-NNN` (testable, observable) |
 | Status codes | `IF-NNN` Success/Failure fields |
 | Error responses | `IF-NNN` Failure field |
@@ -574,10 +574,14 @@ No physical implementation details.
 Parseable anchors:
 
 ```markdown
-### Entity: Name
-### Structure: Name
-### Value Set: Name
+### Entity ENT-001: Name
+### Structure STR-001: Name
+### Value Set VAL-001: Name
 ```
+
+Information Model IDs are append-only context identifiers. Preserve them when
+refining an existing logical subject; never reuse a removed ID. They may be used
+by task-context `contract_refs` but never as task-line coverage refs.
 
 Entity/structure fields use tables.
 

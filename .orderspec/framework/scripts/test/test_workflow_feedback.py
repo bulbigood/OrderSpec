@@ -28,6 +28,9 @@ with tempfile.TemporaryDirectory(prefix="orderspec-feedback-") as temp:
         "--requested-change", "add prerequisite task before T003",
     )
     assert rc == 0 and created["feedback"]["id"] == "FB-001"
+    assert created["feedback"]["recommended_command"] == (
+        '/order.tasks "add prerequisite task before T003"'
+    )
     rc, duplicate = run(
         "create", "--feature-dir", str(feature), "--source", "order.code",
         "--target", "order.tasks", "--category", "task_decomposition",
@@ -77,6 +80,23 @@ with tempfile.TemporaryDirectory(prefix="orderspec-feedback-") as temp:
         stdin=json.dumps(stdin_payload),
     )
     assert rc == 0 and created["feedback"]["id"] == "FB-003", created
+
+    quoted_payload = {
+        "source": "order.code",
+        "target": "order.bootstrap",
+        "category": "project_capability",
+        "summary": "quoted input",
+        "evidence": "capability missing",
+        "requested_change": 'allow "focused" tests',
+    }
+    rc, quoted = run(
+        "create", "--feature-dir", str(feature), "--input-file", "-",
+        stdin=json.dumps(quoted_payload),
+    )
+    assert rc == 0, quoted
+    assert quoted["feedback"]["recommended_command"] == (
+        '/order.bootstrap "allow \\"focused\\" tests"'
+    ), quoted
 
     rc, project_created = run(
         "create", "--scope", "project", "--project-root", temp,

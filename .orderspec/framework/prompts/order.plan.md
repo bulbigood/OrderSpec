@@ -129,14 +129,51 @@ PLAN_STOPPED: implementation baseline is active
 
 Before any plan write while a task is `[X]`, classify the candidate delta:
 
-- no plan delta, or spec-only contract enrichment already covered by the same
-  WHERE/HOW mapping: leave `plan.md` untouched and route to argument-free
-  `/order.tasks`, which may refine only unchecked work;
-- a genuine physical mapping, mechanism, topology, or delivery-strategy change:
-  do not mutate or roll back anything. Ask one blocking question whether the
-  operator wants to preserve partial implementation for an explicit work-order
-  reconciliation, or preview bounded `/order.code --reset` and rebuild. Reset is
-  never inferred or presented as mandatory.
+Do not classify from feedback prose alone. Complete Steps 4–8 read-only
+evidence gathering first, then perform this classification immediately before
+Step 9.
+
+1. Run `python3 .orderspec/framework/scripts/plan_reconcile.py
+   candidate-template`, then fill its exact `candidate` object with the change
+   kind, affected task IDs, paths, changed Spec IDs, evidence-only dependency
+   Spec IDs, completed-behavior impact, reset necessity, and evidence.
+   `changed_spec_ids` contains only obligations whose plan-owned mapping or
+   mechanism will actually change. IDs merely exercised, verified, or cited by
+   the new evidence belong in `evidence_dependency_spec_ids`; they never imply
+   completed-work overlap. `affected_task_ids` likewise names only task
+   obligations that must be rewritten, not every task sharing a file or
+   dependency. This is the sole bounded semantic impact judgment; do not
+   inspect the backing schema or invent fields.
+2. Submit it before writing:
+
+   ```bash
+   python3 .orderspec/framework/scripts/plan_reconcile.py classify-impact \
+     --feature-dir "$FEATURE_DIR" --candidate-file -
+   ```
+
+3. Obey the classification. `NO_DELTA` leaves `plan.md` untouched and routes to
+   argument-free `/order.tasks`. `PENDING_ONLY` permits the minimum plan change
+   and automatically preserves `[X]` work while `/order.tasks` reconciles only
+   unchecked tasks. `COMPLETED_OVERLAP` and `RESET_REQUIRED` prohibit plan
+   writes and return one `operator_request`.
+4. Under an active supervisor run, invoke `workflow_supervisor.py ask` with the
+   retained `--run-file` followed by the returned `ask_arguments` verbatim.
+   Never hand-author `OPERATOR_INPUT`. Without a supervisor, ask the same bounded
+   question, render every returned choice label and consequence in the user's
+   configured language, preserve its token verbatim, and require one exact-token
+   reply.
+5. On resume, rerun `classify-impact` with the unchanged candidate plus
+   `--operator-answer <resume_input.answer>`. `OPERATOR_PRESERVE_APPROVED`
+   permits explicit reconciliation. `RESET_PREVIEW_REQUIRED` runs only its exact
+   rollback preview command; then request separate `MUTATION_APPROVAL` through
+   canonical `ask` before executing the preview's `apply_command`. A previously
+   persisted `preserve_partial` answer is idempotently accepted when a corrected
+   candidate now classifies as `PENDING_ONLY`; no second operator question is
+   allowed.
+
+The existence of a destructive reset alternative does not itself create an
+operator decision. Pending-only change is the safe deterministic default, and
+reset is never inferred, mandatory, or applied from a semantic choice alone.
 
 Never absorb partial implementation into `[NEW]` to `[MOD]` relabeling.
 
@@ -392,7 +429,7 @@ python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$F
 python3 .orderspec/framework/scripts/traceability.py -C "$PWD" --feature-dir "$FEATURE_DIR" validate --stage plan --json
 ```
 
-Blocking findings (`severity: HIGH` or `CRITICAL`) must be fixed. Fix the data in `plan.md` or `mechanisms.tsv` and re-run validation. Do not maintain a separate list of checks; trust the script output.
+With completed tasks, these validators accept an applied `[NEW]`/`[DEL]` only when the frozen baseline exactly matches the pathmanifest and task ownership proves the transition; a missing/mismatched baseline or unproven transition remains blocking. Never relabel or bypass it. Other blocking findings (`severity: HIGH` or `CRITICAL`) must be fixed in `plan.md` or `mechanisms.tsv`; re-run validation and trust its output.
 
 ### Step 13: Update Active Feature State
 

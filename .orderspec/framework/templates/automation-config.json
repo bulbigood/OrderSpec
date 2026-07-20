@@ -17,8 +17,30 @@
       "id": "auto-gate-artifact-fixes",
       "match": {
         "kind": "ROUTE",
-        "reason": ["ARTIFACT_DEFECT", "UPSTREAM_DEFECT"],
+        "reason": ["ARTIFACT_DEFECT", "UPSTREAM_DEFECT", "IMPLEMENTATION_REPAIR"],
         "source": ["order.spec-check", "order.plan-check", "order.tasks-check", "order.code-check"]
+      },
+      "action": "auto_route",
+      "max_occurrences": 4
+    },
+    {
+      "id": "auto-author-upstream-routing",
+      "match": {
+        "kind": "ROUTE",
+        "reason": ["ARTIFACT_DEFECT", "UPSTREAM_DEFECT", "IMPLEMENTATION_REPAIR"],
+        "source": ["order.spec", "order.plan", "order.tasks"],
+        "target": ["order.bootstrap", "order.feature", "order.spec", "order.plan"]
+      },
+      "action": "auto_route",
+      "max_occurrences": 4
+    },
+    {
+      "id": "auto-code-project-routing",
+      "match": {
+        "kind": "ROUTE",
+        "reason": ["ARTIFACT_DEFECT", "UPSTREAM_DEFECT", "IMPLEMENTATION_REPAIR"],
+        "source": "order.code",
+        "target": "order.bootstrap"
       },
       "action": "auto_route",
       "max_occurrences": 4
@@ -27,7 +49,7 @@
       "id": "auto-code-upstream-routing",
       "match": {
         "kind": "ROUTE",
-        "reason": ["ARTIFACT_DEFECT", "UPSTREAM_DEFECT"],
+        "reason": ["ARTIFACT_DEFECT", "UPSTREAM_DEFECT", "IMPLEMENTATION_REPAIR"],
         "source": ["order.code", "order.code-check"],
         "target": ["order.spec", "order.plan", "order.tasks", "order.code"]
       },

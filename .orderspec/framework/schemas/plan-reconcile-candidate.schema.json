@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "orderspec://schemas/plan-reconcile-candidate.schema.json",
+  "title": "OrderSpec Plan Reconcile Candidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "change_kind",
+    "affected_task_ids",
+    "changed_paths",
+    "changed_spec_ids",
+    "evidence_dependency_spec_ids",
+    "completed_behavior",
+    "reset_required",
+    "evidence"
+  ],
+  "properties": {
+    "version": {"const": 2},
+    "change_kind": {
+      "enum": ["none", "mapping", "mechanism", "topology", "delivery_strategy"]
+    },
+    "affected_task_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "description": "Only task obligations that the plan delta must rewrite; exclude tasks that merely share a path or evidence dependency.",
+      "items": {"type": "string", "pattern": "^T[0-9]{3}$"}
+    },
+    "changed_paths": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "changed_spec_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "description": "Only Spec IDs whose plan-owned mapping or mechanism actually changes.",
+      "items": {"type": "string", "pattern": "^[A-Z][A-Z0-9]*-[0-9]{3}$"}
+    },
+    "evidence_dependency_spec_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "description": "Spec IDs only exercised, verified, or cited by the delta; these do not create completed-work overlap.",
+      "items": {"type": "string", "pattern": "^[A-Z][A-Z0-9]*-[0-9]{3}$"}
+    },
+    "completed_behavior": {"enum": ["preserved", "changed", "unknown"]},
+    "reset_required": {"type": "boolean"},
+    "evidence": {"type": "string", "minLength": 1}
+  }
+}

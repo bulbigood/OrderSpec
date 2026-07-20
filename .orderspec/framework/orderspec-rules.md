@@ -178,6 +178,70 @@ concerns`; do not invent a workaround or modify framework files.
 Agents may report only checks and guarantees actually established by script
 output.
 
+### 6.1 User-visible terminal and operator action
+
+Every normal stage completion MUST bind the supervisor transition to the command
+that actually completed:
+
+```bash
+python3 .orderspec/framework/scripts/workflow_supervisor.py advance \
+  --run-file "$RUN_FILE" --source order.<completed-command>
+```
+
+Submit exactly one transition, inspect its returned `next_action`, and execute
+that command before constructing another event. Never chain or batch supervisor
+transitions across command boundaries. `ADVANCE_SOURCE_REQUIRED`,
+`STALE_ADVANCE_REJECTED`, and `ORDER_CODE_INCOMPLETE` are internal recovery
+states: obey their exact `next_action`; do not expose them as workflow stops.
+
+Never hand-author a supervisor event when a canonical adapter exists. Use
+`advance` for `ADVANCE`, `route-feedback` for persisted `ROUTE`, and `ask` for
+`OPERATOR_INPUT`. A rejected direct event with
+`error_code:CALLER_EVENT_INVALID` is non-terminal, has not mutated state, and
+MUST be corrected through the reported canonical adapter. Only
+`FRAMEWORK_ADAPTER_FAILURE` from a canonical adapter is a framework failure.
+
+Every supervisor mutation that leaves the run `RUNNING` MUST return
+`terminal:false`, `continuation_required:true`, an exact `next_action`, and a
+`final_response` object with `permitted:false`. It MUST NOT return an
+`operator_action`: a recovery command in a healthy continuation payload is an
+escape hatch that can counterfeit a host interruption. Missing fields or an
+operator action are malformed RUNNING output. Output from a command-internal
+setup, mechanical check, or partial report step has no terminal authority and
+never permits a final response.
+
+Before every final response, inspect any retained supervisor run with
+`workflow_supervisor.py status`. A `RUNNING` run is never a user-visible stop:
+execute its returned `next_action` immediately. Never self-declare a host
+interruption, context boundary, time limit, or budget boundary. A real host
+interruption ends execution externally and therefore authorizes no agent final
+response. In a later diagnostic turn, `workflow_supervisor.py status
+--operator-recovery` exposes the exact recovery command.
+
+Every terminal response that requires operator work MUST contain exact,
+copy-pasteable commands. When `operator_action.recommended_commands` exists,
+copy every entry verbatim and in order; a singular `recommended_command` or
+`resume_command` is not a substitute for the complete sequence. Otherwise copy
+`operator_action.recommended_command` (or an exact script command array when
+interactive input is required). A path, diagnosis, owner name, or generic
+“retry/fix/resume” instruction is not an operator action. Never reconstruct or
+paraphrase script-owned commands. `PAUSE`, `STOP`, and validation failures
+without a complete exact action are malformed framework output and MUST NOT be
+presented as a complete operator report.
+
+For `WAITING_OPERATOR`, the exact action may be a reply instead of one command.
+Render the bounded question and every `choices[].label` and
+`choices[].consequence` in the user's configured language; never quote raw
+framework prose in another language. Explain the material result of every
+choice before asking for an answer. Preserve every stable token in
+`operator_action.recommended_replies` verbatim and instruct the operator to
+reply with exactly one token. Only tokens and exact commands are verbatim
+machine data. `answer_commands` are mutually exclusive runtime commands, not
+an ordered sequence for the operator to execute. After the reply, the adapter
+invokes only its matching command and immediately follows the returned
+non-terminal `next_action`. A new choice interaction without one structured
+label and consequence per token is malformed operator output.
+
 ## 7. Stable truth and traceability
 
 Specifications own observable WHAT. Plans derive repository-specific WHERE and
@@ -220,3 +284,10 @@ sources of truth in host-specific files.
 
 Agent-specific detection, prompt delivery, and worker configuration belong in
 adapters. Core prompts and protocols retain only agent-independent behavior.
+
+An agent report at an operator boundary MUST contain the exact copy-pasteable
+command or exact reply token required to continue. A RUNNING automated workflow
+is not an operator boundary: call `workflow_supervisor.py guard-final` and obey
+`CONTINUE_REQUIRED`. Code-discovered incomplete implementation routes to tasks
+as `IMPLEMENTATION_REPAIR`; it does not require a work-order reset when pending
+correction tasks can be inserted without changing completed tasks.

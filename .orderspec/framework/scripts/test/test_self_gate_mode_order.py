@@ -24,7 +24,8 @@ class SelfGateModeOrderTests(unittest.TestCase):
             self.assertIn("default_mode.py resolve", content, command)
 
         plan = (ROOT / "prompts" / "order.plan.md").read_text(encoding="utf-8")
-        self.assertIn("Reset is\n  never inferred or presented as mandatory", plan)
+        self.assertIn("reset is never inferred, mandatory, or applied", plan)
+        self.assertIn("Pending-only change is the safe deterministic default", plan)
         tasks = (ROOT / "prompts" / "order.tasks.md").read_text(encoding="utf-8")
         self.assertNotIn("**Existing/Stop**", tasks)
 

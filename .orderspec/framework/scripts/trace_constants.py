@@ -17,6 +17,8 @@ SPECIDS_MARKER = "#orderspec spec-ids v1"
 SPECIDS_COLNAMES = f"spec_id{TAB}kind{TAB}section"
 
 SPEC_PREFIXES = ["REQ", "NFR", "SC", "INV", "EDGE", "UJ", "AC", "Q", "ASM", "DEC", "IF"]
+MODEL_CONTEXT_PREFIXES = ["ENT", "STR", "VAL"]
+CONTRACT_CONTEXT_PREFIXES = [*SPEC_PREFIXES, *MODEL_CONTEXT_PREFIXES]
 REQUIRED_MECHANISM_PREFIXES = {"REQ", "NFR", "INV", "EDGE", "AC", "IF"}
 FORBIDDEN_MECHANISM_PREFIXES = {"SC", "UJ", "Q", "DEC"}
 
@@ -59,4 +61,7 @@ ABSOLUTE_QUANTIFIERS = (
 
 _PATH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
 _SPEC_ID_RE = re.compile(r"^(" + "|".join(SPEC_PREFIXES) + r")-\d{3}$")
+_CONTRACT_CONTEXT_ID_RE = re.compile(
+    r"^(" + "|".join(CONTRACT_CONTEXT_PREFIXES) + r")-\d{3}$"
+)
 _TASK_ID_RE = re.compile(r"^T\d{3}$")

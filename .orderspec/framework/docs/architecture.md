@@ -19,13 +19,22 @@ checkboxes are execution progress, not task design: `/order.code` marks or
 reconciles one successful task at a time through `task_progress.py`.
 `/order.tasks` Refine is surgical: a deterministic guard restores the original
 file if any completed task or its worker context changes.
+Regenerated work orders allocate task IDs in tens. When an older contiguous
+work order needs an inserted prerequisite, `task_refine.py resequence-pending`
+creates gaps by renumbering only unchecked tasks; completed IDs remain stable.
 
 ## Work-order state and feedback
 
 Each new work order attempts to capture a Git-backed baseline for every
 pathmanifest path. `/order.code --reset` is available only when capture
-succeeded; it previews and restores that bounded set, then clears checkboxes
-after rollback succeeds. Broad working-tree cleanup is never used.
+succeeded; its explicit flag authorizes restoration of that bounded set without
+a second confirmation, then clears checkboxes
+and feature-local code-attempt state after rollback succeeds. The current plan
+may differ textually, but its parsed pathmanifest must equal the frozen
+baseline. Broad working-tree cleanup is never used.
+Plan-stage path validation accepts an applied `[NEW]` or `[DEL]` only when that
+exact frozen pathmanifest and completed task ownership prove the transition;
+an absent, malformed, or mismatched baseline keeps the original strict error.
 
 When any command discovers an evidenced defect owned by an earlier author
 command, it persists an idempotent typed handoff before stopping. Feature
@@ -190,12 +199,20 @@ with finite read/write paths, exact contract excerpts, default-deny capabilities
 and the result schema. The coordinator passes it verbatim. Workers do not scan
 the repository or interpret OrderSpec Markdown contracts. Attempt snapshots
 deterministically reject undeclared writes and inaccurate `changed_files`.
+Information Model blocks have stable context-only `ENT`, `STR`, and `VAL` IDs;
+tasks select them through `contract_refs` without claiming behavioural
+traceability. See [Bounded Contract Context](contract-context.md).
 
 `code_workflow.py` is the implementation state-machine boundary: it performs
 preflight, chooses the next legal task unit, constructs packets through the
 task resolvers, and validates terminal completeness. `/order.code-check` uses
 `code_obligations.py` to generate a complete machine ledger and record one
 schema-validated semantic result per obligation before report finalization.
+Attempt state v3 uses one canonical `current.json` slot and stores the exact
+envelope. Exclusive creation prevents concurrent snapshots. Repeated
+`attempt-begin` resumes the same attempt, accepted attempts block new snapshots
+until marking and cleanup, closed failures move atomically to history, and
+supervisor ROUTE/ADVANCE events are rejected across an open code boundary.
 
 ## Continuous execution policy
 
@@ -204,15 +221,38 @@ produce typed boundary events; the deterministic supervisor applies
 `.orderspec/config/automation.json` and persists a feature- or project-scoped
 run checkpoint. Framework-owned command, advance, and owner-route tables decide
 whether an event is legal; an agent-provided target is not authoritative by
-itself. `ADVANCE` and `ROUTE` may continue automatically. Questions and
-exact approvals become `OPERATOR_INPUT` interrupts and can only pause or stop;
-operator configuration never fabricates an answer.
+itself. Canonical `ADVANCE` also requires the explicit completed-command source,
+so a repeated call cannot advance the next stage; `order.code` cannot advance
+while tasks remain unchecked. Acquire repairs a persisted legacy premature code
+gate back to `order.code --resume`. `ADVANCE` and `ROUTE` may continue
+automatically. Questions and exact approvals become `OPERATOR_INPUT` interrupts
+and can only pause or stop; operator configuration never fabricates an answer.
+The canonical `ask` adapter constructs these interrupts and emits stable reply
+tokens plus exact answer commands, so runtime models never guess event enums or
+interaction fields. Invalid direct events are non-mutating caller errors; only
+invalid output from a canonical adapter is a framework failure.
+The shipped policy covers legal non-destructive upstream routes emitted by
+artifact authors, so a derived author can route a missing upstream decision to
+its owner without an accidental default pause. A real policy/limit pause stores
+the pending transition; explicit supervisor resume applies it and returns the
+owner command plus the root adapter recovery command.
 
 Normal cross-command transitions start a fresh agent context and reconstruct
 authoritative input through the command context resolver. An interrupted
 command may resume its own session after the operator answers. Route,
-transition, same-event, and per-rule limits stop non-progress cycles. See
+transition, semantic-event, and per-rule-per-event limits stop non-progress
+cycles without aggregating unrelated defects that share a source and target. See
 [Continuous Execution](continuous-execution.md).
+
+Active-plan reconciliation uses a deterministic impact packet.
+`plan_reconcile.py` distinguishes no delta, pending-only changes, completed-work
+overlap, and reset-required cases. Pending-only changes preserve completed work
+automatically; only evidenced completed overlap creates a semantic operator
+interrupt. The packet separates plan-owned `changed_spec_ids` from
+`evidence_dependency_spec_ids`, so an acceptance test may cite completed
+production behavior without falsely invalidating its completed task. Selecting
+reset first produces a bounded rollback preview and never applies it without a
+separate mutation approval.
 
 ## Repository layout
 

@@ -101,7 +101,7 @@ HARD_OPERATOR_REASONS = {
 }
 REASONS_BY_KIND = {
     "ADVANCE": {"STAGE_COMPLETE"},
-    "ROUTE": {"ARTIFACT_DEFECT", "UPSTREAM_DEFECT"},
+    "ROUTE": {"ARTIFACT_DEFECT", "UPSTREAM_DEFECT", "IMPLEMENTATION_REPAIR"},
     "OPERATOR_INPUT": HARD_OPERATOR_REASONS,
     "RUNTIME": {"TRANSIENT_FAILURE", "FRAMEWORK_ERROR"},
     "COMPLETE": {"WORKFLOW_COMPLETE"},
@@ -276,7 +276,10 @@ def validate_event(data: Any) -> tuple[dict[str, Any] | None, list[str]]:
         else:
             _exact_keys(
                 interaction,
-                {"id", "kind", "question", "response_type", "options", "exact_action", "resume_strategy"},
+                {
+                    "id", "kind", "question", "response_type", "options", "choices",
+                    "exact_action", "resume_strategy",
+                },
                 "event.interaction",
                 errors,
             )
@@ -293,8 +296,29 @@ def validate_event(data: Any) -> tuple[dict[str, Any] | None, list[str]]:
             if response_type == "choice":
                 if not isinstance(options, list) or len(options) < 2 or any(not isinstance(item, str) or not item for item in options):
                     errors.append("choice interaction.options must contain at least two non-empty strings")
-            elif options not in (None, []):
-                errors.append("text interaction.options must be omitted or empty")
+                choices = interaction.get("choices")
+                if not isinstance(choices, list) or len(choices) < 2:
+                    errors.append("choice interaction.choices must describe every option")
+                else:
+                    choice_values: list[str] = []
+                    for index, choice in enumerate(choices):
+                        label = f"interaction.choices[{index}]"
+                        if not isinstance(choice, dict):
+                            errors.append(f"{label} must be an object")
+                            continue
+                        _exact_keys(choice, {"value", "label", "consequence"}, label, errors)
+                        for field in ("value", "label", "consequence"):
+                            if not isinstance(choice.get(field), str) or not choice.get(field, "").strip():
+                                errors.append(f"{label}.{field} must be a non-empty string")
+                        if isinstance(choice.get("value"), str):
+                            choice_values.append(choice["value"])
+                    if isinstance(options, list) and choice_values != options:
+                        errors.append("interaction.choices values must match interaction.options in order")
+            else:
+                if options not in (None, []):
+                    errors.append("text interaction.options must be omitted or empty")
+                if interaction.get("choices") not in (None, []):
+                    errors.append("text interaction.choices must be omitted or empty")
             if interaction.get("resume_strategy", "same_session") not in {"same_session", "fresh_session"}:
                 errors.append("interaction.resume_strategy must be same_session or fresh_session")
             exact_action = interaction.get("exact_action")
@@ -328,7 +352,19 @@ def validate_event(data: Any) -> tuple[dict[str, Any] | None, list[str]]:
 
 
 def event_fingerprint(event: dict[str, Any]) -> str:
-    identity = {key: event.get(key) for key in ("kind", "reason", "source", "target", "severity", "destructive")}
+    identity = {
+        key: event.get(key)
+        for key in ("kind", "reason", "source", "target", "severity", "destructive")
+    }
+    if event.get("kind") in {"ROUTE", "RUNTIME"}:
+        identity["summary"] = " ".join(event.get("summary", "").split())
+        identity["evidence"] = " ".join(event.get("evidence", "").split())
+    elif event.get("kind") == "OPERATOR_INPUT":
+        interaction = event.get("interaction") or {}
+        identity["interaction"] = {
+            "kind": interaction.get("kind"),
+            "question": " ".join(interaction.get("question", "").split()),
+        }
     return hashlib.sha256(
         json.dumps(identity, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()[:20]
@@ -371,7 +407,7 @@ def classify(
 
     action = requested_action
     override: str | None = None
-    occurrence_key = f"rule:{basis}"
+    occurrence_key = f"rule:{basis}:event:{fingerprint}"
     if matched_rule is not None and matched_rule.get("max_occurrences") is not None:
         if counters.get(occurrence_key, 0) >= matched_rule["max_occurrences"]:
             action = "pause"
@@ -402,7 +438,10 @@ def classify(
         elif event["kind"] == "ROUTE" and counters.get("routes", 0) >= limits["max_routes"]:
             action = "pause"
             override = "maximum route count reached"
-        elif counters.get(f"event:{fingerprint}", 0) >= limits["max_same_event"]:
+        elif (
+            event["kind"] in {"ROUTE", "RUNTIME"}
+            and counters.get(f"event:{fingerprint}", 0) >= limits["max_same_event"]
+        ):
             action = "pause"
             override = "same-event cycle limit reached"
 

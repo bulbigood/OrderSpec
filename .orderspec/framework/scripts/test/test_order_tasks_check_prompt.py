@@ -41,6 +41,14 @@ class TasksCheckPromptTests(unittest.TestCase):
         self.assertIn("Plan-Selected Delivery Ordering", PROMPT)
         self.assertIn("non-migration plan MUST NOT", PROMPT)
 
+    def test_active_supervisor_cannot_stop_at_partial_gate_state(self):
+        self.assertIn("unfinalized report are internal states", PROMPT)
+        self.assertIn("--source order.tasks-check", PROMPT)
+        self.assertIn("While it remains `RUNNING`", PROMPT)
+        self.assertIn("final_response.permitted:false", PROMPT)
+        self.assertIn("absolute response ban", PROMPT)
+        self.assertIn("A real host interruption produces no agent-authored final", PROMPT)
+
 
 if __name__ == "__main__":
     unittest.main()

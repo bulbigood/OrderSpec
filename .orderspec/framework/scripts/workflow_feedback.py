@@ -121,6 +121,11 @@ def feedback_fingerprint(values: dict[str, Any]) -> str:
     ).hexdigest()[:20]
 
 
+def recommended_command(target: str, requested_change: str) -> str:
+    """Return a copy-pasteable slash command without lossy quote handling."""
+    return f"/{target} {json.dumps(requested_change.strip(), ensure_ascii=False)}"
+
+
 def load_open_for_command(
     project_root: Path,
     feature_dir: Path | None,
@@ -220,7 +225,7 @@ def cmd_create(args: argparse.Namespace) -> int:
         "location": location,
         "requested_change": requested_change.strip(),
         "fingerprint": fingerprint,
-        "recommended_command": f'/{target} "{requested_change.strip()}"',
+        "recommended_command": recommended_command(target, requested_change),
     }
     path = store / f"{feedback_id}.json"
     atomic_json(path, payload)

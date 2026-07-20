@@ -28,12 +28,12 @@
             "enum": ["new", "mod", "del", "none"]
           },
           "contract_refs": {
-            "description": "Optional exact spec IDs needed by this task in addition to coverage refs on the task line.",
+            "description": "Optional exact behavioural or Information Model context IDs needed by this task in addition to coverage refs on the task line.",
             "type": "array",
             "uniqueItems": true,
             "items": {
               "type": "string",
-              "pattern": "^(REQ|NFR|SC|INV|EDGE|UJ|AC|Q|ASM|DEC|IF)-[0-9]{3}$"
+              "pattern": "^(REQ|NFR|SC|INV|EDGE|UJ|AC|Q|ASM|DEC|IF|ENT|STR|VAL)-[0-9]{3}$"
             }
           }
         }

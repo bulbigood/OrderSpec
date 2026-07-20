@@ -90,7 +90,9 @@ with tempfile.TemporaryDirectory(prefix="orderspec-task-context-") as temp:
     expect(rc == 0 and data["total"] == 2, "validate accepts complete task context")
 
     context_with_refs = json.loads(block)
-    context_with_refs["tasks"]["T002"]["contract_refs"] = ["REQ-001", "IF-002"]
+    context_with_refs["tasks"]["T002"]["contract_refs"] = [
+        "REQ-001", "IF-002", "ENT-001", "STR-001", "VAL-001"
+    ]
     write_tasks(
         feature,
         json.dumps(context_with_refs),
@@ -98,7 +100,7 @@ with tempfile.TemporaryDirectory(prefix="orderspec-task-context-") as temp:
         "- [ ] T002 | src/new.py |  | create new implementation",
     )
     rc, _ = run(root, "validate", "--feature-dir", str(feature))
-    expect(rc == 0, "validate accepts optional canonical contract_refs")
+    expect(rc == 0, "validate accepts behavioural and Information Model contract_refs")
 
     context_with_refs["tasks"]["T002"]["contract_refs"] = ["REQ-1"]
     write_tasks(

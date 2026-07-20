@@ -28,7 +28,7 @@ DISPOSITION_MAP = {
     "M25": "Route", "M28": "Route", "M29": "Route", "M30": "Route",
     "M32": "Route", "M33": "Route", "M34": "Route",
     "M35": "Route", "M36": "Route", "M37": "Route", "M38": "Route",
-    "M39": "Route", "M40": "Route"
+    "M39": "Route", "M40": "Route", "M41": "Route"
 }
 
 def _load_specids(feature=None):
@@ -279,6 +279,53 @@ def _check_m22(section_12, section_8, add):
                     )
 
 
+def _check_m41_information_model_ids(section_8, add):
+    """Require stable, kind-correct context IDs on every Information Model block."""
+    expected_prefix = {"Entity": "ENT", "Structure": "STR", "Value Set": "VAL"}
+    seen = {}
+    for line_number, line in enumerate(section_8.splitlines(), start=1):
+        if not re.match(r"^###\s+(?:Entity|Structure|Value Set)\b", line):
+            continue
+        match = re.match(
+            r"^###\s+(Entity|Structure|Value Set)(?:\s+([A-Z]+-\d{3}))?:\s+(\S.*)$",
+            line,
+        )
+        if not match:
+            add(
+                "M41",
+                "HIGH",
+                f"spec.md:§8:{line_number}",
+                f"Malformed Information Model heading: {line.strip()}",
+            )
+            continue
+        kind, context_id, _ = match.groups()
+        prefix = expected_prefix[kind]
+        if context_id is None:
+            add(
+                "M41",
+                "HIGH",
+                f"spec.md:§8:{line_number}",
+                f"{kind} heading requires stable context ID {prefix}-NNN",
+            )
+            continue
+        if not context_id.startswith(f"{prefix}-"):
+            add(
+                "M41",
+                "HIGH",
+                f"spec.md:§8:{line_number}",
+                f"{kind} must use {prefix}-NNN, got {context_id}",
+            )
+        if context_id in seen:
+            add(
+                "M41",
+                "HIGH",
+                f"spec.md:§8:{line_number}",
+                f"Duplicate Information Model ID {context_id}; first declared at §8:{seen[context_id]}",
+            )
+        else:
+            seen[context_id] = line_number
+
+
 def _check_m23(grid_rows, anchor_ids, add):
     for row in grid_rows:
         left_id = row.get("left_id")
@@ -333,15 +380,28 @@ def _check_plan_refs(plan, defined_ids, add):
 def _check_plan_manifest(plan, add):
     from trace_commands import resolved_root
     manifest_paths, manifest_errors = _parse_pathmanifest(plan)
+    applied_paths = set()
+    transition_conflicts = any(
+        (tag == "[NEW]" and ((resolved_root() / path).exists() or (resolved_root() / path).is_symlink()))
+        or (tag == "[DEL]" and not ((resolved_root() / path).exists() or (resolved_root() / path).is_symlink()))
+        for path, tag in manifest_paths.items()
+    )
+    if transition_conflicts:
+        try:
+            from work_order import applied_transition_paths
+            applied_paths = applied_transition_paths(resolved_root(), plan.parent, plan)
+        except ValueError as exc:
+            add("M10", "HIGH", "plan.md", str(exc))
     for err in manifest_errors:
         add("M9", "HIGH", "plan.md", err)
     for path, tag in manifest_paths.items():
         full_path = resolved_root() / path
-        if tag == "[MOD]" and not full_path.exists():
+        present = full_path.exists() or full_path.is_symlink()
+        if tag == "[MOD]" and not present:
             add("M10", "HIGH", "plan.md", f"[MOD] path '{path}' does not exist in repo")
-        elif tag == "[NEW]" and full_path.exists():
+        elif tag == "[NEW]" and present and path not in applied_paths:
             add("M10", "HIGH", "plan.md", f"[NEW] path '{path}' already exists in repo")
-        elif tag == "[DEL]" and not full_path.exists():
+        elif tag == "[DEL]" and not present and path not in applied_paths:
             add("M10", "HIGH", "plan.md", f"[DEL] path '{path}' does not exist in repo")
 
 
@@ -896,6 +956,8 @@ def cmd_validate(args):
     acceptance_sections = "\n".join(section for section in (section_11, section_12) if section)
 
     if_records = _extract_if_records(section_9) if section_9 else {}
+    if section_8:
+        _check_m41_information_model_ids(section_8, add)
     _check_m18(if_records, add)
 
     ac_inline_covers = _extract_ac_inline_covers(acceptance_sections) if acceptance_sections else {}
@@ -930,9 +992,8 @@ def cmd_validate(args):
         for check, severity, location, message in check_mechanisms_findings(feature):
             add(check, severity, location, message)
 
-    # M10 validates the repository baseline observed by /order.plan. During
-    # tasking, especially after partial implementation, applied [NEW]/[DEL]
-    # transitions are expected work-order state rather than plan drift.
+    # M10 remains strict unless the exact frozen work-order baseline and
+    # completed task ownership prove an applied [NEW]/[DEL] transition.
     if stage == "plan":
         _check_plan_manifest(plan, add)
 

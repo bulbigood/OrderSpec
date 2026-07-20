@@ -216,6 +216,10 @@ mechanical output.
   `implementation-first` places it after and requires the plan's explicit
   justification. Mismatch → **Route** to `/order.tasks` (HIGH for P1, MEDIUM otherwise).
 - **T4b**: Each story phase is closed by a **Checkpoint prose line** (per `/order.tasks` rules: "Checkpoint is prose, not a task"). Missing checkpoint → **Route** to `/order.tasks` (MEDIUM).
+- **T4f**: The last executable task in every story phase MUST be a same-story
+  `[USn] | @verify |  | VERIFY:` task containing the exact command, asserted
+  IDs, and STOP-on-failure instruction. Missing or displaced phase gate →
+  **Route** to `/order.tasks` (HIGH for P1/MVP, MEDIUM otherwise).
 - **T4c**: Test tasks state the expected red, baseline, or post-implementation
   result selected by the plan. Missing/mismatched expectation → Route (MEDIUM).
 - **T4d**: In `red-first`, inspect Setup/Expand and earlier phases for behavior already
@@ -245,7 +249,10 @@ mechanical output.
 
 - **T8a**: For each behavior-bearing support task with empty or insufficient
   field-3 refs, require minimal `contract_refs` in task-context so the worker
-  receives exact contract excerpts. Missing context is `/order.tasks` (HIGH for
+  receives exact contract excerpts. A model/schema task must include every
+  required `ENT-NNN`, `STR-NNN`, and `VAL-NNN` Information Model reference;
+  behavioural REQ/INV refs alone are insufficient when they do not define the
+  fields or closed values. Missing context is `/order.tasks` (HIGH for
   P1/MVP, MEDIUM otherwise). Escalate to CRITICAL only when the missing context
   leaves an invariant unenforced or creates atomicity, security, data-loss, or
   data-corruption risk.
@@ -256,6 +263,11 @@ mechanical output.
   Assign HIGH for P1/MVP and MEDIUM otherwise. Escalate to CRITICAL only when
   the missing prerequisite leaves an invariant unenforced or creates atomicity,
   security, data-loss, or data-corruption risk.
+- **T8c**: A test or serializer/controller task that asserts a named model or
+  service seam must include those exact dependency paths in task-context
+  `read` and the Information Model/response contract IDs in `contract_refs`.
+  A correct write path does not close this boundary. Missing context routes to
+  `/order.tasks` (HIGH for P1/MVP, MEDIUM otherwise).
 
 ## Report Generation
 
@@ -347,9 +359,26 @@ Do not complete while `REPORT_RC` is non-zero. Correct only the report rendering
 from the already collected mechanical and semantic evidence, then rerun the
 finalizer. Never change an artifact under inspection to make the report pass.
 
+Mechanical validation, context validation, report template refresh, and an
+unfinalized report are internal states. Never produce a completion response at
+any of them. Under an active supervisor, after successful finalization submit
+exactly one bound transition:
+
+```bash
+python3 .orderspec/framework/scripts/workflow_supervisor.py advance \
+  --run-file "$RUN_FILE" --source order.tasks-check
+```
+
+Obey its `terminal`, `continuation_required`, and `next_action` immediately.
+While it remains `RUNNING`, the Completion Response below is not user-visible.
+Before any final response, call `workflow_supervisor.py status`. Its
+`final_response.permitted:false` is an absolute response ban: execute
+`next_action` and do not emit a progress handoff or self-declare a host
+interruption. A real host interruption produces no agent-authored final.
+
 ## Completion Response
 
-After writing the report, respond in chat with:
+Only after a permitted terminal boundary, respond in chat with:
 - Verdict (BLOCK, ROUTING_REQUIRED, or PASS)
 - Report path
 - Number of findings by severity

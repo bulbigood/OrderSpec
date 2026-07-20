@@ -71,8 +71,19 @@ expect(
     "order.code reconciles previously completed unchecked work from evidence",
 )
 expect(
-    "RESET_PREVIEW" in code_prompt and "### Reset" in code_prompt,
-    "order.code reset uses a bounded work-order baseline",
+    "RECONCILE_PREEXISTING" in code_prompt
+    and "reconciliation_commands" in code_prompt
+    and "earlier `[X]` task owns every" in normalized_code_prompt
+    and "verbatim and in order" in normalized_code_prompt,
+    "order.code deterministically reconciles verified inherited or retry work",
+)
+expect(
+    "RESET_APPLY" in code_prompt
+    and "RESET_APPLIED" in code_prompt
+    and "### Reset" in code_prompt
+    and "explicit `--reset` control is authorization" in normalized_code_prompt
+    and "Do not preview it first, ask for confirmation" in normalized_code_prompt,
+    "order.code explicit reset applies the bounded work-order baseline without double confirmation",
 )
 expect(
     "workflow_feedback.py create" in code_prompt and "Before every upstream route" in code_prompt,
@@ -95,15 +106,47 @@ expect(
 expect(
     "Turn termination contract" in code_prompt
     and "continuation_required: true" in code_prompt
-    and '"ready at T008" is never a final response' in normalized_code_prompt,
+    and '"ready at T008" is never a final response' in normalized_code_prompt
+    and "`final_response.permitted:false` is an absolute response ban" in normalized_code_prompt
+    and "Never self-declare a host interruption" in normalized_code_prompt
+    and "permits no agent-authored final" in normalized_code_prompt,
     "order.code forbids ending a turn on an internal ready state",
 )
 expect(
     "Automated cross-command continuation" in code_prompt
-    and "workflow_supervisor.py evaluate" in code_prompt
+    and "workflow_supervisor.py acquire" in code_prompt
+    and "never acquire or resume a supervisor run for" in normalized_code_prompt
+    and "For every non-RESET mode" in code_prompt
+    and "`RESUME_RUN` recovers" in code_prompt
+    and "created after the latest terminal run" in normalized_code_prompt
+    and "older RUNNING lease is superseded" in normalized_code_prompt
+    and "schema-valid typed event through `evaluate`" in normalized_code_prompt
+    and "workflow_supervisor.py route-feedback" in code_prompt
+    and "workflow_supervisor.py advance" in code_prompt
+    and "--source order.<completed-command>" in normalized_code_prompt
+    and "never chain transitions across command boundaries" in normalized_code_prompt
+    and "Never hand-author `ROUTE`, `ADVANCE`, or `OPERATOR_INPUT`" in normalized_code_prompt
+    and "never hand-author its `ADVANCE` event" in code_prompt
     and "On `AUTO_ROUTE`, do not produce a completion report" in code_prompt
-    and "Load the exact target OrderSpec skill completely" in code_prompt,
-    "order.code acts as the Codex runtime adapter for enabled automatic routes",
+    and "Load the exact target OrderSpec skill completely" in normalized_code_prompt,
+    "order.code acquires resumable leases and coordinates automatic routes through the supervisor",
+)
+expect(
+    "deleted feature-local code-attempt state" in normalized_code_prompt
+    and "parsed pathmanifest exactly matches the frozen baseline" in normalized_code_prompt,
+    "order.code reset clears its stage state while preserving the frozen physical rollback boundary",
+)
+expect(
+    "native turn-completion guard" not in code_prompt
+    and "supervisor_run_file" not in code_prompt
+    and "bind the run to its current session" not in code_prompt,
+    "order.code does not require capabilities or fields absent from the runtime-neutral supervisor",
+)
+expect(
+    "CALLER_EVENT_INVALID" in normalized_code_prompt
+    and "state_mutated:false" in normalized_code_prompt
+    and "obey `USE_CANONICAL_EVENT_ADAPTER` immediately" in normalized_code_prompt,
+    "order.code recovers canonically from a non-mutating adapter transport rejection",
 )
 expect(
     "End the agent turn only when the supervisor returns `PAUSE`, `STOP`, or" in code_prompt
@@ -118,6 +161,32 @@ expect(
     "rejected result is terminal" in code_prompt
     and "Never alter `changed_files`" in code_prompt,
     "order.code forbids marker-result laundering and retries",
+)
+expect(
+    "Never call `reconcile` while `current.json` exists" in code_prompt
+    and "before opening an attempt" in code_prompt,
+    "order.code reconciles pre-existing work only outside an attempt snapshot",
+)
+expect(
+    "Never report a generic need" in code_prompt
+    and "operator_action.recommended_commands" in code_prompt
+    and "operator_action.recommended_command" in code_prompt
+    and "verbatim and in order" in normalized_code_prompt
+    and "A non-terminal payload has no report and no operator next action" in normalized_code_prompt,
+    "order.code completion reports expose every exact ordered operator action",
+)
+expect(
+    "Never hand-author `ROUTE`, `ADVANCE`, or `OPERATOR_INPUT`" in normalized_code_prompt
+    and "CALLER_EVENT_INVALID" in normalized_code_prompt
+    and "FRAMEWORK_ADAPTER_FAILURE" in normalized_code_prompt
+    and "operator_action.recommended_replies" in normalized_code_prompt,
+    "order.code uses canonical operator interrupts and exact stable replies",
+)
+expect(
+    "user's configured language" in normalized_code_prompt
+    and "structured choice label" in normalized_code_prompt
+    and "explain each choice" in normalized_code_prompt,
+    "order.code localizes operator prose and explains every stable choice",
 )
 expect(
     "plan Evidence Sequencing" in code_prompt
@@ -147,6 +216,13 @@ expect(
     and "worker_envelopes" in code_prompt and "verbatim" in code_prompt,
     "order.code dispatches a snapshotted self-contained envelope verbatim",
 )
+expect(
+    "one canonical\n`current.json` attempt slot" in code_prompt
+    and "`attempt-recover`" in code_prompt
+    and "Never synthesize a recovery list" in code_prompt
+    and "`open_attempt_boundary` is not a reportable halt" in code_prompt,
+    "order.code enforces a singleton attempt and one deterministic boundary recovery",
+)
 expect("tooling-protocol.md" not in code_prompt, "order.code contains no dead tooling branch")
 expect("Mark Gate Report Consumed" not in code_prompt, "order.code does not consume tasks gate reports")
 
@@ -162,12 +238,22 @@ expect(
     "order.tasks Refine protects existing progress without template regeneration",
 )
 expect(
+    "task_refine.py resequence-pending" in tasks_prompt
+    and "allocate IDs in tens" in tasks_prompt
+    and "`unsafe_refine` with `restored: true` is a rejected candidate edit" in tasks_prompt,
+    "order.tasks preserves insertion capacity and retries restored refinement candidates",
+)
+expect(
     "work_order.py capture" in tasks_prompt,
     "order.tasks captures a reset baseline for each new work order",
 )
 expect(
     "mandatory for behavior-bearing support tasks" in tasks_prompt,
     "order.tasks supplies exact contract context to support paths",
+)
+expect(
+    "`ENT-NNN`, `STR-NNN`, `VAL-NNN`" in tasks_prompt,
+    "order.tasks supplies stable Information Model context IDs to schema tasks",
 )
 expect(
     "Test-writing tasks state the expected" in tasks_prompt

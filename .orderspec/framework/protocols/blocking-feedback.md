@@ -69,6 +69,18 @@ Do not create feedback for a user clarification, an operator refusal, or a
 transient environment failure that does not identify an earlier author-owned
 defect. Do not route a framework implementation failure to an artifact owner.
 
+When an automation supervisor run is active, submit the created report without
+translating its fields or hand-authoring a ROUTE event:
+
+```bash
+python3 .orderspec/framework/scripts/workflow_supervisor.py route-feedback \
+  --run-file "$RUN_FILE" --feedback-file "$FEEDBACK_REPORT"
+```
+
+Execute an `AUTO_ROUTE` result's exact `next_action`. On `PAUSE` or `STOP`, show
+the returned `operator_action` verbatim; never replace it with a generic repair
+or diagnosis request.
+
 ## Gate commands
 
 After finalizing its canonical report, a gate creates feedback only for routed

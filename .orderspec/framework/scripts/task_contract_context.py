@@ -22,16 +22,22 @@ sys.path.insert(0, str(SCRIPT_DIR))
 from common import get_repo_root  # noqa: E402
 from task_context import read_context_block  # noqa: E402
 from task_progress import parse_tasks  # noqa: E402
+from trace_constants import SPEC_PREFIXES  # noqa: E402
 
 
 ID_RE = re.compile(
     r"(?:[A-Z][A-Z0-9-]*:)?(?P<id>"
-    r"(?:REQ|NFR|SC|INV|EDGE|UJ|AC|Q|ASM|DEC|IF|CON)-\d{3})"
+    r"(?:" + "|".join(SPEC_PREFIXES) + r")-\d{3})"
 )
 ANCHOR_RE = re.compile(
     r"^\s*-\s+\*\*(?P<id>"
-    r"(?:REQ|NFR|SC|INV|EDGE|UJ|AC|Q|ASM|DEC|IF|CON)-\d{3})\*\*:"
+    r"(?:" + "|".join(SPEC_PREFIXES) + r")-\d{3})\*\*:"
 )
+MODEL_ANCHOR_RE = re.compile(
+    r"^###\s+(?P<kind>Entity|Structure|Value Set)\s+"
+    r"(?P<id>(?:ENT|STR|VAL)-\d{3}):\s+(?P<name>\S.*)$"
+)
+MODEL_PREFIX_BY_KIND = {"Entity": "ENT", "Structure": "STR", "Value Set": "VAL"}
 
 
 def emit(payload: dict[str, Any]) -> None:
@@ -81,19 +87,63 @@ def task_context_refs(tasks_path: Path, task_id: str) -> list[str]:
 
 def load_spec_blocks(spec_path: Path) -> dict[str, str]:
     lines = spec_path.read_text(encoding="utf-8").splitlines()
-    anchors: list[tuple[str, int]] = []
+    anchors: list[tuple[str, int, int]] = []
     for index, line in enumerate(lines):
         match = ANCHOR_RE.match(line)
         if match:
-            anchors.append((match.group("id"), index))
+            anchors.append((match.group("id"), index, 2))
+            continue
+        model_match = MODEL_ANCHOR_RE.match(line)
+        if model_match:
+            anchors.append((model_match.group("id"), index, 3))
 
     blocks: dict[str, str] = {}
-    for position, (spec_id, start) in enumerate(anchors):
-        end = anchors[position + 1][1] if position + 1 < len(anchors) else len(lines)
+    anchor_starts = {start for _, start, _ in anchors}
+    for spec_id, start, boundary_level in anchors:
+        end = len(lines)
+        for index in range(start + 1, len(lines)):
+            if index in anchor_starts:
+                end = index
+                break
+            heading = re.match(r"^(#{2,6})\s+", lines[index])
+            if heading and len(heading.group(1)) <= boundary_level:
+                end = index
+                break
         block = "\n".join(lines[start:end]).strip()
         if block:
             blocks[spec_id] = block
     return blocks
+
+
+def contract_anchor_errors(spec_path: Path) -> list[str]:
+    """Validate context-addressable anchors without making them coverage IDs."""
+    seen: dict[str, int] = {}
+    errors: list[str] = []
+    for line_number, line in enumerate(spec_path.read_text(encoding="utf-8").splitlines(), start=1):
+        model_heading = re.match(r"^###\s+(?:Entity|Structure|Value Set)\b", line)
+        model_match = MODEL_ANCHOR_RE.match(line)
+        if model_heading and not model_match:
+            errors.append(
+                f"Information Model heading at line {line_number} requires kind-specific stable ID: {line.strip()}"
+            )
+            continue
+        match = ANCHOR_RE.match(line) or model_match
+        if not match:
+            continue
+        contract_id = match.group("id")
+        if contract_id in seen:
+            errors.append(
+                f"duplicate contract context ID {contract_id} at lines {seen[contract_id]} and {line_number}"
+            )
+        else:
+            seen[contract_id] = line_number
+        if "kind" in match.groupdict():
+            expected = MODEL_PREFIX_BY_KIND[match.group("kind")]
+            if not contract_id.startswith(f"{expected}-"):
+                errors.append(
+                    f"{match.group('kind')} at line {line_number} must use {expected}-NNN, got {contract_id}"
+                )
+    return errors
 
 
 def load_mechanisms(path: Path) -> dict[str, dict[str, str]]:
@@ -173,6 +223,14 @@ def resolve(feature_dir: Path, task_id: str, repo_root: Path) -> tuple[int, dict
     coverage_refs = task_refs(record["line"])
     extra_refs = task_context_refs(tasks_path, task_id)
     refs = list(dict.fromkeys([*coverage_refs, *extra_refs]))
+    anchor_errors = contract_anchor_errors(spec_path)
+    if anchor_errors:
+        return 2, {
+            "ok": False,
+            "error": "invalid_contract_anchors",
+            "task_id": task_id,
+            "validation_errors": anchor_errors,
+        }
     spec_blocks = load_spec_blocks(spec_path)
     mechanisms = load_mechanisms(mechanisms_path)
 

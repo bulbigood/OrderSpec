@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "orderspec://schemas/code-attempt-state.schema.json",
+  "title": "OrderSpec Current Code Attempt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version", "attempt_id", "mode", "feature_dir", "task_ids", "write_paths",
+    "verification_required", "worker_envelopes", "baseline", "results_file", "state_digest"
+  ],
+  "properties": {
+    "version": {"const": 3},
+    "attempt_id": {"type": "string", "pattern": "^[0-9a-f]+$"},
+    "mode": {"enum": ["LOCAL_ALL", "LOCAL_PHASE", "DELEGATED"]},
+    "feature_dir": {"type": "string", "minLength": 1},
+    "task_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^T[0-9]{3}$"}
+    },
+    "write_paths": {"type": "object", "additionalProperties": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}},
+    "verification_required": {"type": "object", "additionalProperties": {"type": "boolean"}},
+    "worker_envelopes": {"type": "array", "minItems": 1, "items": {"$ref": "worker-envelope.schema.json"}},
+    "baseline": {"type": "object"},
+    "results_file": {"type": "string", "minLength": 1},
+    "finish_status": {"enum": ["accepted", "invalid_results", "rejected", "worker_failed"]},
+    "terminal_error": {"type": "object"},
+    "state_digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

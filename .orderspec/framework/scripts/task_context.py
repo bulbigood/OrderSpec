@@ -19,7 +19,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 from common import get_repo_root  # noqa: E402
 from task_progress import parse_tasks  # noqa: E402
-from trace_constants import _SPEC_ID_RE  # noqa: E402
+from trace_constants import _CONTRACT_CONTEXT_ID_RE  # noqa: E402
 from trace_parse import _parse_pathmanifest  # noqa: E402
 
 READ_ONLY_TASK_TARGET = "@verify"
@@ -189,11 +189,11 @@ def validate_payload(
 
         contract_refs = entry.get("contract_refs", [])
         if not isinstance(contract_refs, list) or not all(
-            isinstance(spec_id, str) and _SPEC_ID_RE.match(spec_id)
+            isinstance(spec_id, str) and _CONTRACT_CONTEXT_ID_RE.match(spec_id)
             for spec_id in contract_refs
         ):
             errors.append(
-                f"task {task_id} contract_refs must be an array of canonical spec IDs"
+                f"task {task_id} contract_refs must be an array of canonical contract context IDs"
             )
             continue
         if len(contract_refs) != len(set(contract_refs)):

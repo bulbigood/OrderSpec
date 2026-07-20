@@ -47,7 +47,14 @@ with tempfile.TemporaryDirectory(prefix="orderspec-task-contract-context-") as t
         "## Requirements\n\n"
         "- **REQ-001**: Task MUST keep its owner.\n"
         "  - **Verification**: owner stays unchanged.\n"
-        "- **AC-001**: API returns the task owner.\n",
+        "- **AC-001**: API returns the task owner.\n\n"
+        "## 8. Information Model\n\n"
+        "### Entity ENT-001: Task\n\n"
+        "| Field | Type | Required | Default | Mutable | Notes |\n"
+        "|-------|------|----------|---------|---------|-------|\n"
+        "| owner | Identifier | yes | none | no | Task owner. |\n\n"
+        "### Value Set VAL-001: Task Status\n\n"
+        "| Value | Description |\n|-------|-------------|\n| `open` | Active task. |\n",
         encoding="utf-8",
     )
     (feature / "tasks.md").write_text(
@@ -79,13 +86,23 @@ with tempfile.TemporaryDirectory(prefix="orderspec-task-contract-context-") as t
         "resolve returns current phase Goal and Verification",
     )
 
+    spec_path = feature / "spec.md"
+    valid_spec = spec_path.read_text(encoding="utf-8")
+    spec_path.write_text(valid_spec.replace("### Entity ENT-001: Task", "### Entity: Task"), encoding="utf-8")
+    rc, data = run(root, "resolve", "--feature-dir", str(feature), "--task-id", "T001")
+    expect(
+        rc != 0 and data["error"] == "invalid_contract_anchors",
+        "legacy Information Model heading blocks contract resolution",
+    )
+    spec_path.write_text(valid_spec, encoding="utf-8")
+
     (feature / "tasks.md").write_text(
         "# Tasks\n\n"
         "**Format (STRICT — pipe-delimited, machine-parsed)**\n\n"
         "## Task Context (Machine-Readable)\n\n"
         "```task-context\n"
         '{"version": 1, "tasks": {"T001": {"read": [], "target_state": "new", '
-        '"contract_refs": ["AC-001"]}}}\n'
+        '"contract_refs": ["AC-001", "ENT-001", "VAL-001"]}}}\n'
         "```\n\n"
         "---\n\n"
         "## Phase 1: Migrate\n\n"
@@ -97,8 +114,18 @@ with tempfile.TemporaryDirectory(prefix="orderspec-task-contract-context-") as t
     rc, data = run(root, "resolve", "--feature-dir", str(feature), "--task-id", "T001")
     expect(rc == 0, "resolve accepts task-context contract refs")
     expect(data["coverage_refs"] == ["REQ-001"], "coverage refs remain task-line refs")
-    expect(data["contract_refs"] == ["AC-001"], "support contract refs remain distinct")
-    expect(data["refs"] == ["REQ-001", "AC-001"], "resolve merges refs in stable order")
+    expect(
+        data["contract_refs"] == ["AC-001", "ENT-001", "VAL-001"],
+        "support behavioural and model refs remain distinct",
+    )
+    expect(
+        data["refs"] == ["REQ-001", "AC-001", "ENT-001", "VAL-001"],
+        "resolve merges refs in stable order",
+    )
+    excerpts = {item["id"]: item["excerpt"] for item in data["spec_excerpts"]}
+    expect("| owner |" in excerpts["ENT-001"], "entity ref resolves its exact field table")
+    expect("`open`" in excerpts["VAL-001"], "value-set ref resolves its exact values")
+    expect("## 8." not in excerpts["AC-001"], "behaviour excerpt stops at its section boundary")
 
     (state / "mechanisms.tsv").write_text(
         "#orderspec mechanisms v1\n"

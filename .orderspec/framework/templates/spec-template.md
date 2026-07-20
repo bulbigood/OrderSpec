@@ -148,19 +148,19 @@ flowchart TD
 No database column types, ORM annotations, library names, plugin names, file paths, or implementation details.
 Omit this entire section if no data model exists. -->
 
-### Entity: [EntityName]
+### Entity ENT-001: [EntityName]
 
 | Field | Type | Required | Default | Mutable | Notes |
 |-------|------|----------|---------|---------|-------|
 |       |      |          |         |         |       |
 
-### Structure: [StructureName]
+### Structure STR-001: [StructureName]
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
 |       |      |          |       |
 
-### Value Set: [ValueSetName]
+### Value Set VAL-001: [ValueSetName]
 
 | Value | Description |
 |-------|-------------|
