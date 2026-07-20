@@ -5,9 +5,14 @@ Recursively discovers and runs all test files in .orderspec/framework/scripts/te
 Aggregates results and exits non-zero if any test failed.
 """
 
+import argparse
+import os
 import subprocess
 import sys
+import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -16,6 +21,45 @@ TEST_DIR = SCRIPTS_DIR / "test"
 
 # Canonical discovery pattern for OrderSpec regression tests.
 PATTERNS = ["test_*.py"]
+TEST_TIMEOUT_SECONDS = 120
+
+
+@dataclass(frozen=True)
+class TestResult:
+    passed: bool
+    elapsed: float
+    label: str
+    returncode: int | None = None
+    stdout: str = ""
+    stderr: str = ""
+    error: str | None = None
+
+
+def default_worker_count() -> int:
+    """Leave one hardware thread free, but always allow at least one worker."""
+    return max(1, (os.cpu_count() or 1) - 1)
+
+
+def positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("must be an integer") from exc
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return parsed
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "-j",
+        "--workers",
+        type=positive_int,
+        default=default_worker_count(),
+        help="number of parallel test processes (default: CPU threads minus 1)",
+    )
+    return parser.parse_args(argv)
 
 
 def find_test_files() -> list[Path]:
@@ -37,42 +81,63 @@ def find_test_files() -> list[Path]:
     return unique
 
 
-def run_one(test_file: Path) -> tuple[bool, float, str]:
-    """Run a single test file. Returns (passed, elapsed_seconds, label)."""
+def run_one(test_file: Path) -> TestResult:
+    """Run one test process with a private temporary directory."""
     label = str(test_file.relative_to(SCRIPTS_DIR))
-    start = time.time()
+    start = time.monotonic()
 
     try:
-        proc = subprocess.run(
-            [sys.executable, str(test_file)],
-            capture_output=True,
-            text=True,
-            timeout=120,
+        with tempfile.TemporaryDirectory(prefix="orderspec-test-run-") as temp_dir:
+            env = os.environ.copy()
+            # tempfile-based fixtures in different test processes must never share
+            # paths, even when the host has non-standard TMPDIR configuration.
+            env.update({"TMPDIR": temp_dir, "TEMP": temp_dir, "TMP": temp_dir})
+            proc = subprocess.run(
+                [sys.executable, str(test_file)],
+                capture_output=True,
+                text=True,
+                timeout=TEST_TIMEOUT_SECONDS,
+                env=env,
+            )
+        elapsed = time.monotonic() - start
+        return TestResult(
+            passed=proc.returncode == 0,
+            elapsed=elapsed,
+            label=label,
+            returncode=proc.returncode,
+            stdout=proc.stdout,
+            stderr=proc.stderr,
         )
-        elapsed = time.time() - start
 
-        if proc.returncode == 0:
-            return True, elapsed, label
-        else:
-            # Print captured output so user sees what failed
-            print(f"\n--- FAIL: {label} (exit {proc.returncode}) ---", flush=True)
-            if proc.stdout:
-                print(proc.stdout, flush=True)
-            if proc.stderr:
-                print(proc.stderr, file=sys.stderr, flush=True)
-            return False, elapsed, label
-
-    except subprocess.TimeoutExpired:
-        elapsed = time.time() - start
-        print(f"\n--- TIMEOUT: {label} (120s) ---", flush=True)
-        return False, elapsed, label
+    except subprocess.TimeoutExpired as exc:
+        elapsed = time.monotonic() - start
+        return TestResult(
+            passed=False,
+            elapsed=elapsed,
+            label=label,
+            stdout=exc.stdout or "",
+            stderr=exc.stderr or "",
+            error=f"timeout after {TEST_TIMEOUT_SECONDS}s",
+        )
     except Exception as exc:
-        elapsed = time.time() - start
-        print(f"\n--- ERROR: {label}: {exc} ---", flush=True)
-        return False, elapsed, label
+        elapsed = time.monotonic() - start
+        return TestResult(False, elapsed, label, error=str(exc))
 
 
-def main() -> int:
+def print_failure(result: TestResult) -> None:
+    if result.error:
+        heading = f"ERROR: {result.label}: {result.error}"
+    else:
+        heading = f"FAIL: {result.label} (exit {result.returncode})"
+    print(f"\n--- {heading} ---", flush=True)
+    if result.stdout:
+        print(result.stdout, flush=True)
+    if result.stderr:
+        print(result.stderr, file=sys.stderr, flush=True)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     test_files = find_test_files()
 
     if not test_files:
@@ -82,27 +147,34 @@ def main() -> int:
 
     print(f"OrderSpec Master Test Runner", flush=True)
     print(f"Found {len(test_files)} test file(s) in {TEST_DIR}", flush=True)
+    worker_count = min(args.workers, len(test_files))
+    print(f"Workers: {worker_count}", flush=True)
     print(f"{'=' * 60}", flush=True)
 
     passed = 0
     failed = 0
-    total_elapsed = 0.0
     failures: list[str] = []
+    suite_start = time.monotonic()
 
-    for i, tf in enumerate(test_files, start=1):
-        label = str(tf.relative_to(SCRIPTS_DIR))
-        print(f"[{i}/{len(test_files)}] {label} ... ", end="", flush=True)
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        futures = {executor.submit(run_one, test_file): test_file for test_file in test_files}
+        for completed, future in enumerate(as_completed(futures), start=1):
+            result = future.result()
+            status = "PASS" if result.passed else "FAIL"
+            print(
+                f"[{completed}/{len(test_files)}] {result.label} ... "
+                f"{status} ({result.elapsed:.2f}s)",
+                flush=True,
+            )
 
-        ok, elapsed, _ = run_one(tf)
-        total_elapsed += elapsed
+            if result.passed:
+                passed += 1
+            else:
+                failed += 1
+                failures.append(result.label)
+                print_failure(result)
 
-        if ok:
-            print(f"PASS ({elapsed:.2f}s)", flush=True)
-            passed += 1
-        else:
-            print(f"FAIL ({elapsed:.2f}s)", flush=True)
-            failed += 1
-            failures.append(label)
+    total_elapsed = time.monotonic() - suite_start
 
     print(f"{'=' * 60}", flush=True)
     print(f"Total: {passed} passed, {failed} failed, {len(test_files)} total", flush=True)
